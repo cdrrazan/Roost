@@ -1,0 +1,45 @@
+version: 2
+
+project_name: roost
+
+builds:
+  - main: ./cmd/roost
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+brews:
+  - repository:
+      owner: cdrrazan
+      name: homebrew-tap
+    homepage: https://github.com/cdrrazan/roost
+    description: "Local apps, live on your own domain: compose + Caddy + Cloudflare Tunnel from a list of paths"
+    license: MIT
+    # One install brings the tunnel binary too.
+    dependencies:
+      - name: cloudflared
+    install: |
+      bin.install "roost"
+    test: |
+      system "#{bin}/roost", "version"

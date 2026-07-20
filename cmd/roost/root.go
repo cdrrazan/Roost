@@ -28,6 +28,7 @@ roost infers everything else.`,
 
 	root.AddCommand(
 		newVersionCmd(),
+		newInitCmd(flags),
 		newListCmd(flags),
 		newDetectCmd(flags),
 		newGenerateCmd(flags),
