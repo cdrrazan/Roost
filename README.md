@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🐦 roost
+<img src="assets/banner.svg" alt="roost — every app on your laptop, live on your own domain" width="820">
 
-**Every app on your laptop, live on your own domain, from one config file.**
+<br><br>
 
 [![CI](https://github.com/cdrrazan/roost/actions/workflows/ci.yml/badge.svg)](https://github.com/cdrrazan/roost/actions/workflows/ci.yml)
 [![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -32,16 +32,14 @@ apps:
     domain: crm.example.com      # explicit hostname, any zone in your account
 ```
 
-```console
-$ roost up
-up: app1 → https://app1.demo.example.com
-up: some-rails-app → https://crm.example.com
-```
+<div align="center">
+<img src="assets/demo.svg" alt="Terminal: roost up brings six apps online over HTTPS; roost add puts a seventh live with no DNS change" width="760">
+</div>
 
 More configs — from two-liners to every knob, plus a [fully-populated demo
 with fake data](examples/demo/config.yml) — live in [`examples/`](examples/).
 
-## How it works
+## 🧭 How it works
 
 ```mermaid
 flowchart LR
@@ -69,7 +67,7 @@ local change — no DNS call, no dashboard visit, no new certificate:
 roost add ~/projects/app7 --domain app7.example.com && roost up
 ```
 
-## The honest part: this is not hosting
+## 🌙 The honest part: this is not hosting
 
 Your apps **roost** while the laptop is open and leave when it closes. Lid
 shut, machine asleep, on a plane — your apps are down. roost is a local-first
@@ -77,7 +75,7 @@ preview and personal-hosting tool for demos, side projects, and sharing work
 in progress. It is not a replacement for a server; when the laptop wakes,
 cloudflared reconnects within ~5–10 seconds and everything is live again.
 
-## 60-second quickstart
+## ⚡ 60-second quickstart
 
 Prerequisites (one-time, roost automates everything else — see
 [below](#what-roost-manages-vs-what-you-do)): your domain is added to
@@ -94,19 +92,19 @@ roost up            # generate, build, start, route
 roost enable        # start everything at login
 ```
 
-## What roost manages vs what you do
+## 🤝 What roost manages vs what you do
 
-You do exactly two things, once ever:
+| 🧑 You, once ever | 🤖 roost, every time |
+|---|---|
+| Point your domain's nameservers at Cloudflare (registrar dashboard) | Creates the tunnel and writes its ingress |
+| Create one API token — a genuine bootstrap problem, `roost init` links the page and lists the scopes | Creates **every DNS record** via API |
+| | Applies Access policies across every suffix |
+| | Runs `cloudflared` as a container |
 
-1. Point your domain's nameservers at Cloudflare (registrar dashboard).
-2. Create one API token (creating a token needs an existing login, so this
-   can't be automated). `roost init` links the page and lists the scopes.
+There is no "now add this CNAME in your dashboard" step — that would
+contradict roost holding `Zone:DNS:Edit`.
 
-roost does everything else via API: creates the tunnel, writes its ingress,
-creates every DNS record, applies Access policies, and runs `cloudflared` as
-a container. There is no "now add this CNAME in your dashboard" step.
-
-## Commands
+## 🧰 Commands
 
 | Command | What it does |
 |---|---|
@@ -125,7 +123,7 @@ a container. There is no "now add this CNAME in your dashboard" step.
 The full schema, resolution order, and hostname rules are in the
 [configuration reference](docs/configuration.md).
 
-## What gets inferred from a bare path
+## 🔍 What gets inferred from a bare path
 
 | Signal in the folder | Framework | Port | Start |
 |---|---|---|---|
@@ -152,22 +150,22 @@ staggered starts so six apps don't spike your CPU at once, and a doctor check
 for the multi-level subdomain SSL trap (free Universal SSL covers **one**
 subdomain level — `app.demo.example.com` needs ACM or a flatter name).
 
-## How it compares
+## ⚖️ How it compares
 
 | | roost | DockFlare | TunnelDock / cloudflare-companion | Coolify |
 |---|---|---|---|---|
-| Input | a list of source folders | running containers + labels | running containers + labels | git repos, web UI |
-| Dockerfiles/Compose | **generated for you** | you write them | you write them | buildpacks/you |
-| DNS strategy | one wildcard per suffix, zero API calls per app | per-hostname API records | per-hostname API records | your server's DNS |
-| Adding an app | local change only | edit labels, API calls | edit labels, API calls | UI/git |
-| Runs on | your laptop | your Docker host | your Docker host | a server you operate |
+| Input | ✅ a list of source folders | 🏷️ running containers + labels | 🏷️ running containers + labels | 🌐 git repos, web UI |
+| Dockerfiles/Compose | ✅ **generated for you** | ❌ you write them | ❌ you write them | ⚠️ buildpacks/you |
+| DNS strategy | ✅ one wildcard per suffix, zero API calls per app | ⚠️ per-hostname API records | ⚠️ per-hostname API records | ⚠️ your server's DNS |
+| Adding an app | ✅ local change only | ❌ edit labels, API calls | ❌ edit labels, API calls | ⚠️ UI/git |
+| Runs on | 💻 your laptop | 🖥️ your Docker host | 🖥️ your Docker host | ☁️ a server you operate |
 
 roost's distinction: it starts from **source paths, not containers**. The
 label-driven tools automate tunnel routing for containers you already
 maintain; roost generates the entire container layer from your code and treats
 the tunnel as an implementation detail.
 
-## Security defaults
+## 🔐 Security defaults
 
 - Set `tunnel.access.emails` in the config and every suffix gets a Cloudflare
   Access wall **before** first exposure — hostnames leak via Certificate
@@ -182,7 +180,7 @@ the tunnel as an implementation detail.
 
 The full threat model and reporting process are in [SECURITY.md](SECURITY.md).
 
-## Layout on disk
+## 🗂️ Layout on disk
 
 ```
 ~/.roost/
@@ -196,7 +194,7 @@ The full threat model and reporting process are in [SECURITY.md](SECURITY.md).
 Your app repos are never touched. Uninstalling is `roost down && roost
 disable` and deleting `~/.roost`.
 
-## Project
+## 🌱 Project
 
 - **[Examples](examples/)** — runnable configs from minimal to every-knob,
   plus a [demo with fake data](examples/demo/config.yml).
@@ -215,6 +213,6 @@ Built with Go 1.22+, exactly two dependencies (cobra, yaml.v3). `go test
 calls go through a fake; the Cloudflare API is `httptest`). TDD is the house
 rule: failing test first.
 
-## License
+## 📄 License
 
 [MIT](LICENSE) © [Rajan Bhattarai](https://github.com/cdrrazan)

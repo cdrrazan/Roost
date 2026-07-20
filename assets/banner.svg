@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="230" viewBox="0 0 960 230" role="img" aria-label="roost — every app on your laptop, live on your own domain">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#262624"/>
+      <stop offset="1" stop-color="#1a1917"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#c96442" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#c96442" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#c96442" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="1" y="1" width="958" height="228" rx="18" fill="url(#bg)" stroke="#3a3833"/>
+  <rect x="80" y="196" width="800" height="2" fill="url(#glow)"/>
+
+  <!-- perch + bird glyph -->
+  <g transform="translate(84,50)">
+    <line x1="-12" y1="94" x2="132" y2="94" stroke="#57534a" stroke-width="5" stroke-linecap="round"/>
+    <g fill="#c96442">
+      <!-- tail -->
+      <path d="M32 58 L2 40 L28 74 Z"/>
+      <!-- body -->
+      <circle cx="58" cy="62" r="30"/>
+      <!-- head -->
+      <circle cx="88" cy="36" r="17"/>
+      <!-- beak -->
+      <path d="M103 31 L120 38 L103 45 Z"/>
+    </g>
+    <!-- wing -->
+    <path d="M40 60 C52 50 70 52 78 64 C66 74 48 72 40 60 Z" fill="#1a1917" opacity=".3"/>
+    <!-- eye -->
+    <circle cx="93" cy="33" r="3.4" fill="#1a1917"/>
+    <!-- legs -->
+    <line x1="50" y1="90" x2="50" y2="94" stroke="#1a1917" stroke-width="3"/>
+    <line x1="66" y1="90" x2="66" y2="94" stroke="#1a1917" stroke-width="3"/>
+  </g>
+
+  <!-- wordmark -->
+  <g font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif">
+    <text x="248" y="112" font-size="64" font-weight="800" letter-spacing="-2" fill="#e8e6dd">roost<tspan fill="#c96442">.</tspan></text>
+    <text x="252" y="150" font-size="21" fill="#a5a196">every app on your laptop, live on your own domain</text>
+  </g>
+
+  <!-- chips -->
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="14">
+    <rect x="252" y="168" width="118" height="30" rx="15" fill="none" stroke="#3a3833"/>
+    <text x="311" y="188" text-anchor="middle" fill="#9dc4a5">paths in</text>
+    <rect x="382" y="168" width="118" height="30" rx="15" fill="none" stroke="#3a3833"/>
+    <text x="441" y="188" text-anchor="middle" fill="#d3976f">HTTPS out</text>
+    <rect x="512" y="168" width="230" height="30" rx="15" fill="none" stroke="#3a3833"/>
+    <text x="627" y="188" text-anchor="middle" fill="#a5a196">zero files in your repos</text>
+  </g>
+</svg>
