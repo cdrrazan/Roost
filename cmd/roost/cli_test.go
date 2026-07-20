@@ -139,7 +139,7 @@ func TestInitCommand(t *testing.T) {
 		}
 	}
 
-	out, err := runCLI(t, "init", "--domain", "example.com", "--scan", scan)
+	out, err := runCLI(t, "init", "--domain", "example.com", "--scan", scan, "--tunnel-name", "my-perch")
 	if err != nil {
 		t.Fatalf("init: %v\n%s", err, out)
 	}
@@ -153,7 +153,7 @@ func TestInitCommand(t *testing.T) {
 	for _, want := range []string{
 		"domain: example.com",
 		"tunnel:",
-		"name: roost",              // written explicitly, never generated
+		"name: my-perch",           // user-chosen, written explicitly, never generated
 		"domain: shop.example.com", // explicit per-app hostname
 	} {
 		if !strings.Contains(s, want) {

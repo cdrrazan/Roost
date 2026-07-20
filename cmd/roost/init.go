@@ -22,7 +22,7 @@ import (
 // tunnel.name, and walks the user through the only two manual steps —
 // nameservers and token creation.
 func newInitCmd(flags *rootFlags) *cobra.Command {
-	var domain, scanDir string
+	var domain, scanDir, tunnelName string
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "init",
@@ -65,7 +65,7 @@ func newInitCmd(flags *rootFlags) *cobra.Command {
 				"domain: "+domain,
 				"",
 				"tunnel:",
-				"  name: roost",
+				"  name: "+tunnelName,
 				"",
 				"apps:",
 			)
@@ -123,6 +123,7 @@ func newInitCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "the domain for app hostnames (with a token stored, roost offers your zones as a picker)")
+	cmd.Flags().StringVar(&tunnelName, "tunnel-name", "roost", "name for the Cloudflare tunnel — used verbatim, never generated")
 	cmd.Flags().StringVar(&scanDir, "scan", "", "folder whose subdirectories are scanned for apps")
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing config")
 	return cmd
