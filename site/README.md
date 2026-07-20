@@ -1,7 +1,8 @@
 # roost website
 
-A single self-contained page (`index.html`, no external assets, no build
-step) meant for Cloudflare Pages.
+A single static page (`index.html`, no build step) meant for Cloudflare
+Pages. The only external dependency is the Google Sans webfont from Google
+Fonts; everything else is inline.
 
 ## Deploy to Cloudflare Pages
 
@@ -15,5 +16,5 @@ Or via the dashboard: **Workers & Pages → Create → Pages → Upload assets**
 upload this folder — or connect the GitHub repo with build output directory
 `site` and no build command.
 
-The page is theme-aware (light/dark via `prefers-color-scheme`) and has no
-runtime dependencies, so there is nothing to keep updated except the content.
+The page is theme-aware (light/dark via `prefers-color-scheme`); apart from
+the webfont there is nothing to keep updated except the content.

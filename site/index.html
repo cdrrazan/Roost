@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost — your laptop, live on your own domain</title>
 <meta name="description" content="roost turns a list of local app folders into live HTTPS apps on your own domain: generated Docker Compose, Caddy routing, and a Cloudflare Tunnel from one config file.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #faf9f5;
@@ -32,7 +35,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: var(--bg); color: var(--ink);
-    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 16px/1.6 "Google Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
@@ -41,16 +44,16 @@
 
   header.top {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 0;
+    padding: 20px 0; flex-wrap: wrap; gap: 10px;
   }
   .brand { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
   .brand .tld { color: var(--accent); }
-  nav.links { display: flex; gap: 20px; font-size: 14px; }
+  nav.links { display: flex; gap: 18px; font-size: 14px; flex-wrap: wrap; }
   nav.links a { color: var(--muted); }
 
   .hero { padding: 56px 0 40px; display: grid; gap: 40px; grid-template-columns: 1fr 1fr; align-items: center; }
   @media (max-width: 800px) { .hero { grid-template-columns: 1fr; } }
-  .hero h1 { font-size: clamp(30px, 4.5vw, 44px); line-height: 1.15; letter-spacing: -0.02em; }
+  .hero h1 { font-size: clamp(30px, 4.5vw, 44px); line-height: 1.15; letter-spacing: -0.02em; font-weight: 700; }
   .hero h1 em { font-style: normal; color: var(--accent); }
   .hero p.lede { margin-top: 16px; color: var(--muted); font-size: 18px; max-width: 34em; }
   .cta { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
@@ -68,26 +71,31 @@
     box-shadow: 0 12px 40px rgba(0,0,0,.18);
     overflow-x: auto;
   }
+  .term > div { white-space: pre; }
   .term .dots { display: flex; gap: 6px; margin-bottom: 12px; }
   .term .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--code-dim); opacity: .5; }
   .term .p { color: var(--code-dim); }
   .term .c { color: #d3976f; }
   .term .ok { color: #9dc4a5; }
+  .term .warn { color: #d3b96f; }
+  .term .err { color: #d38585; }
   .term .dim { color: var(--code-dim); }
 
   section { padding: 40px 0; border-top: 1px solid var(--line); }
-  section h2 { font-size: 24px; letter-spacing: -0.01em; margin-bottom: 8px; }
-  section p.sub { color: var(--muted); margin-bottom: 24px; max-width: 44em; }
+  section h2 { font-size: 24px; letter-spacing: -0.01em; margin-bottom: 8px; font-weight: 700; }
+  section h3 { font-size: 17px; margin: 26px 0 10px; font-weight: 600; }
+  section p.sub { color: var(--muted); margin-bottom: 24px; max-width: 46em; }
 
   .cols { display: grid; gap: 20px; grid-template-columns: repeat(3, 1fr); }
-  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  .cols2 { display: grid; gap: 20px; grid-template-columns: 1fr 1fr; align-items: start; }
+  @media (max-width: 800px) { .cols, .cols2 { grid-template-columns: 1fr; } }
   .card {
     background: var(--surface); border: 1px solid var(--line);
     border-radius: 12px; padding: 20px;
   }
-  .card h3 { font-size: 16px; margin-bottom: 6px; }
+  .card h3 { font-size: 16px; margin: 0 0 6px; }
   .card p { font-size: 14px; color: var(--muted); }
-  .card .k { font: 600 13px ui-monospace, Menlo, monospace; color: var(--accent); }
+  .k { font: 600 13px ui-monospace, Menlo, monospace; color: var(--accent); }
 
   .flow { display: grid; gap: 8px; grid-template-columns: repeat(5, 1fr); text-align: center; font-size: 13px; color: var(--muted); align-items: stretch; }
   @media (max-width: 800px) { .flow { grid-template-columns: 1fr; } }
@@ -106,16 +114,34 @@
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
   th { color: var(--muted); font-weight: 600; font-size: 13px; }
-  td:first-child, th:first-child { font-weight: 600; }
+  td:first-child, th:first-child { font-weight: 600; white-space: nowrap; }
+  td code, li code {
+    font: 12.5px ui-monospace, Menlo, monospace; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+  }
   .yes { color: var(--ok); font-weight: 600; }
   .tablewrap { overflow-x: auto; }
 
   .honest {
     background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent);
-    border-radius: 10px; padding: 18px 20px; max-width: 44em;
+    border-radius: 10px; padding: 18px 20px; max-width: 46em;
   }
   .honest b { display: block; margin-bottom: 4px; }
   .honest p { color: var(--muted); font-size: 15px; }
+
+  .dev {
+    display: grid; gap: 24px; grid-template-columns: auto 1fr; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 26px;
+  }
+  @media (max-width: 640px) { .dev { grid-template-columns: 1fr; } }
+  .avatar {
+    width: 88px; height: 88px; border-radius: 50%; border: 2px solid var(--accent);
+    background: var(--code-bg); display: grid; place-items: center;
+    font-size: 34px; font-weight: 700; color: var(--accent); letter-spacing: -1px;
+  }
+  .dev h3 { margin: 0 0 4px; font-size: 20px; }
+  .dev p.role { color: var(--muted); font-size: 14px; margin-bottom: 10px; }
+  .dev .devlinks { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; }
 
   footer { border-top: 1px solid var(--line); padding: 28px 0 48px; font-size: 14px; color: var(--muted); display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; }
   footer .fl { display: flex; gap: 18px; flex-wrap: wrap; }
@@ -129,7 +155,10 @@
   <nav class="links">
     <a href="#how">How it works</a>
     <a href="#quickstart">Quickstart</a>
+    <a href="#usage">Usage</a>
+    <a href="#commands">Commands</a>
     <a href="#compare">Compare</a>
+    <a href="#developer">Developer</a>
     <a href="https://github.com/cdrrazan/roost">GitHub</a>
   </nav>
 </header>
@@ -141,7 +170,7 @@
     Dockerfiles, Compose stack, Caddy routing, and Cloudflare Tunnel — and
     creates every DNS record via API. No files added to your repos, ever.</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/cdrrazan/roost#60-second-quickstart">Get started</a>
+      <a class="btn primary" href="#quickstart">Get started</a>
       <a class="btn ghost" href="https://github.com/cdrrazan/roost/tree/main/examples">See examples</a>
     </div>
   </div>
@@ -162,12 +191,23 @@
   <p class="sub">You supply where each app lives and what hostname it answers
   on. Framework, port, database, start command, and memory cap are inferred —
   every one overridable, none required.</p>
-  <pre class="code"><span class="cm"># ~/.roost/config.yml</span>
+  <div class="cols2">
+    <pre class="code"><span class="cm"># ~/.roost/config.yml — minimal</span>
 <span class="key">domain:</span> <span class="str">rajan.dev</span>
 <span class="key">apps:</span>
-  - <span class="str">~/code/blog</span>              <span class="cm"># → https://blog.rajan.dev  (Rails + MySQL, detected)</span>
+  - <span class="str">~/code/blog</span>       <span class="cm"># → blog.rajan.dev</span>
+  - <span class="str">~/code/shop</span>       <span class="cm"># → shop.rajan.dev</span></pre>
+    <pre class="code"><span class="cm"># …or with every knob</span>
+<span class="key">tunnel:</span>
+  <span class="key">name:</span> <span class="str">roost</span>
+  <span class="key">access:</span>
+    <span class="key">emails:</span> [<span class="str">rajan@rajan.dev</span>]
+<span class="key">apps:</span>
   - <span class="key">path:</span> <span class="str">~/code/trackaru</span>
-    <span class="key">domain:</span> <span class="str">trackaru.com</span>    <span class="cm"># any zone in your account, even a bare apex</span></pre>
+    <span class="key">domain:</span> <span class="str">trackaru.com</span>   <span class="cm"># bare apex, own zone</span>
+    <span class="key">memory:</span> <span class="str">768m</span>
+    <span class="key">profile:</span> <span class="str">extras</span></pre>
+  </div>
 </section>
 
 <section id="how">
@@ -182,12 +222,31 @@
     <div class="step"><b>Route</b>Caddy matches the Host header → app container</div>
     <div class="step"><b>Expose</b>cloudflared + wildcard DNS, TLS at the edge</div>
   </div>
+
+  <h3>What gets inferred from a bare path</h3>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Signal in the folder</th><th>Framework</th><th>Port</th><th>Start command</th></tr>
+    <tr><td><code>Gemfile</code> + <code>config/application.rb</code></td><td>rails</td><td>3000</td><td>puma, bound to 0.0.0.0</td></tr>
+    <tr><td><code>Gemfile</code> + <code>config.ru</code> + sinatra</td><td>sinatra</td><td>4567</td><td>rackup</td></tr>
+    <tr><td><code>package.json</code> with <code>next</code></td><td>next</td><td>3000</td><td>npm run start</td></tr>
+    <tr><td><code>package.json</code> with <code>vite</code></td><td>static</td><td>80</td><td>built, served by Caddy</td></tr>
+    <tr><td><code>package.json</code> with <code>express</code></td><td>node</td><td>3000</td><td>npm run start</td></tr>
+    <tr><td><code>manage.py</code> + requirements/pyproject</td><td>django</td><td>8000</td><td>gunicorn</td></tr>
+    <tr><td><code>index.html</code>, no manifest</td><td>static</td><td>80</td><td>served by Caddy</td></tr>
+  </table>
+  </div>
+  <p class="sub" style="margin-top:14px">Also inferred: runtime version, database
+  need (one shared MySQL/Postgres, one database per app), and memory caps.
+  Detection is explainable — <span class="k">roost detect</span> prints the exact
+  signal — and never guesses silently.</p>
 </section>
 
 <section id="quickstart">
   <h2>60-second quickstart</h2>
   <p class="sub">Prerequisites: Docker, and a domain on Cloudflare. You create
-  one API token — roost automates every other Cloudflare step.</p>
+  one API token — roost automates every other Cloudflare step, including all
+  DNS records. There is no "add this CNAME in your dashboard" step.</p>
   <pre class="code"><span class="cm">$</span> brew install cdrrazan/tap/roost
 <span class="cm">$</span> roost init          <span class="cm"># picks your domain from your live zone list</span>
 <span class="cm">$</span> roost auth login    <span class="cm"># paste the API token (init links the page + scopes)</span>
@@ -197,10 +256,84 @@
 <span class="cm">$</span> roost enable        <span class="cm"># come back up at every login</span></pre>
 </section>
 
+<section id="usage">
+  <h2>Everyday usage</h2>
+  <p class="sub">A day in the life after setup: check what's running, tail a
+  log, park heavy apps in a profile, and let the doctor explain anything odd.</p>
+
+  <div class="cols2">
+    <div>
+      <h3 style="margin-top:0">Status &amp; logs</h3>
+      <div class="term">
+        <div><span class="p">$</span> <span class="c">roost</span> status</div>
+        <div class="dim">APP        STATE    HEALTH   MEMORY           URL</div>
+        <div>blog       <span class="ok">running</span>  healthy  212MiB / 512MiB  https://blog.rajan.dev</div>
+        <div>shop       <span class="ok">running</span>  healthy  198MiB / 512MiB  https://shop.rajan.dev</div>
+        <div>trackaru   <span class="ok">running</span>  healthy  301MiB / 768MiB  https://trackaru.com</div>
+        <div class="dim">&nbsp;</div>
+        <div><span class="p">$</span> <span class="c">roost</span> logs blog -f</div>
+        <div class="dim">blog  | Puma starting in single mode...</div>
+        <div class="dim">blog  | * Listening on http://0.0.0.0:3000</div>
+      </div>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Add, remove, profiles</h3>
+      <div class="term">
+        <div><span class="p">$</span> <span class="c">roost</span> add ~/code/api --domain api.rajan.dev</div>
+        <div><span class="ok">added</span> ~/code/api to ~/.roost/config.yml</div>
+        <div><span class="p">$</span> <span class="c">roost</span> up</div>
+        <div class="dim">&nbsp;</div>
+        <div><span class="p">$</span> <span class="c">roost</span> up --profile extras</div>
+        <div class="dim"># heavy apps only start when you ask</div>
+        <div class="dim">&nbsp;</div>
+        <div><span class="p">$</span> <span class="c">roost</span> remove api</div>
+        <div><span class="ok">removed</span> api from ~/.roost/config.yml</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>When something's off, the doctor says exactly what and how to fix it</h3>
+  <div class="term">
+    <div><span class="p">$</span> <span class="c">roost</span> doctor</div>
+    <div>  <span class="ok">ok</span>    docker: installed and running</div>
+    <div>  <span class="ok">ok</span>    config: ~/.roost/config.yml parses; 6 app(s) resolve to hostnames</div>
+    <div>  <span class="warn">warn</span>  zone:app.pending.dev: zone pending.dev is pending: nameservers haven't propagated yet</div>
+    <div>        <span class="dim">fix: wait for propagation (usually under 24h); records can be created meanwhile</span></div>
+    <div>  <span class="err">FAIL</span>  ssl-depth: app1.demo.rajan.dev is 2 levels below zone rajan.dev; free Universal SSL</div>
+    <div>        <span class="dim">covers only ONE subdomain level, so browsers will get an opaque TLS error</span></div>
+    <div>        <span class="dim">fix: (1) flatten to app1.rajan.dev (free, recommended), (2) use a dedicated</span></div>
+    <div>        <span class="dim">one-level domain, or (3) enable Advanced Certificate Manager on rajan.dev</span></div>
+  </div>
+</section>
+
+<section id="commands">
+  <h2>Command reference</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>roost init</code></td><td>interactive setup; picks your domain from your live Cloudflare zone list, scans a folder for apps, writes explicit hostnames</td></tr>
+    <tr><td><code>roost add</code> / <code>remove</code></td><td>edit the app list — your config comments are preserved</td></tr>
+    <tr><td><code>roost list</code> / <code>detect</code></td><td>resolved apps and URLs; detection with the signal that triggered it</td></tr>
+    <tr><td><code>roost generate</code></td><td>write <code>~/.roost/build/*</code> without starting anything</td></tr>
+    <tr><td><code>roost up [--profile]</code> / <code>down</code></td><td>start the stack (staggered, memory-capped) / stop it</td></tr>
+    <tr><td><code>roost status</code> / <code>logs</code> / <code>restart</code></td><td>state, health, memory vs cap, public URL; tail logs; bounce one app</td></tr>
+    <tr><td><code>roost doctor</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth — with a fix per failure</td></tr>
+    <tr><td><code>roost tunnel setup</code></td><td>create the tunnel + every DNS record via API; idempotent, refuses to clobber records it didn't create</td></tr>
+    <tr><td><code>roost tunnel access</code></td><td>apply the Cloudflare Access policy across every suffix</td></tr>
+    <tr><td><code>roost auth login</code></td><td>verify and store the API token (<code>~/.roost/credentials</code>, 0600)</td></tr>
+    <tr><td><code>roost enable</code> / <code>disable</code></td><td>run at login via launchd (macOS) / systemd --user (Linux); fully removable</td></tr>
+  </table>
+  </div>
+  <p class="sub" style="margin-top:14px">Full schema and hostname rules:
+  <a href="https://github.com/cdrrazan/roost/blob/main/docs/configuration.md">configuration reference</a> ·
+  runnable configs: <a href="https://github.com/cdrrazan/roost/tree/main/examples">examples</a>, including a
+  <a href="https://github.com/cdrrazan/roost/blob/main/examples/demo/config.yml">fully-populated demo</a>.</p>
+</section>
+
 <section>
   <h2>Built-in guardrails</h2>
   <p class="sub">The failure modes that cost hours are encoded, tested, and
-  checked by <span class="k" style="font-family:ui-monospace,Menlo,monospace;color:var(--accent)">roost doctor</span>.</p>
+  checked by <span class="k">roost doctor</span>.</p>
   <div class="cols">
     <div class="card"><h3>No Rails redirect loops</h3><p>Cloudflare terminates TLS and forwards plain HTTP; roost sets <span class="k">RAILS_ASSUME_SSL</span> so <span class="k">force_ssl</span> apps don't redirect forever.</p></div>
     <div class="card"><h3>The SSL depth trap</h3><p>Free Universal SSL covers <b>one</b> subdomain level. Doctor flags hostnames nested deeper — before you hit an unexplainable browser TLS error.</p></div>
@@ -234,6 +367,25 @@
     <p>Your apps roost while the laptop is open and leave when it closes. Lid
     shut — apps down; lid open — cloudflared reconnects in seconds. roost is
     for demos, previews, and personal projects, and it says so plainly.</p>
+  </div>
+</section>
+
+<section id="developer">
+  <h2>Developer</h2>
+  <div class="dev">
+    <div class="avatar" aria-hidden="true">RB</div>
+    <div>
+      <h3>Rajan Bhattarai</h3>
+      <p class="role">Creator &amp; maintainer of roost — Ruby and Go developer
+      building tools that keep side projects fun. roost exists because putting
+      ten local apps online should be one config file, not ten YAML rituals.</p>
+      <div class="devlinks">
+        <a href="https://github.com/cdrrazan">GitHub @cdrrazan</a>
+        <a href="https://rajan.dev">rajan.dev</a>
+        <a href="mailto:cdrrazan@gmail.com">cdrrazan@gmail.com</a>
+        <a href="https://github.com/sponsors/cdrrazan">Sponsor</a>
+      </div>
+    </div>
   </div>
 </section>
 
