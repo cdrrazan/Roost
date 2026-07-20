@@ -95,7 +95,10 @@ roost enable        # start everything at login
 ### Installing from source
 
 A standard Go build — Go 1.24+, no build scripts, two dependencies fetched
-automatically:
+automatically. No Go on your machine? `brew install go` (macOS),
+`sudo dnf install golang` (Fedora), or the official tarball from
+[go.dev/dl](https://go.dev/dl/) (Debian/Ubuntu's `apt` version is often too
+old) — then make sure `~/go/bin` is on your `PATH`:
 
 ```bash
 git clone https://github.com/cdrrazan/roost && cd roost
