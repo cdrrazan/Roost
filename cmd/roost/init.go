@@ -16,6 +16,11 @@ import (
 	"github.com/cdrrazan/roost/internal/tunnel"
 )
 
+// newInitCmd bootstraps ~/.roost/config.yml: picks the domain (from
+// the account's live zone list when a token is stored), scans a folder
+// for detectable apps, writes explicit per-app hostnames plus
+// tunnel.name, and walks the user through the only two manual steps —
+// nameservers and token creation.
 func newInitCmd(flags *rootFlags) *cobra.Command {
 	var domain, scanDir string
 	var force bool

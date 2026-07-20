@@ -10,6 +10,10 @@ import (
 	"github.com/cdrrazan/roost/internal/detect"
 )
 
+// newDetectCmd is the dry-run explainability table: for each app, the
+// detected framework, the exact signal that triggered the detection,
+// the port, and the database. Detection failures surface as an error
+// telling the user to set framework: explicitly — never a silent guess.
 func newDetectCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "detect",

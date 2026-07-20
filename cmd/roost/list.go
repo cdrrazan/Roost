@@ -24,6 +24,9 @@ func loadResolved(flags *rootFlags) (*config.Config, []config.ResolvedApp, []con
 	return cfg, resolved, skipped, err
 }
 
+// newListCmd shows every configured app with its resolved name,
+// framework, and public URL — skipped apps appear with their reason,
+// never silently dropped.
 func newListCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",

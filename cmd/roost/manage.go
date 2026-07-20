@@ -12,6 +12,9 @@ import (
 	"github.com/cdrrazan/roost/internal/shell"
 )
 
+// newAddCmd is the everyday command: append an app to the config
+// (comments preserved). With --domain the entry gets an explicit FQDN;
+// without, the global domain rule applies.
 func newAddCmd(flags *rootFlags) *cobra.Command {
 	var domain string
 	cmd := &cobra.Command{
@@ -34,6 +37,8 @@ func newAddCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
+// newRemoveCmd deletes an app from the config by resolved name,
+// erroring with the list of known apps on a miss.
 func newRemoveCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove <name>",
@@ -53,6 +58,8 @@ func newRemoveCmd(flags *rootFlags) *cobra.Command {
 	}
 }
 
+// newLifecycleManager wires the platform unit installer to the real
+// home directory, resolved roost binary path, and real shell.
 func newLifecycleManager() (*lifecycle.Manager, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -73,6 +80,8 @@ func newLifecycleManager() (*lifecycle.Manager, error) {
 	}, nil
 }
 
+// newEnableCmd installs the boot-on-login unit (launchd on macOS,
+// systemd --user on Linux; manual instructions elsewhere).
 func newEnableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable",
@@ -98,6 +107,7 @@ func newEnableCmd() *cobra.Command {
 	}
 }
 
+// newDisableCmd removes the boot-on-login unit with no leftovers.
 func newDisableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "disable",

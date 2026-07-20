@@ -14,6 +14,9 @@ import (
 	"github.com/cdrrazan/roost/internal/tunnel"
 )
 
+// newDoctorCmd runs every preflight check and exits non-zero when a
+// hard failure would break `roost up`. Each failure prints a specific
+// remedy — never a stack trace.
 func newDoctorCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",

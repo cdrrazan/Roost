@@ -9,7 +9,9 @@ import (
 	"github.com/cdrrazan/roost/internal/generate"
 )
 
-// buildDir returns ~/.roost/build, creating it if needed.
+// buildDir returns ~/.roost/build, creating it if needed. ALL
+// generated artifacts live here — roost never writes into the user's
+// app directories.
 func buildDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -22,6 +24,9 @@ func buildDir() (string, error) {
 	return dir, nil
 }
 
+// newGenerateCmd writes all build artifacts (compose.yml, Caddyfile,
+// Dockerfiles, database init scripts) under ~/.roost/build without
+// starting anything — useful for inspecting what `up` would run.
 func newGenerateCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "generate",

@@ -15,6 +15,9 @@ import (
 	"github.com/cdrrazan/roost/internal/tunnel"
 )
 
+// newAuthCmd stores the Cloudflare API token in ~/.roost/credentials
+// (0600), verifying it against the API before writing anything. Tokens
+// never go into config.yml.
 func newAuthCmd() *cobra.Command {
 	auth := &cobra.Command{Use: "auth", Short: "Manage Cloudflare credentials"}
 	var token string
@@ -129,6 +132,9 @@ func loadTunnelContext(cmd *cobra.Command, flags *rootFlags, accountFlag string)
 	}, nil
 }
 
+// tunnelName is the configured tunnel name or the literal default
+// "roost" — never generated, so the Cloudflare dashboard stays
+// recognizable (§9.0 of the design).
 func tunnelName(cfg *config.Config) string {
 	if cfg.Tunnel.Name != "" {
 		return cfg.Tunnel.Name
@@ -146,6 +152,9 @@ func accessPatterns(plan []tunnel.PlannedRecord) []string {
 	return patterns
 }
 
+// newTunnelCmd groups `tunnel setup` (create the tunnel, plan and
+// create every DNS record, push ingress, apply Access — the whole
+// remote side, no dashboard visit) and `tunnel access` (policies only).
 func newTunnelCmd(flags *rootFlags) *cobra.Command {
 	root := &cobra.Command{Use: "tunnel", Short: "Manage the Cloudflare tunnel and DNS"}
 

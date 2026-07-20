@@ -7,10 +7,14 @@ import (
 // version is set at build time via -ldflags "-X main.version=...".
 var version = "dev"
 
+// rootFlags carries the persistent flags shared by every subcommand.
 type rootFlags struct {
+	// configPath is the --config override; empty means the standard
+	// resolution order (see config.FindConfig).
 	configPath string
 }
 
+// newRootCmd assembles the full roost command tree.
 func newRootCmd() *cobra.Command {
 	flags := &rootFlags{}
 
@@ -49,6 +53,7 @@ roost infers everything else.`,
 	return root
 }
 
+// newVersionCmd prints the build version (stamped by GoReleaser).
 func newVersionCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",

@@ -28,6 +28,8 @@ func loadPlanned(cmd *cobra.Command, flags *rootFlags) ([]generate.App, error) {
 	return generate.Plan(cfg, resolved)
 }
 
+// newRunner builds the real-shell compose runner against the standard
+// build directory.
 func newRunner() (*runner.Runner, error) {
 	dir, err := buildDir()
 	if err != nil {
@@ -36,6 +38,10 @@ func newRunner() (*runner.Runner, error) {
 	return runner.New(dir), nil
 }
 
+// newUpCmd is the one-liner the tool exists for: regenerate artifacts,
+// start shared infrastructure, then each app with a staggered pause.
+// Boot-on-login and crash recovery come from Docker's restart policy,
+// not a roost daemon.
 func newUpCmd(flags *rootFlags) *cobra.Command {
 	var profiles []string
 	cmd := &cobra.Command{
@@ -77,6 +83,8 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
+// newDownCmd stops and removes the whole stack (containers only; DNS
+// and the tunnel stay for the next up).
 func newDownCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "down",
@@ -92,6 +100,8 @@ func newDownCmd(flags *rootFlags) *cobra.Command {
 	}
 }
 
+// newStatusCmd reports per-app container state, health, memory used
+// against the cap, and the public URL.
 func newStatusCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -124,6 +134,7 @@ func newStatusCmd(flags *rootFlags) *cobra.Command {
 	}
 }
 
+// newLogsCmd streams one app's container logs, optionally following.
 func newLogsCmd(flags *rootFlags) *cobra.Command {
 	var follow bool
 	cmd := &cobra.Command{
@@ -142,6 +153,7 @@ func newLogsCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
+// newRestartCmd restarts a single app's container.
 func newRestartCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:   "restart <app>",
