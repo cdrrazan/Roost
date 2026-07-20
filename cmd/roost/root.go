@@ -31,6 +31,15 @@ roost infers everything else.`,
 		newListCmd(flags),
 		newDetectCmd(flags),
 		newGenerateCmd(flags),
+		newUpCmd(flags),
+		newDownCmd(flags),
+		newStatusCmd(flags),
+		newLogsCmd(flags),
+		newRestartCmd(flags),
+		newAddCmd(flags),
+		newRemoveCmd(flags),
+		newEnableCmd(),
+		newDisableCmd(),
 	)
 
 	return root
