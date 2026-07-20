@@ -257,6 +257,13 @@ func RenderMySQLInit(apps []App) ([]byte, error) {
 		db := dbName(app.Name)
 		fmt.Fprintf(&b, "CREATE DATABASE IF NOT EXISTS `%s`;\n", db)
 		fmt.Fprintf(&b, "GRANT ALL PRIVILEGES ON `%s`.* TO 'roost'@'%%';\n", db)
+		// A per-app user matching the app name, for apps whose database.yml
+		// connects as their own username (the Rails convention) rather than as
+		// roost — including multi-database setups (Solid Cache/Queue/Cable) that
+		// create sibling databases named `<app>_*`. The grant spans that
+		// database family so the app can create and migrate them.
+		fmt.Fprintf(&b, "CREATE USER IF NOT EXISTS '%s'@'%%' IDENTIFIED BY 'roost';\n", app.Name)
+		fmt.Fprintf(&b, "GRANT ALL PRIVILEGES ON `%s%%`.* TO '%s'@'%%';\n", db, app.Name)
 	}
 	b.WriteString("FLUSH PRIVILEGES;\n")
 	return b.Bytes(), nil

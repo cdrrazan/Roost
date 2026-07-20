@@ -79,6 +79,12 @@ func fakeCloudflare(t *testing.T) (*httptest.Server, *[]string) {
 }
 
 func TestTunnelSetupEndToEnd(t *testing.T) {
+	// Stub the connector refresh so the test never shells out to Docker.
+	refreshed := false
+	origRefresh := refreshConnector
+	refreshConnector = func() error { refreshed = true; return nil }
+	t.Cleanup(func() { refreshConnector = origRefresh })
+
 	server, requests := fakeCloudflare(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -115,6 +121,8 @@ apps:
 		"*.other.org",
 		"created",
 		"ingress configuration pushed",
+		// New records were created, so the connector is refreshed.
+		"refreshed cloudflared",
 		// The unreachable zone is skipped with both possible causes and
 		// the visible zones listed.
 		"app.unknown.net",
@@ -126,6 +134,9 @@ apps:
 		if !strings.Contains(out, want) {
 			t.Errorf("setup output missing %q:\n%s", want, out)
 		}
+	}
+	if !refreshed {
+		t.Error("expected cloudflared to be refreshed after creating new routes")
 	}
 
 	// The connector token landed in build/.env with tight permissions.

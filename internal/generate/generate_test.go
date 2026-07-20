@@ -262,6 +262,15 @@ func TestRenderMySQLInit(t *testing.T) {
 	if strings.Contains(s, "crm") {
 		t.Errorf("mysql-init.sql must not include the postgres app crm:\n%s", s)
 	}
+	// A per-app mysql user (matching the app name) so apps whose database.yml
+	// connects as their own username — including Rails multi-database setups —
+	// work, with a grant spanning the app's database family.
+	if !strings.Contains(s, "CREATE USER IF NOT EXISTS 'blog'@'%'") {
+		t.Errorf("mysql-init.sql missing per-app user for blog:\n%s", s)
+	}
+	if !strings.Contains(s, "GRANT ALL PRIVILEGES ON `blog%`.* TO 'blog'@'%'") {
+		t.Errorf("mysql-init.sql missing per-app grant for blog:\n%s", s)
+	}
 }
 
 func TestRenderPostgresInit(t *testing.T) {

@@ -132,6 +132,19 @@ func loadTunnelContext(cmd *cobra.Command, flags *rootFlags, accountFlag string)
 	}, nil
 }
 
+// refreshConnector restarts the cloudflared container so it re-reads a
+// freshly pushed ingress. A remotely-managed connector doesn't always pick up
+// new hostnames on its own, so a just-added zone can 404 until it refreshes.
+// Overridable in tests; best-effort at the call site (nothing to restart if the
+// stack isn't running).
+var refreshConnector = func() error {
+	r, err := newRunner()
+	if err != nil {
+		return err
+	}
+	return r.Restart("cloudflared")
+}
+
 // tunnelName is the configured tunnel name or the literal default
 // "roost" — never generated, so the Cloudflare dashboard stays
 // recognizable (§9.0 of the design).
@@ -237,6 +250,7 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 2, 4, 2, ' ', 0)
 			fmt.Fprintln(w, "RECORD\tZONE\tRESULT")
 			var recordErrs []string
+			newRoutes := false
 			for _, rec := range plan {
 				action, created, err := tunnel.EnsureRecord(tc.client, rec.Zone.ID, rec.Name, content, force)
 				if err != nil {
@@ -246,6 +260,7 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 				}
 				if action == tunnel.RecordCreated && created != nil {
 					tc.st.AddRecord(state.Record{ID: created.ID, ZoneID: rec.Zone.ID, Name: rec.Name})
+					newRoutes = true
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\n", rec.Name, rec.Zone.Name, action)
 			}
@@ -260,6 +275,17 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 			cmd.Println("ingress configuration pushed")
+
+			// A newly-created record means a new hostname/zone entered the
+			// ingress; nudge the running connector to re-read it so the new
+			// route works without waiting for its periodic refresh.
+			if newRoutes {
+				if err := refreshConnector(); err != nil {
+					cmd.Println("note: new routes added but cloudflared wasn't refreshed automatically; run `roost up` to apply them")
+				} else {
+					cmd.Println("refreshed cloudflared to apply the new routes")
+				}
+			}
 
 			if err := writeTunnelEnv(res.Token); err != nil {
 				return err
