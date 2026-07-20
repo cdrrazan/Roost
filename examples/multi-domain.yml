@@ -1,0 +1,23 @@
+# One config, several domains. Per-app `domain:` is used verbatim and
+# ignores the global domain entirely, so a single laptop can serve
+# hostnames across every zone in your Cloudflare account — including a
+# bare apex. roost plans the minimal DNS set: one wildcard per routing
+# suffix, plus an exact CNAME for the apex (wildcards can't cover it).
+
+domain: demo.example.com # fallback for bare paths
+
+apps:
+  # → https://app1.demo.example.com (global domain fallback)
+  - ~/projects/app1
+
+  # A different suffix on the same zone.
+  - path: ~/projects/tweetx
+    domain: tweetx.app.example.com
+
+  # A completely different zone.
+  - path: ~/work/crm
+    domain: crm.otherdomain.org
+
+  # A bare apex: gets an exact CNAME with flattening, not a wildcard.
+  - path: ~/projects/trackaru
+    domain: trackaru.com

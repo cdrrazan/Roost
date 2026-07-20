@@ -1,0 +1,12 @@
+# The smallest useful roost config: a fallback domain and a list of
+# paths. Everything else — framework, port, database, start command,
+# memory cap — is inferred from each folder.
+#
+#   ~/projects/blog   → https://blog.example.com
+#   ~/projects/shop   → https://shop.example.com
+
+domain: example.com
+
+apps:
+  - ~/projects/blog
+  - ~/projects/shop

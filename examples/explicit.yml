@@ -1,0 +1,19 @@
+# Explicit per-app hostnames — the style `roost init` writes, and the
+# recommended one: the file is self-describing instead of depending on
+# a derivation rule you have to remember.
+
+domain: example.com # still useful as a fallback for quick additions
+
+tunnel:
+  name: roost # always explicit, never generated
+
+apps:
+  - path: ~/projects/blog
+    domain: blog.example.com
+
+  - path: ~/projects/shop
+    domain: shop.example.com
+
+  # A bare path still works thanks to the global domain:
+  #   → https://sandbox.example.com
+  - ~/projects/sandbox

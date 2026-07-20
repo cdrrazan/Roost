@@ -1,0 +1,45 @@
+# Every knob roost has, annotated. You will almost never need all of
+# these — the whole point is that a path and a hostname are enough.
+
+# Fallback domain: bare-path apps become <name>.demo.example.com.
+domain: demo.example.com
+
+tunnel:
+  # Always the literal default or your own value — roost never invents
+  # tunnel names, so the Cloudflare dashboard stays recognizable.
+  name: roost
+  # With access set, every routing suffix gets a Cloudflare Access
+  # wall BEFORE the first `up`. Hostnames leak via Certificate
+  # Transparency logs within hours; personal apps want this.
+  access:
+    emails:
+      - me@example.com
+      - friend@example.com
+
+# Applied to every app unless the app overrides them.
+defaults:
+  memory: 512m
+  profile: core
+
+apps:
+  # Bare string form: everything inferred.
+  - ~/projects/blog
+
+  # Map form with every override:
+  - path: ~/work/legacy-crm
+    domain: crm.example.com # verbatim FQDN, ignores the global domain
+    name: crm # default: slugified folder basename
+    framework: rails # default: detected from the folder
+    port: 3001 # default: framework default
+    database: mysql # default: detected from the app's config
+    memory: 768m # this one needs more headroom
+    profile: extras # start only with: roost up --profile extras
+    env: # extra container environment
+      SOME_FEATURE_FLAG: "on"
+      LEGACY_MODE: "true"
+
+  # Heavy app, parked in a profile so it doesn't start by default.
+  - path: ~/experiments/ml-playground
+    domain: ml.example.com
+    memory: 2g
+    profile: extras
