@@ -1,6 +1,19 @@
-# roost
+<div align="center">
+
+# 🐦 roost
 
 **Every app on your laptop, live on your own domain, from one config file.**
+
+[![CI](https://github.com/cdrrazan/roost/actions/workflows/ci.yml/badge.svg)](https://github.com/cdrrazan/roost/actions/workflows/ci.yml)
+[![Go 1.22+](https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white)](go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/cdrrazan/roost?include_prereleases)](https://github.com/cdrrazan/roost/releases)
+
+[Website](https://roost.pages.dev) · [Examples](examples/) · [Config reference](docs/configuration.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+---
 
 roost turns a list of local application folders into running, HTTPS-accessible
 apps on your own domain. You tell it *where each app lives* and *what hostname
@@ -25,6 +38,37 @@ up: app1 → https://app1.demo.example.com
 up: some-rails-app → https://crm.example.com
 ```
 
+More configs — from two-liners to every knob, plus a [fully-populated demo
+with fake data](examples/demo/config.yml) — live in [`examples/`](examples/).
+
+## How it works
+
+```mermaid
+flowchart LR
+    subgraph laptop["💻 your laptop"]
+        CFG["config.yml<br/>paths + hostnames"] --> DET["detect<br/>framework · port · db"]
+        DET --> GEN["generate<br/>~/.roost/build/*"]
+        GEN --> DC["docker compose -p roost"]
+        subgraph stack["generated stack"]
+            CADDY["Caddy<br/>Host-header router"] --> A1["app1 :3000"]
+            CADDY --> A2["app2 :8000"]
+            A1 & A2 --> DB[("shared MySQL/Postgres<br/>no published ports")]
+            CFD["cloudflared"] --> CADDY
+        end
+        DC --> stack
+    end
+    EDGE["☁️ Cloudflare edge<br/>TLS + wildcard DNS + Access"] <--> CFD
+    USER(("🌍 visitors<br/>https://app1.example.com")) --> EDGE
+```
+
+One tunnel, **one wildcard DNS record per routing suffix**, host-header
+routing inside. That architecture is why adding app number seven is a purely
+local change — no DNS call, no dashboard visit, no new certificate:
+
+```bash
+roost add ~/projects/app7 --domain app7.example.com && roost up
+```
+
 ## The honest part: this is not hosting
 
 Your apps **roost** while the laptop is open and leave when it closes. Lid
@@ -35,9 +79,9 @@ cloudflared reconnects within ~5–10 seconds and everything is live again.
 
 ## 60-second quickstart
 
-Prerequisites (one-time, roost automates everything else — see below):
-your domain is added to Cloudflare with nameservers pointed there, and Docker
-is installed.
+Prerequisites (one-time, roost automates everything else — see
+[below](#what-roost-manages-vs-what-you-do)): your domain is added to
+Cloudflare with nameservers pointed there, and Docker is installed.
 
 ```bash
 brew install cdrrazan/tap/roost   # or: curl -fsSL https://raw.githubusercontent.com/cdrrazan/roost/main/install.sh | sh
@@ -49,17 +93,6 @@ roost tunnel setup  # creates the tunnel + every DNS record via API
 roost up            # generate, build, start, route
 roost enable        # start everything at login
 ```
-
-Adding app number seven later is one command — no DNS change, no dashboard
-visit, no new certificate:
-
-```bash
-roost add ~/projects/app7 --domain app7.example.com && roost up
-```
-
-That property comes from the architecture: **one tunnel, one wildcard DNS
-record per routing suffix**, with Caddy routing by Host header inside. Adding
-an app is a purely local change.
 
 ## What roost manages vs what you do
 
@@ -88,6 +121,9 @@ a container. There is no "now add this CNAME in your dashboard" step.
 | `roost tunnel access` | Cloudflare Access policy across every suffix |
 | `roost auth login` | store the API token (`~/.roost/credentials`, 0600) |
 | `roost enable` / `disable` | boot-on-login via launchd / systemd --user |
+
+The full schema, resolution order, and hostname rules are in the
+[configuration reference](docs/configuration.md).
 
 ## What gets inferred from a bare path
 
@@ -144,6 +180,8 @@ the tunnel as an implementation detail.
 - roost refuses to overwrite DNS records it didn't create (`--force` to
   override) and refuses to adopt a tunnel it didn't create (`--adopt`).
 
+The full threat model and reporting process are in [SECURITY.md](SECURITY.md).
+
 ## Layout on disk
 
 ```
@@ -158,12 +196,25 @@ the tunnel as an implementation detail.
 Your app repos are never touched. Uninstalling is `roost down && roost
 disable` and deleting `~/.roost`.
 
-## Development
+## Project
 
-Go 1.22+, two dependencies (cobra, yaml.v3). `go test ./...` runs everything —
-no test touches Docker or the network (shell calls go through a fake; the
-Cloudflare API is `httptest`). TDD is the house rule: failing test first.
+- **[Examples](examples/)** — runnable configs from minimal to every-knob,
+  plus a [demo with fake data](examples/demo/config.yml).
+- **[Website](https://roost.pages.dev)** — the one-page overview
+  ([source](site/), deployable to Cloudflare Pages).
+- **[Roadmap](ROADMAP.md)** — what's next, and the non-goals that keep roost
+  small.
+- **[Contributing](CONTRIBUTING.md)** — house rules (TDD, no real
+  Docker/network in tests, two dependencies) and how to add a framework.
+- **[Security policy](SECURITY.md)** · **[Code of Conduct](CODE_OF_CONDUCT.md)**
+- **Support the project** — via [GitHub Sponsors](https://github.com/sponsors/cdrrazan)
+  (see [FUNDING](.github/FUNDING.yml)).
+
+Built with Go 1.22+, exactly two dependencies (cobra, yaml.v3). `go test
+./...` runs the whole suite — no test touches Docker or the network (shell
+calls go through a fake; the Cloudflare API is `httptest`). TDD is the house
+rule: failing test first.
 
 ## License
 
-MIT
+[MIT](LICENSE) © [Rajan Bhattarai](https://github.com/cdrrazan)
