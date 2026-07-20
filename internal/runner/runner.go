@@ -111,6 +111,16 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 			return fmt.Errorf("start app %q: %w", app.Name, err)
 		}
 	}
+
+	// Apps may have been recreated with new container IPs; Caddy, started
+	// earlier as infra, can hold stale upstream keep-alives to the old
+	// containers and serve empty 200s. Reload Caddy so it rebuilds the
+	// reverse-proxy connection pools. Best-effort: the stack is already up,
+	// and a reload hiccup must not fail `up` — a stale connection self-heals
+	// once it errors on the next request.
+	if len(selected) > 0 {
+		_, _ = r.run(r.compose("exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile")...)
+	}
 	return nil
 }
 

@@ -92,6 +92,25 @@ func TestUpStaggersAppStarts(t *testing.T) {
 	}
 }
 
+func TestUpReloadsCaddyAfterApps(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Up(testApps(), nil); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	calls := allCalls(fake)
+	reloadIdx := strings.Index(calls, "caddy reload")
+	if reloadIdx < 0 {
+		t.Fatalf("Up should reload caddy to drop stale upstream connections:\n%s", calls)
+	}
+	// The reload must run after apps (re)start, otherwise it can't clear
+	// Caddy's stale keep-alives to freshly-recreated app containers.
+	appUpIdx := strings.LastIndex(calls, "up -d blog")
+	if appUpIdx < 0 || reloadIdx < appUpIdx {
+		t.Errorf("caddy reload must run after app starts:\n%s", calls)
+	}
+}
+
 func TestUpStreamsBuilds(t *testing.T) {
 	// First builds take minutes (base image pulls, dependency installs);
 	// their output must stream to the terminal, not be captured — a
