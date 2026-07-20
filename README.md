@@ -92,6 +92,29 @@ roost up            # generate, build, start, route
 roost enable        # start everything at login
 ```
 
+### Installing from source
+
+A standard Go build — Go 1.24+, no build scripts, two dependencies fetched
+automatically:
+
+```bash
+git clone https://github.com/cdrrazan/roost && cd roost
+go install ./cmd/roost            # installs to ~/go/bin (ensure it's on PATH)
+
+# or build a binary and place it yourself:
+go build -o roost ./cmd/roost && sudo install -m 0755 roost /usr/local/bin/roost
+
+# optional: stamp the version instead of "dev"
+go build -ldflags "-X main.version=$(git describe --tags --always)" -o roost ./cmd/roost
+```
+
+Once the module is published you can skip the clone entirely:
+`go install github.com/cdrrazan/roost/cmd/roost@latest`. Runtime
+prerequisites are the same as any install: Docker running, and a Cloudflare
+API token when you reach `tunnel setup` — `cloudflared` is not needed on the
+host, roost runs it as a container. `go test ./...` is a fast, network-free
+sanity check before installing.
+
 ## 🤝 What roost manages vs what you do
 
 | 🧑 You, once ever | 🤖 roost, every time |
