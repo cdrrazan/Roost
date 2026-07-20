@@ -254,6 +254,22 @@ func TestDetectUnknown(t *testing.T) {
 	}
 }
 
+func TestDefaults(t *testing.T) {
+	for _, name := range []string{"rails", "sinatra", "next", "node", "django", "static"} {
+		d, ok := Defaults(name)
+		if !ok {
+			t.Errorf("Defaults(%q) unknown, want known", name)
+			continue
+		}
+		if d.Framework != name || d.Port == 0 {
+			t.Errorf("Defaults(%q) = %+v, want matching framework and a port", name, d)
+		}
+	}
+	if _, ok := Defaults("fortran-on-rails"); ok {
+		t.Error("Defaults should not know made-up frameworks")
+	}
+}
+
 func TestDetectMissingDir(t *testing.T) {
 	if _, err := Detect(filepath.Join(t.TempDir(), "nope")); err == nil {
 		t.Fatal("want error for missing directory")

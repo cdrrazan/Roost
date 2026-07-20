@@ -53,6 +53,13 @@ func (p *packageJSON) hasDep(name string) bool {
 	return inDeps || inDev
 }
 
+// Defaults returns the framework-default port and start command for an
+// explicitly configured framework: value, without inspecting any
+// directory. The second return is false for an unknown framework name.
+func Defaults(framework string) (Detection, bool) {
+	return Detection{}, false
+}
+
 // Detect inspects dir and returns what it found. It returns an error
 // naming the directory when no rule matches, telling the user to set
 // framework: explicitly.
