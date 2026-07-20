@@ -20,12 +20,24 @@ func AddApp(configPath, appPath, domain string) error {
 	}
 	root := documentRoot(doc)
 	apps := mappingValue(root, "apps")
-	if apps == nil {
+	switch {
+	case apps == nil:
 		apps = &yaml.Node{Kind: yaml.SequenceNode}
 		root.Content = append(root.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Value: "apps"},
 			apps,
 		)
+	case apps.Kind != yaml.SequenceNode:
+		// An apps: key holding only comments (what init writes when it
+		// finds no apps) parses as YAML null — appending to it would be
+		// silently dropped. Replace it with a real list, keeping any
+		// comments attached to the node.
+		*apps = yaml.Node{
+			Kind:        yaml.SequenceNode,
+			HeadComment: apps.HeadComment,
+			LineComment: apps.LineComment,
+			FootComment: apps.FootComment,
+		}
 	}
 
 	var entry *yaml.Node

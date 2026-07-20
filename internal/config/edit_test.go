@@ -71,6 +71,26 @@ func TestAddApp(t *testing.T) {
 		}
 	})
 
+	t.Run("apps key that is null gets a real list", func(t *testing.T) {
+		// What `roost init` writes with no apps found: an apps: key
+		// followed only by commented-out examples — YAML-null.
+		path := filepath.Join(t.TempDir(), "config.yml")
+		content := "domain: example.com\n\ntunnel:\n  name: roost\n\napps:\n  # - path: ~/projects/app1\n  #   domain: app1.example.com\n"
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := AddApp(path, "/apps/one", "one.example.com"); err != nil {
+			t.Fatalf("AddApp: %v", err)
+		}
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load after AddApp: %v", err)
+		}
+		if len(cfg.Apps) != 1 || cfg.Apps[0].Domain != "one.example.com" {
+			t.Fatalf("apps = %+v, want the added app to actually persist", cfg.Apps)
+		}
+	})
+
 	t.Run("apps key created when missing", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "config.yml")
 		if err := os.WriteFile(path, []byte("domain: example.com\n"), 0o644); err != nil {
