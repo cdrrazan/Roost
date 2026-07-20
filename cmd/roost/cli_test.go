@@ -90,6 +90,33 @@ func TestDetectCommand(t *testing.T) {
 	}
 }
 
+func TestGenerateCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	out, err := runCLI(t, "--config", writeTestConfig(t), "generate")
+	if err != nil {
+		t.Fatalf("generate: %v\n%s", err, out)
+	}
+	build := filepath.Join(home, ".roost", "build")
+	for _, rel := range []string{
+		"compose.yml",
+		"Caddyfile",
+		"mysql-init.sql",
+		filepath.Join("dockerfiles", "rails-app.Dockerfile"),
+		filepath.Join("dockerfiles", "django-app.Dockerfile"),
+	} {
+		if _, err := os.Stat(filepath.Join(build, rel)); err != nil {
+			t.Errorf("expected artifact %s: %v", rel, err)
+		}
+	}
+	if !strings.Contains(out, "skipped") {
+		t.Errorf("generate output should report the skipped app:\n%s", out)
+	}
+	if !strings.Contains(out, "wrote") {
+		t.Errorf("generate output should list written files:\n%s", out)
+	}
+}
+
 func TestVersionCommand(t *testing.T) {
 	out, err := runCLI(t, "version")
 	if err != nil {

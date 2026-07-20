@@ -30,6 +30,7 @@ roost infers everything else.`,
 		newVersionCmd(),
 		newListCmd(flags),
 		newDetectCmd(flags),
+		newGenerateCmd(flags),
 	)
 
 	return root

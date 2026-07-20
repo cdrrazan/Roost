@@ -57,7 +57,22 @@ func (p *packageJSON) hasDep(name string) bool {
 // explicitly configured framework: value, without inspecting any
 // directory. The second return is false for an unknown framework name.
 func Defaults(framework string) (Detection, bool) {
-	return Detection{}, false
+	switch framework {
+	case "rails":
+		return Detection{Framework: "rails", Port: 3000, StartCommand: "bundle exec puma -b tcp://0.0.0.0:3000"}, true
+	case "sinatra":
+		return Detection{Framework: "sinatra", Port: 4567, StartCommand: "bundle exec rackup -o 0.0.0.0 -p 4567"}, true
+	case "next":
+		return Detection{Framework: "next", Port: 3000, StartCommand: "npm run start"}, true
+	case "node":
+		return Detection{Framework: "node", Port: 3000, StartCommand: "npm run start"}, true
+	case "django":
+		return Detection{Framework: "django", Port: 8000, StartCommand: "gunicorn -b 0.0.0.0:8000"}, true
+	case "static":
+		return Detection{Framework: "static", Port: 80}, true
+	default:
+		return Detection{}, false
+	}
 }
 
 // Detect inspects dir and returns what it found. It returns an error

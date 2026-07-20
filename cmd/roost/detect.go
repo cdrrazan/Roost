@@ -16,7 +16,7 @@ func newDetectCmd(flags *rootFlags) *cobra.Command {
 		Short: "Dry-run framework detection: app → framework → signal → port → database",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			resolved, skipped, err := loadResolved(flags)
+			_, resolved, skipped, err := loadResolved(flags)
 			if err != nil {
 				return err
 			}

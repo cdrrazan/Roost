@@ -11,16 +11,17 @@ import (
 )
 
 // loadResolved loads the config and resolves every app to a hostname.
-func loadResolved(flags *rootFlags) ([]config.ResolvedApp, []config.SkippedApp, error) {
+func loadResolved(flags *rootFlags) (*config.Config, []config.ResolvedApp, []config.SkippedApp, error) {
 	path, err := config.FindConfig(flags.configPath)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	cfg, err := config.Load(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return config.Resolve(cfg)
+	resolved, skipped, err := config.Resolve(cfg)
+	return cfg, resolved, skipped, err
 }
 
 func newListCmd(flags *rootFlags) *cobra.Command {
@@ -29,7 +30,7 @@ func newListCmd(flags *rootFlags) *cobra.Command {
 		Short: "List configured apps with resolved name, framework, and URL",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			resolved, skipped, err := loadResolved(flags)
+			_, resolved, skipped, err := loadResolved(flags)
 			if err != nil {
 				return err
 			}
