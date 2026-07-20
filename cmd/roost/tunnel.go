@@ -210,8 +210,11 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 
+			content := tunnel.TunnelCNAME(res.Tunnel.ID)
+
 			// Shadowing pre-flight: an exact record beats a wildcard in
-			// DNS, so a matching exact record silently swallows an app.
+			// DNS, so a matching exact record pointing anywhere but this
+			// tunnel silently swallows an app.
 			var shadowErrs []string
 			for _, rec := range plan {
 				if !rec.Wildcard {
@@ -221,7 +224,7 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				for _, shadow := range tunnel.FindShadowing(existing, rec.Name, rec.Covers) {
+				for _, shadow := range tunnel.FindShadowing(existing, rec.Name, rec.Covers, content) {
 					shadowErrs = append(shadowErrs, fmt.Sprintf(
 						"%s is shadowed: the exact record %s → %s takes precedence over %s and requests will never reach the tunnel; rename the app or delete/repoint that record",
 						shadow.Hostname, shadow.Existing.Name, shadow.Existing.Content, rec.Name))
@@ -231,7 +234,6 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 				cmd.Println("finding:", msg)
 			}
 
-			content := tunnel.TunnelCNAME(res.Tunnel.ID)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 2, 4, 2, ' ', 0)
 			fmt.Fprintln(w, "RECORD\tZONE\tRESULT")
 			var recordErrs []string

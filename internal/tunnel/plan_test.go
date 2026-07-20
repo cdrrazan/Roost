@@ -136,35 +136,59 @@ func TestIngressRules(t *testing.T) {
 func TestFindShadowing(t *testing.T) {
 	appHosts := []string{"tweetx.example.com", "blog.example.com"}
 	wildcard := "*.example.com"
+	ours := "t.cfargotunnel.com"
 
 	t.Run("wildcard only passes", func(t *testing.T) {
-		existing := []DNSRecord{{Name: "*.example.com", Type: "CNAME", Content: "t.cfargotunnel.com"}}
-		if got := FindShadowing(existing, wildcard, appHosts); len(got) != 0 {
+		existing := []DNSRecord{{Name: "*.example.com", Type: "CNAME", Content: ours}}
+		if got := FindShadowing(existing, wildcard, appHosts, ours); len(got) != 0 {
 			t.Errorf("shadows = %+v, want none", got)
 		}
 	})
 
 	t.Run("unrelated exact record passes", func(t *testing.T) {
 		existing := []DNSRecord{
-			{Name: "*.example.com", Type: "CNAME", Content: "t.cfargotunnel.com"},
+			{Name: "*.example.com", Type: "CNAME", Content: ours},
 			{Name: "mail.example.com", Type: "A", Content: "1.2.3.4"},
 		}
-		if got := FindShadowing(existing, wildcard, appHosts); len(got) != 0 {
+		if got := FindShadowing(existing, wildcard, appHosts, ours); len(got) != 0 {
 			t.Errorf("shadows = %+v, want none", got)
 		}
 	})
 
 	t.Run("exact record matching an app hostname is a hard finding", func(t *testing.T) {
 		existing := []DNSRecord{
-			{Name: "*.example.com", Type: "CNAME", Content: "t.cfargotunnel.com"},
+			{Name: "*.example.com", Type: "CNAME", Content: ours},
 			{Name: "tweetx.example.com", Type: "A", Content: "9.9.9.9"},
 		}
-		got := FindShadowing(existing, wildcard, appHosts)
+		got := FindShadowing(existing, wildcard, appHosts, ours)
 		if len(got) != 1 {
 			t.Fatalf("shadows = %+v, want one", got)
 		}
 		if got[0].Hostname != "tweetx.example.com" || !strings.Contains(got[0].Existing.Content, "9.9.9.9") {
 			t.Errorf("shadow = %+v", got[0])
+		}
+	})
+
+	t.Run("exact record already pointing at our tunnel does not shadow", func(t *testing.T) {
+		// The migration case: an app's hostname has an exact CNAME that
+		// was repointed at roost's tunnel. It takes precedence over the
+		// wildcard but routes identically, so it must not be flagged.
+		existing := []DNSRecord{
+			{Name: "*.example.com", Type: "CNAME", Content: ours},
+			{Name: "tweetx.example.com", Type: "CNAME", Content: ours},
+		}
+		if got := FindShadowing(existing, wildcard, appHosts, ours); len(got) != 0 {
+			t.Errorf("shadows = %+v, want none for a record routing to our own tunnel", got)
+		}
+	})
+
+	t.Run("exact record pointing at a DIFFERENT tunnel still shadows", func(t *testing.T) {
+		existing := []DNSRecord{
+			{Name: "*.example.com", Type: "CNAME", Content: ours},
+			{Name: "tweetx.example.com", Type: "CNAME", Content: "other-tunnel.cfargotunnel.com"},
+		}
+		if got := FindShadowing(existing, wildcard, appHosts, ours); len(got) != 1 {
+			t.Errorf("shadows = %+v, want the foreign-tunnel record flagged", got)
 		}
 	})
 }

@@ -225,7 +225,7 @@ func CheckCloudflare(client *tunnel.Client, st *state.State, tunnelName string, 
 				"run `roost tunnel setup`"))
 		}
 		if rec.Wildcard {
-			for _, shadow := range tunnel.FindShadowing(existing, rec.Name, rec.Covers) {
+			for _, shadow := range tunnel.FindShadowing(existing, rec.Name, rec.Covers, content) {
 				add(fail("dns-shadow:"+shadow.Hostname,
 					fmt.Sprintf("exact record %s → %s takes precedence over %s; requests will show the old target with no error anywhere", shadow.Existing.Name, shadow.Existing.Content, rec.Name),
 					"rename the app, or delete/repoint the existing record"))

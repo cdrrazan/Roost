@@ -147,9 +147,12 @@ type Shadow struct {
 }
 
 // FindShadowing reports app hostnames under the wildcard's suffix that
-// have their own exact record. tunnelContent records (ours) don't
-// shadow — only foreign exact records do.
-func FindShadowing(existing []DNSRecord, wildcard string, appHosts []string) []Shadow {
+// have their own exact record pointing somewhere else. An exact record
+// whose content is ourContent (this tunnel) takes precedence over the
+// wildcard but routes identically — the migration case — so it is not
+// a shadow; a record pointing at a different tunnel or any other
+// target is.
+func FindShadowing(existing []DNSRecord, wildcard string, appHosts []string, ourContent string) []Shadow {
 	suffix := strings.TrimPrefix(wildcard, "*")
 	hosts := map[string]bool{}
 	for _, h := range appHosts {
@@ -159,7 +162,7 @@ func FindShadowing(existing []DNSRecord, wildcard string, appHosts []string) []S
 	}
 	var shadows []Shadow
 	for _, rec := range existing {
-		if rec.Name == wildcard || !hosts[rec.Name] {
+		if rec.Name == wildcard || !hosts[rec.Name] || rec.Content == ourContent {
 			continue
 		}
 		shadows = append(shadows, Shadow{Hostname: rec.Name, Existing: rec})
