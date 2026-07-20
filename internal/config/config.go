@@ -62,6 +62,13 @@ type App struct {
 	Memory    string            `yaml:"memory"`
 	Profile   string            `yaml:"profile"`
 	Env       map[string]string `yaml:"env"`
+	// BuildEnv is environment set at image-build time (Docker ENV in the
+	// builder stage) rather than at runtime — needed by frameworks that
+	// validate env during their build, e.g. a Next.js app using
+	// @t3-oss/env, which needs SKIP_ENV_VALIDATION set for `next build`.
+	// These values bake into image layers, so use runtime `env:` for
+	// secrets; build_env is for non-secret build flags.
+	BuildEnv map[string]string `yaml:"build_env"`
 }
 
 // UnmarshalYAML accepts both the bare-string form (a path) and the

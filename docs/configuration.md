@@ -48,9 +48,19 @@ apps:
     database: mysql           # default: detected from the app's config
     memory: 768m              # default: defaults.memory, then 512m
     profile: extras           # start only with --profile extras
-    env:
+    env:                      # runtime environment (container)
       SOME_KEY: value
+    build_env:                # build-time environment (Docker builder stage)
+      SKIP_ENV_VALIDATION: "1"
 ```
+
+`env` is set at container runtime; `build_env` is set during the image build
+(rendered as `ENV` in the Dockerfile's builder stage). Use `build_env` for
+frameworks that validate configuration during their build — e.g. a Next.js app
+using `@t3-oss/env`, whose `next build` needs `SKIP_ENV_VALIDATION` since the
+runtime env isn't present at build time. **`build_env` values bake into image
+layers** (visible via `docker history`), so keep secrets in `env`; `build_env`
+is for non-secret build flags.
 
 ## Splitting the app list across files — `include`
 

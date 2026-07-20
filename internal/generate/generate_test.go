@@ -300,6 +300,43 @@ func TestRenderDockerfile(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("build_env is injected into the builder stage, sorted", func(t *testing.T) {
+		app := apps["api"]
+		app.BuildEnv = map[string]string{
+			"SKIP_ENV_VALIDATION":     "1",
+			"NEXT_TELEMETRY_DISABLED": "1",
+		}
+		out, err := RenderDockerfile(app)
+		if err != nil {
+			t.Fatalf("RenderDockerfile: %v", err)
+		}
+		s := string(out)
+		if !strings.Contains(s, `ENV SKIP_ENV_VALIDATION="1"`) {
+			t.Errorf("node Dockerfile missing build_env ENV line:\n%s", s)
+		}
+		// Deterministic (sorted) order: NEXT_* before SKIP_*.
+		if strings.Index(s, "NEXT_TELEMETRY_DISABLED") > strings.Index(s, "SKIP_ENV_VALIDATION") {
+			t.Errorf("build_env keys not sorted:\n%s", s)
+		}
+		// Must land in the builder stage, before the runtime FROM, so it
+		// is present during `npm run build`.
+		env := strings.Index(s, `ENV SKIP_ENV_VALIDATION`)
+		build := strings.Index(s, "npm run build")
+		if env < 0 || build < 0 || env > build {
+			t.Errorf("build_env ENV must precede the build step:\n%s", s)
+		}
+	})
+
+	t.Run("no build_env leaves the Dockerfile unchanged", func(t *testing.T) {
+		out, err := RenderDockerfile(apps["api"])
+		if err != nil {
+			t.Fatalf("RenderDockerfile: %v", err)
+		}
+		if strings.Contains(string(out), "ENV SKIP_ENV_VALIDATION") {
+			t.Errorf("unexpected build_env output when none set:\n%s", out)
+		}
+	})
 }
 
 func TestGenerateWritesArtifacts(t *testing.T) {

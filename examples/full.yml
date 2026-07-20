@@ -43,3 +43,14 @@ apps:
     domain: ml.example.com
     memory: 2g
     profile: extras
+
+  # A Next.js app that validates env at build time (e.g. @t3-oss/env).
+  # build_env is set during `next build`; env is set at runtime. Keep
+  # secrets in env — build_env bakes into image layers.
+  - path: ~/projects/webapp
+    domain: app.example.com
+    framework: next
+    build_env:
+      SKIP_ENV_VALIDATION: "1"
+    env:
+      NEXT_PUBLIC_APP_URL: https://app.example.com

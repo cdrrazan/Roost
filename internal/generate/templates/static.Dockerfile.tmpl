@@ -2,6 +2,9 @@
 {{- if .StaticBuild}}
 FROM node:{{.NodeTag}} AS builder
 WORKDIR /app
+{{- range .BuildEnvPairs}}
+ENV {{.Key}}="{{.Value}}"
+{{- end}}
 COPY package.json package-lock.jso[n] ./
 RUN npm ci || npm install
 COPY . .

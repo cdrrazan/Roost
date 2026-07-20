@@ -27,16 +27,20 @@ var templates = template.Must(template.ParseFS(templateFS, "templates/*.tmpl"))
 // App is one app fully planned for generation: detection results
 // merged with config overrides and defaults applied.
 type App struct {
-	Name           string
-	FQDN           string
-	Path           string
-	Framework      string
-	Port           int
-	StartCommand   string
-	Database       string // "", "mysql", "postgres"
-	Memory         string
-	Profile        string
-	Env            map[string]string
+	Name         string
+	FQDN         string
+	Path         string
+	Framework    string
+	Port         int
+	StartCommand string
+	Database     string // "", "mysql", "postgres"
+	Memory       string
+	Profile      string
+	Env          map[string]string
+	// BuildEnv is environment injected at image-build time (see
+	// config.App.BuildEnv), rendered as ENV in the Dockerfile builder
+	// stage so it is present during the app's build step.
+	BuildEnv       map[string]string
 	RuntimeVersion string
 	// HasOwnDockerfile is true when the app ships its own Dockerfile,
 	// in which case roost uses theirs and generates none.
@@ -77,6 +81,7 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			Database:       d.Database,
 			RuntimeVersion: d.RuntimeVersion,
 			Env:            r.Env,
+			BuildEnv:       r.BuildEnv,
 			Memory:         firstNonEmpty(r.Memory, cfg.Defaults.Memory, "512m"),
 			Profile:        firstNonEmpty(r.Profile, cfg.Defaults.Profile),
 			StaticBuild:    strings.Contains(d.Signal, "vite"),
@@ -120,6 +125,21 @@ func dockerfilePath(buildDir string, app App) string {
 
 type envPair struct{ Key, Value string }
 
+// sortedPairs turns an env map into key-sorted pairs for deterministic
+// rendering.
+func sortedPairs(env map[string]string) []envPair {
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	pairs := make([]envPair, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, envPair{k, env[k]})
+	}
+	return pairs
+}
+
 // appEnv assembles the container environment for an app: roost's
 // injected values first, framework tuning, the database URL, then the
 // user's env on top so explicit config always wins.
@@ -156,17 +176,7 @@ func appEnv(app App) []envPair {
 	for k, v := range app.Env {
 		env[k] = v
 	}
-
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	pairs := make([]envPair, 0, len(keys))
-	for _, k := range keys {
-		pairs = append(pairs, envPair{k, env[k]})
-	}
-	return pairs
+	return sortedPairs(env)
 }
 
 // dbName is the app's database name: hyphens become underscores so the
@@ -261,16 +271,20 @@ type dockerfileData struct {
 	NodeTag     string
 	PythonTag   string
 	RailsAssets bool
+	// BuildEnvPairs is app.BuildEnv sorted for a deterministic Dockerfile;
+	// templates range over it to emit build-stage ENV lines.
+	BuildEnvPairs []envPair
 }
 
 // RenderDockerfile renders the multi-stage Dockerfile for one app.
 func RenderDockerfile(app App) ([]byte, error) {
 	data := dockerfileData{
-		App:         app,
-		RubyTag:     versionTag(app.RuntimeVersion, "3.3"),
-		NodeTag:     nodeTag(app.RuntimeVersion),
-		PythonTag:   "3.12-slim",
-		RailsAssets: app.Framework == "rails",
+		App:           app,
+		RubyTag:       versionTag(app.RuntimeVersion, "3.3"),
+		NodeTag:       nodeTag(app.RuntimeVersion),
+		PythonTag:     "3.12-slim",
+		RailsAssets:   app.Framework == "rails",
+		BuildEnvPairs: sortedPairs(app.BuildEnv),
 	}
 	var name string
 	switch app.Framework {
