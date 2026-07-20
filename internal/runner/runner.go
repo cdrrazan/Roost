@@ -91,7 +91,9 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 		infra = append(infra, "postgres")
 	}
 
-	if _, err := r.run(r.compose(append([]string{"up", "-d"}, infra...)...)...); err != nil {
+	// Stream infra startup: first runs pull images (mysql alone is
+	// hundreds of MB) and captured output would look like a hang.
+	if err := r.Shell.Stream("docker", r.compose(append([]string{"up", "-d"}, infra...)...)...); err != nil {
 		return fmt.Errorf("start shared services: %w", err)
 	}
 
@@ -99,7 +101,13 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 		if i > 0 {
 			r.Sleep(r.Stagger)
 		}
-		if _, err := r.run(r.compose("up", "-d", "--build", app.Name)...); err != nil {
+		// Build as an explicit streamed step: a first build installs
+		// dependencies and can take minutes, and the user must see it
+		// happening rather than a silent prompt.
+		if err := r.Shell.Stream("docker", r.compose("build", app.Name)...); err != nil {
+			return fmt.Errorf("build app %q: %w", app.Name, err)
+		}
+		if _, err := r.run(r.compose("up", "-d", app.Name)...); err != nil {
 			return fmt.Errorf("start app %q: %w", app.Name, err)
 		}
 	}

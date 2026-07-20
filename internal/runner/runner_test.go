@@ -92,6 +92,30 @@ func TestUpStaggersAppStarts(t *testing.T) {
 	}
 }
 
+func TestUpStreamsBuilds(t *testing.T) {
+	// First builds take minutes (base image pulls, dependency installs);
+	// their output must stream to the terminal, not be captured — a
+	// captured build looks like a frozen roost.
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Up(testApps(), nil); err != nil {
+		t.Fatal(err)
+	}
+	var sawBuild bool
+	for _, c := range fake.Calls {
+		joined := strings.Join(c.Args, " ")
+		if strings.Contains(joined, " build ") || strings.HasSuffix(joined, " build blog") {
+			sawBuild = true
+		}
+		if strings.Contains(joined, "--build") {
+			t.Errorf("call %q hides the build behind a captured `up --build`; build must be a separate streamed step", c)
+		}
+	}
+	if !sawBuild {
+		t.Errorf("no explicit build step issued:\n%s", allCalls(fake))
+	}
+}
+
 func TestUpProfileFiltering(t *testing.T) {
 	t.Run("no profile starts everything", func(t *testing.T) {
 		fake := &shell.Fake{}

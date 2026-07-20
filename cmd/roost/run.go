@@ -65,6 +65,7 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 			r := runner.New(dir)
+			cmd.Println("starting stack (first runs build images and can take several minutes)...")
 			if err := r.Up(apps, profiles); err != nil {
 				return err
 			}
