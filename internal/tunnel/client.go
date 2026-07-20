@@ -209,6 +209,25 @@ func (c *Client) UpdateDNS(zoneID, recordID string, rec DNSRecord) error {
 	return c.do(http.MethodPut, "/zones/"+zoneID+"/dns_records/"+recordID, rec, nil)
 }
 
+// certificatePack is one edge certificate pack on a zone.
+type certificatePack struct {
+	Hosts []string `json:"hosts"`
+}
+
+// CertificateSANs lists every hostname covered by the zone's edge
+// certificates (Universal SSL and any ACM packs).
+func (c *Client) CertificateSANs(zoneID string) ([]string, error) {
+	var packs []certificatePack
+	if err := c.do(http.MethodGet, "/zones/"+zoneID+"/ssl/certificate_packs?status=all", nil, &packs); err != nil {
+		return nil, err
+	}
+	var sans []string
+	for _, p := range packs {
+		sans = append(sans, p.Hosts...)
+	}
+	return sans, nil
+}
+
 // PatchDNSProxied flips a record to proxied, the safe targeted fix for
 // a correct-but-unproxied tunnel record.
 func (c *Client) PatchDNSProxied(zoneID, recordID string) error {

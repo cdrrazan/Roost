@@ -331,6 +331,23 @@ func TestEnsureAccess(t *testing.T) {
 	}
 }
 
+func TestCertificateSANs(t *testing.T) {
+	f := newFakeCF(t)
+	f.mux.HandleFunc("GET /zones/z1/ssl/certificate_packs", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, []map[string]any{
+			{"hosts": []string{"example.com", "*.example.com"}},
+			{"hosts": []string{"*.demo.example.com"}},
+		})
+	})
+	sans, err := f.client().CertificateSANs("z1")
+	if err != nil {
+		t.Fatalf("CertificateSANs: %v", err)
+	}
+	if len(sans) != 3 || sans[2] != "*.demo.example.com" {
+		t.Errorf("sans = %v", sans)
+	}
+}
+
 func TestLoadToken(t *testing.T) {
 	t.Run("env var wins", func(t *testing.T) {
 		t.Setenv("CLOUDFLARE_API_TOKEN", "env-token")

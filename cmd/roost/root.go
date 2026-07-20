@@ -42,6 +42,7 @@ roost infers everything else.`,
 		newDisableCmd(),
 		newAuthCmd(),
 		newTunnelCmd(flags),
+		newDoctorCmd(flags),
 	)
 
 	return root
