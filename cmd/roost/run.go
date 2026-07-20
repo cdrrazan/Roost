@@ -154,6 +154,48 @@ func newLogsCmd(flags *rootFlags) *cobra.Command {
 	return cmd
 }
 
+// newStartCmd builds (if needed) and starts a single app's container,
+// for bringing one app up without touching the rest of the stack.
+func newStartCmd(flags *rootFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "start <app>",
+		Short: "Build and start one app's container",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := newRunner()
+			if err != nil {
+				return err
+			}
+			if err := r.Start(args[0]); err != nil {
+				return err
+			}
+			cmd.Printf("started %s\n", args[0])
+			return nil
+		},
+	}
+}
+
+// newStopCmd stops a single app's container, leaving it in place to
+// start again quickly.
+func newStopCmd(flags *rootFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop <app>",
+		Short: "Stop one app's container (without removing it)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r, err := newRunner()
+			if err != nil {
+				return err
+			}
+			if err := r.Stop(args[0]); err != nil {
+				return err
+			}
+			cmd.Printf("stopped %s\n", args[0])
+			return nil
+		},
+	}
+}
+
 // newRestartCmd restarts a single app's container.
 func newRestartCmd(flags *rootFlags) *cobra.Command {
 	return &cobra.Command{

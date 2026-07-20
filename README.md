@@ -139,7 +139,8 @@ contradict roost holding `Zone:DNS:Edit`.
 | `roost list` / `detect` | resolved apps and URLs; framework detection with the signal that triggered it |
 | `roost generate` | write `~/.roost/build/*` without starting anything |
 | `roost up [--profile p]` / `down` | start (staggered) / stop the stack |
-| `roost status` / `logs <app> [-f]` / `restart <app>` | day-to-day operations |
+| `roost status` / `logs <app> [-f]` | day-to-day operations |
+| `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost doctor` | preflight: every failure comes with a specific fix |
 | `roost tunnel setup [--adopt] [--force]` | tunnel + all DNS records via API |
 | `roost tunnel access` | Cloudflare Access policy across every suffix |

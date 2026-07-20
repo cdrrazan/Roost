@@ -112,14 +112,41 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 		}
 	}
 
-	// Apps may have been recreated with new container IPs; Caddy, started
-	// earlier as infra, can hold stale upstream keep-alives to the old
-	// containers and serve empty 200s. Reload Caddy so it rebuilds the
-	// reverse-proxy connection pools. Best-effort: the stack is already up,
-	// and a reload hiccup must not fail `up` — a stale connection self-heals
-	// once it errors on the next request.
 	if len(selected) > 0 {
-		_, _ = r.run(r.compose("exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile")...)
+		r.reloadProxy()
+	}
+	return nil
+}
+
+// reloadProxy reloads Caddy so it rebuilds its reverse-proxy connection
+// pools. Apps may have been recreated with new container IPs, and Caddy —
+// started earlier as infra — can otherwise hold stale upstream keep-alives to
+// the old containers and serve empty 200s. Best-effort: the stack is already
+// up, and a reload hiccup must not fail the caller (a stale connection
+// self-heals once it errors on the next request).
+func (r *Runner) reloadProxy() {
+	_, _ = r.run(r.compose("exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile")...)
+}
+
+// Start builds (if needed) and starts one app's container, then reloads Caddy
+// so the proxy routes to the fresh container. Assumes shared infrastructure is
+// already up (use `roost up` for a full bring-up).
+func (r *Runner) Start(app string) error {
+	if err := r.Shell.Stream("docker", r.compose("build", app)...); err != nil {
+		return fmt.Errorf("build %q: %w", app, err)
+	}
+	if _, err := r.run(r.compose("up", "-d", app)...); err != nil {
+		return fmt.Errorf("start %q: %w", app, err)
+	}
+	r.reloadProxy()
+	return nil
+}
+
+// Stop stops one app's container without removing it, leaving the rest of the
+// stack (and this app's image) in place so `roost start` brings it back fast.
+func (r *Runner) Stop(app string) error {
+	if _, err := r.run(r.compose("stop", app)...); err != nil {
+		return fmt.Errorf("stop %q: %w", app, err)
 	}
 	return nil
 }

@@ -111,6 +111,36 @@ func TestUpReloadsCaddyAfterApps(t *testing.T) {
 	}
 }
 
+func TestStartBuildsUpsAndReloadsCaddy(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Start("blog"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	calls := allCalls(fake)
+	for _, want := range []string{"build blog", "up -d blog", "caddy reload"} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("Start missing %q:\n%s", want, calls)
+		}
+	}
+}
+
+func TestStopStopsOnlyThatApp(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Stop("blog"); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	calls := allCalls(fake)
+	if !strings.Contains(calls, "stop blog") {
+		t.Errorf("Stop should stop blog:\n%s", calls)
+	}
+	// Must not tear the whole stack down.
+	if strings.Contains(calls, " down") {
+		t.Errorf("Stop must not down the stack:\n%s", calls)
+	}
+}
+
 func TestUpStreamsBuilds(t *testing.T) {
 	// First builds take minutes (base image pulls, dependency installs);
 	// their output must stream to the terminal, not be captured — a
