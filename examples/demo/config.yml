@@ -1,27 +1,27 @@
 # ------------------------------------------------------------------
-# Demo: Jamie's laptop
+# Demo: Rajan's laptop
 # ------------------------------------------------------------------
-# Fictional but realistic: Jamie runs six side projects on one laptop
-# and owns two domains, jamiedev.io and trackaru.com, both on
+# Fictional but realistic: Rajan runs six side projects on one laptop
+# and owns two domains, rajan.dev and trackaru.com, both on
 # Cloudflare. All data below is fake — copy this file, swap in your
 # own paths and domains, and it works.
 #
-# What Jamie gets from `roost up`:
-#   blog          → https://blog.jamiedev.io        (Rails + MySQL)
-#   shop          → https://shop.jamiedev.io        (Rails + MySQL, shared DB container)
-#   tiny-status   → https://status.jamiedev.io      (Sinatra + Postgres)
-#   portfolio     → https://portfolio.jamiedev.io   (static, served by Caddy)
-#   recipe-radar  → https://recipes.jamiedev.io     (Next.js)
-#   trackaru      → https://trackaru.com            (Django + Postgres, bare apex)
+# What Rajan gets from `roost up`:
+#   blog          → https://blog.rajan.dev        (Rails + MySQL)
+#   shop          → https://shop.rajan.dev        (Rails + MySQL, shared DB container)
+#   tiny-status   → https://status.rajan.dev      (Sinatra + Postgres)
+#   portfolio     → https://portfolio.rajan.dev   (static, served by Caddy)
+#   recipe-radar  → https://recipes.rajan.dev     (Next.js)
+#   trackaru      → https://trackaru.com          (Django + Postgres, bare apex)
 # ------------------------------------------------------------------
 
-domain: jamiedev.io
+domain: rajan.dev
 
 tunnel:
   name: roost
   access:
     emails:
-      - jamie@jamiedev.io # only Jamie can open these while iterating
+      - rajan@rajan.dev # only Rajan can open these while iterating
 
 defaults:
   memory: 512m
@@ -32,14 +32,14 @@ apps:
   - ~/code/shop
 
   - path: ~/code/tiny-status
-    domain: status.jamiedev.io # nicer than tiny-status.jamiedev.io
+    domain: status.rajan.dev # nicer than tiny-status.rajan.dev
 
   - path: ~/code/portfolio
-    domain: portfolio.jamiedev.io
+    domain: portfolio.rajan.dev
     memory: 128m # static files need almost nothing
 
   - path: ~/code/recipe-radar
-    domain: recipes.jamiedev.io
+    domain: recipes.rajan.dev
 
   # The second domain: a bare apex on its own zone.
   - path: ~/code/trackaru

@@ -148,11 +148,11 @@
   <div class="term" role="img" aria-label="Terminal: roost up brings three apps online over HTTPS">
     <div class="dots"><i></i><i></i><i></i></div>
     <div><span class="p">$</span> <span class="c">roost</span> up</div>
-    <div><span class="ok">up:</span> blog      → https://blog.jamiedev.io</div>
-    <div><span class="ok">up:</span> shop      → https://shop.jamiedev.io</div>
+    <div><span class="ok">up:</span> blog      → https://blog.rajan.dev</div>
+    <div><span class="ok">up:</span> shop      → https://shop.rajan.dev</div>
     <div><span class="ok">up:</span> trackaru  → https://trackaru.com</div>
     <div class="dim">&nbsp;</div>
-    <div><span class="p">$</span> <span class="c">roost</span> add ~/code/app7 --domain app7.jamiedev.io</div>
+    <div><span class="p">$</span> <span class="c">roost</span> add ~/code/app7 --domain app7.rajan.dev</div>
     <div class="dim"># no DNS change, no dashboard, no new cert — just up again</div>
   </div>
 </div>
@@ -163,9 +163,9 @@
   on. Framework, port, database, start command, and memory cap are inferred —
   every one overridable, none required.</p>
   <pre class="code"><span class="cm"># ~/.roost/config.yml</span>
-<span class="key">domain:</span> <span class="str">jamiedev.io</span>
+<span class="key">domain:</span> <span class="str">rajan.dev</span>
 <span class="key">apps:</span>
-  - <span class="str">~/code/blog</span>              <span class="cm"># → https://blog.jamiedev.io  (Rails + MySQL, detected)</span>
+  - <span class="str">~/code/blog</span>              <span class="cm"># → https://blog.rajan.dev  (Rails + MySQL, detected)</span>
   - <span class="key">path:</span> <span class="str">~/code/trackaru</span>
     <span class="key">domain:</span> <span class="str">trackaru.com</span>    <span class="cm"># any zone in your account, even a bare apex</span></pre>
 </section>
