@@ -176,6 +176,31 @@ func TestRenderCompose(t *testing.T) {
 	})
 }
 
+func TestRenderComposeNoMountForCompiledApps(t *testing.T) {
+	apps := []App{
+		{Name: "web", FQDN: "web.example.com", Path: "/apps/web", Framework: "next", Port: 3000, StartCommand: "npm run start", Memory: "512m"},
+		{Name: "svc", FQDN: "svc.example.com", Path: "/apps/svc", Framework: "node", Port: 3000, StartCommand: "npm run start", Memory: "512m"},
+		{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m"},
+	}
+	out, err := RenderCompose("/b", apps)
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	s := string(out)
+	// Compiled/bundled apps build into the image; mounting host source over
+	// /app would shadow the built .next / node_modules and break startup.
+	if strings.Contains(s, "/apps/web:/app:ro") {
+		t.Errorf("next app source must not be bind-mounted:\n%s", s)
+	}
+	if strings.Contains(s, "/apps/svc:/app:ro") {
+		t.Errorf("node app source must not be bind-mounted:\n%s", s)
+	}
+	// Interpreted frameworks stay mounted so restart picks up edits.
+	if !strings.Contains(s, "/apps/blog:/app:ro") {
+		t.Errorf("rails app source should be bind-mounted:\n%s", s)
+	}
+}
+
 func TestRenderComposeOmitsUnusedDatabases(t *testing.T) {
 	apps := []App{{
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",

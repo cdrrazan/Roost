@@ -114,6 +114,20 @@ func fileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// mountsSource reports whether an app's source is bind-mounted read-only at
+// /app at runtime. Interpreted frameworks (Rails, Django, Sinatra) are mounted
+// so `roost restart` picks up source edits without a rebuild. Compiled/bundled
+// frameworks build their artifacts into the image — static (Vite → dist/),
+// next (.next/), and node (build output + installed node_modules) — so mounting
+// the host source over /app would shadow the build and break startup.
+func mountsSource(framework string) bool {
+	switch framework {
+	case "static", "next", "node":
+		return false
+	}
+	return true
+}
+
 // dockerfilePath returns the Dockerfile compose should build with:
 // the app's own when it has one, the generated one otherwise.
 func dockerfilePath(buildDir string, app App) string {
@@ -211,15 +225,13 @@ func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 		data.NeedsMySQL = data.NeedsMySQL || app.Database == "mysql"
 		data.NeedsPostgres = data.NeedsPostgres || app.Database == "postgres"
 		data.Apps = append(data.Apps, composeApp{
-			Name:       app.Name,
-			Path:       app.Path,
-			Dockerfile: dockerfilePath(buildDir, app),
-			Memory:     app.Memory,
-			Profile:    app.Profile,
-			Database:   app.Database,
-			// Static app content is copied at image build time; every
-			// other app gets its source bind-mounted read-only.
-			MountSource: app.Framework != "static",
+			Name:        app.Name,
+			Path:        app.Path,
+			Dockerfile:  dockerfilePath(buildDir, app),
+			Memory:      app.Memory,
+			Profile:     app.Profile,
+			Database:    app.Database,
+			MountSource: mountsSource(app.Framework),
 			Env:         appEnv(app),
 		})
 	}
