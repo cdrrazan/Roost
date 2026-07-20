@@ -4,9 +4,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -16,7 +18,12 @@ import (
 type Config struct {
 	// Domain is the optional global fallback: apps without their own
 	// domain resolve to <name>.<Domain>.
-	Domain   string   `yaml:"domain"`
+	Domain string `yaml:"domain"`
+	// Include is an optional list of glob patterns; each matched file
+	// contributes its `apps:` to this config, letting a big app list be
+	// split across one file per feature. Patterns resolve against this
+	// config's directory.
+	Include  Includes `yaml:"include"`
 	Tunnel   Tunnel   `yaml:"tunnel"`
 	Defaults Defaults `yaml:"defaults"`
 	Apps     []App    `yaml:"apps"`
@@ -78,6 +85,28 @@ func (a *App) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// Includes is a list of glob patterns for pulling in extra app files.
+// In YAML it accepts either a single string or a list of strings.
+type Includes []string
+
+// UnmarshalYAML accepts both a single scalar pattern and a list.
+func (in *Includes) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		var s string
+		if err := value.Decode(&s); err != nil {
+			return err
+		}
+		*in = Includes{s}
+		return nil
+	}
+	var list []string
+	if err := value.Decode(&list); err != nil {
+		return err
+	}
+	*in = list
+	return nil
+}
+
 // ResolvedApp is an app that resolved to exactly one hostname.
 type ResolvedApp struct {
 	App
@@ -116,10 +145,75 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve home directory: %w", err)
 	}
-	for i := range cfg.Apps {
-		cfg.Apps[i].Path = expandPath(cfg.Apps[i].Path, cfg.Dir, home)
+	expandApps(cfg.Apps, cfg.Dir, home)
+
+	// Pull in apps from included files, appended after this file's own
+	// apps in include-pattern order. Hostname collisions across files
+	// are caught later by Resolve.
+	for _, pattern := range cfg.Include {
+		apps, err := loadIncluded(pattern, cfg.Dir, home)
+		if err != nil {
+			return nil, err
+		}
+		cfg.Apps = append(cfg.Apps, apps...)
 	}
 	return &cfg, nil
+}
+
+// expandApps makes every app path absolute, relative to dir.
+func expandApps(apps []App, dir, home string) {
+	for i := range apps {
+		apps[i].Path = expandPath(apps[i].Path, dir, home)
+	}
+}
+
+// loadIncluded expands pattern (relative to baseDir), globs it, and
+// returns the apps from every matched file in sorted file order. A
+// pattern that matches nothing is an error, not a silent no-op.
+func loadIncluded(pattern, baseDir, home string) ([]App, error) {
+	glob := expandPath(pattern, baseDir, home)
+	matches, err := filepath.Glob(glob)
+	if err != nil {
+		return nil, fmt.Errorf("include %q: %w", pattern, err)
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("include %q matched no files (looked under %s)", pattern, baseDir)
+	}
+	sort.Strings(matches)
+
+	var apps []App
+	for _, m := range matches {
+		fileApps, err := loadIncludedFile(m, home)
+		if err != nil {
+			return nil, err
+		}
+		apps = append(apps, fileApps...)
+	}
+	return apps, nil
+}
+
+// loadIncludedFile reads one included file, which may contain only an
+// `apps:` list. Any other top-level key (including a nested include:)
+// is rejected. App paths resolve against the included file's own
+// directory, so a per-feature file can use paths relative to itself.
+func loadIncludedFile(path, home string) ([]App, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read included file %s: %w", path, err)
+	}
+	var inc struct {
+		Apps []App `yaml:"apps"`
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&inc); err != nil {
+		return nil, fmt.Errorf("included file %s must contain only `apps:`: %w", path, err)
+	}
+	if len(inc.Apps) == 0 {
+		return nil, fmt.Errorf("included file %s has no apps", path)
+	}
+	expandApps(inc.Apps, filepath.Dir(path), home)
+	return inc.Apps, nil
 }
 
 // expandPath turns an app path into an absolute path: ~ expands to

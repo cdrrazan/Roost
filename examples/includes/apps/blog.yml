@@ -1,0 +1,7 @@
+# One included file, one feature. Contains only `apps:` — the domain,
+# tunnel, and defaults all live in the main config. Paths are relative
+# to THIS file's directory.
+apps:
+  - path: ~/projects/blog
+    domain: blog.example.com
+    framework: rails

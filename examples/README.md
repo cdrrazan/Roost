@@ -14,6 +14,7 @@ roost --config examples/demo/config.yml detect
 | [`explicit.yml`](explicit.yml) | explicit per-app hostnames — what `roost init` writes |
 | [`multi-domain.yml`](multi-domain.yml) | one config spanning three domains plus a bare apex |
 | [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env |
+| [`includes/config.yml`](includes/config.yml) | a main file that pulls apps from `apps/*.yml`, one file per feature |
 | [`demo/config.yml`](demo/config.yml) | a fully-populated fake setup for a fictional developer |
 
 ## Common recipes
@@ -31,3 +32,8 @@ value is used verbatim and can live in any zone of your Cloudflare account
 
 **"My apps are private"** — set `tunnel.access.emails`. Every routing suffix
 gets a Cloudflare Access wall before first exposure (`full.yml`).
+
+**"One config.yml is getting unwieldy"** — split the apps into files and
+`include: apps/*.yml` them from the main config (`includes/config.yml`). Each
+included file holds only an `apps:` list; the domain, tunnel, and defaults
+stay in the main file.

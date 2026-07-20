@@ -210,7 +210,7 @@ The full threat model and reporting process are in [SECURITY.md](SECURITY.md).
 
 ```
 ~/.roost/
-├── config.yml        # the only file you edit
+├── config.yml        # the file you edit (may `include:` more app files)
 ├── credentials       # CF API token, 0600
 ├── state.json        # tunnel ID, created DNS records
 ├── build/            # ALL generated artifacts (compose.yml, Caddyfile, dockerfiles/)

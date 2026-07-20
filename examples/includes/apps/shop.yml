@@ -1,0 +1,7 @@
+# A file may group several apps under one feature — here a storefront
+# and its admin, both on the global domain via bare paths.
+apps:
+  - ~/projects/shop
+  - path: ~/projects/shop-admin
+    domain: admin.shop.example.com
+    profile: extras

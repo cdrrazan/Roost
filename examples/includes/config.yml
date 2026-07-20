@@ -1,0 +1,22 @@
+# A config split across files: the main file holds the shared settings
+# (domain, tunnel, defaults) and pulls the apps in from apps/*.yml, one
+# file per feature. Keeps a big fleet readable instead of a single wall
+# of YAML.
+#
+#   roost --config examples/includes/config.yml list
+
+domain: example.com
+
+tunnel:
+  name: roost
+
+defaults:
+  memory: 512m
+
+include: apps/*.yml
+
+# The main file can still list apps of its own; they load before the
+# included ones.
+apps:
+  - path: ~/projects/dashboard
+    domain: dashboard.example.com
