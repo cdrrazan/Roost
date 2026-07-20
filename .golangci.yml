@@ -5,6 +5,13 @@ linters:
   enable:
     - misspell
     - unconvert
+  settings:
+    errcheck:
+      # Writes to a tabwriter buffer can't fail independently of the
+      # checked Flush.
+      exclude-functions:
+        - fmt.Fprintf
+        - fmt.Fprintln
 
 formatters:
   enable:

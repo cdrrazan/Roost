@@ -3,7 +3,14 @@
 // to exactly one fully-qualified hostname.
 package config
 
-import "errors"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
 
 // Config is the parsed roost configuration.
 type Config struct {
@@ -50,6 +57,27 @@ type App struct {
 	Env       map[string]string `yaml:"env"`
 }
 
+// UnmarshalYAML accepts both the bare-string form (a path) and the
+// map form for an app entry.
+func (a *App) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		var path string
+		if err := value.Decode(&path); err != nil {
+			return err
+		}
+		*a = App{Path: path}
+		return nil
+	}
+	// Alias type drops the custom unmarshaller to avoid recursion.
+	type plain App
+	var p plain
+	if err := value.Decode(&p); err != nil {
+		return err
+	}
+	*a = App(p)
+	return nil
+}
+
 // ResolvedApp is an app that resolved to exactly one hostname.
 type ResolvedApp struct {
 	App
@@ -67,36 +95,213 @@ type SkippedApp struct {
 	Reason string
 }
 
-var errNotImplemented = errors.New("not implemented")
-
 // Load reads and parses the config file at path, expanding ~ and
 // resolving relative app paths against the config file's directory.
 func Load(path string) (*Config, error) {
-	return nil, errNotImplemented
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config: %w", err)
+	}
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config %s: %w", path, err)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path %s: %w", path, err)
+	}
+	cfg.Dir = filepath.Dir(abs)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve home directory: %w", err)
+	}
+	for i := range cfg.Apps {
+		cfg.Apps[i].Path = expandPath(cfg.Apps[i].Path, cfg.Dir, home)
+	}
+	return &cfg, nil
+}
+
+// expandPath turns an app path into an absolute path: ~ expands to
+// home, relative paths resolve against the config file's directory.
+func expandPath(p, cfgDir, home string) string {
+	switch {
+	case p == "~":
+		p = home
+	case strings.HasPrefix(p, "~/"):
+		p = filepath.Join(home, p[2:])
+	}
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(cfgDir, p)
+	}
+	return filepath.Clean(p)
 }
 
 // FindConfig returns the config file path using the resolution order:
 // the --config flag value, $ROOST_CONFIG, ./roost.yml, then
-// ~/.roost/config.yml. First hit wins.
+// ~/.roost/config.yml. First hit wins. An explicitly-requested file
+// that does not exist is an error rather than a fallthrough.
 func FindConfig(flagPath string) (string, error) {
-	return "", errNotImplemented
+	if flagPath != "" {
+		if !fileExists(flagPath) {
+			return "", fmt.Errorf("config file not found: %s", flagPath)
+		}
+		return flagPath, nil
+	}
+	if env := os.Getenv("ROOST_CONFIG"); env != "" {
+		if !fileExists(env) {
+			return "", fmt.Errorf("$ROOST_CONFIG points to a missing file: %s", env)
+		}
+		return env, nil
+	}
+	if fileExists("roost.yml") {
+		abs, err := filepath.Abs("roost.yml")
+		if err != nil {
+			return "", err
+		}
+		return abs, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	def := filepath.Join(home, ".roost", "config.yml")
+	if fileExists(def) {
+		return def, nil
+	}
+	return "", fmt.Errorf("no config found: tried ./roost.yml and %s (run `roost init` to create one)", def)
 }
 
-// Resolve maps every app to exactly one hostname. Apps with no usable
-// domain or a missing path are skipped with a reason; hostname syntax
-// errors and collisions are hard errors.
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+// Resolve maps every app to exactly one hostname, per the rule:
+// an explicit per-app domain is used verbatim; otherwise the global
+// domain composes <name>.<domain>; otherwise the app is skipped.
+// A missing or non-directory path also skips the app. Invalid hostname
+// syntax and hostname collisions are hard errors.
 func Resolve(cfg *Config) ([]ResolvedApp, []SkippedApp, error) {
-	return nil, nil, errNotImplemented
+	var resolved []ResolvedApp
+	var skipped []SkippedApp
+	owner := make(map[string]string) // FQDN -> app name that claimed it
+
+	for _, app := range cfg.Apps {
+		name := app.Name
+		if name == "" {
+			name = Slugify(filepath.Base(app.Path))
+		}
+
+		if info, err := os.Stat(app.Path); err != nil {
+			skipped = append(skipped, SkippedApp{App: app, Name: name, Reason: "path does not exist: " + app.Path})
+			continue
+		} else if !info.IsDir() {
+			skipped = append(skipped, SkippedApp{App: app, Name: name, Reason: "path is not a directory: " + app.Path})
+			continue
+		}
+
+		var fqdn string
+		switch {
+		case app.Domain != "":
+			if err := ValidateHostname(app.Domain); err != nil {
+				return nil, nil, fmt.Errorf("app %q: invalid domain: %w", name, err)
+			}
+			fqdn = app.Domain
+		case cfg.Domain != "":
+			fqdn = name + "." + cfg.Domain
+			if err := ValidateHostname(fqdn); err != nil {
+				return nil, nil, fmt.Errorf("app %q: invalid hostname %q derived from global domain %q: %w", name, fqdn, cfg.Domain, err)
+			}
+		default:
+			skipped = append(skipped, SkippedApp{App: app, Name: name, Reason: "no domain configured (set domain: on the app or a global domain)"})
+			continue
+		}
+
+		if other, taken := owner[fqdn]; taken {
+			return nil, nil, fmt.Errorf("apps %q and %q both resolve to hostname %q; hostnames must be unique", other, name, fqdn)
+		}
+		owner[fqdn] = name
+		resolved = append(resolved, ResolvedApp{App: app, Name: name, FQDN: fqdn})
+	}
+	return resolved, skipped, nil
 }
 
-// ValidateHostname checks that host is a valid fully-qualified hostname.
-// It never repairs the value; it accepts or rejects with a precise reason.
+// ValidateHostname checks that host is a valid fully-qualified
+// hostname: labels of 1-63 alphanumerics-and-hyphens, no leading or
+// trailing hyphen, at least two labels, total length <= 253. It never
+// repairs the value; it accepts or rejects with a precise reason, and
+// for URLs and ports it says what the correct value would be.
 func ValidateHostname(host string) error {
-	return errNotImplemented
+	if host == "" {
+		return fmt.Errorf("hostname is empty")
+	}
+	if idx := strings.Index(host, "://"); idx >= 0 {
+		bare := host[idx+3:]
+		if slash := strings.IndexAny(bare, "/:"); slash >= 0 {
+			bare = bare[:slash]
+		}
+		return fmt.Errorf("%q is a URL, not a hostname; use %q instead", host, bare)
+	}
+	if idx := strings.Index(host, ":"); idx >= 0 {
+		return fmt.Errorf("%q includes a port; use %q instead", host, host[:idx])
+	}
+	if idx := strings.Index(host, "/"); idx >= 0 {
+		return fmt.Errorf("%q includes a path; use %q instead", host, host[:idx])
+	}
+	if strings.HasSuffix(host, ".") {
+		return fmt.Errorf("%q has a trailing dot; remove it", host)
+	}
+	if len(host) > 253 {
+		return fmt.Errorf("%q is %d characters; hostnames are limited to 253", host, len(host))
+	}
+	labels := strings.Split(host, ".")
+	if len(labels) < 2 {
+		return fmt.Errorf("%q is a bare label; a hostname needs at least two labels, like app.example.com", host)
+	}
+	for _, label := range labels {
+		if label == "" {
+			return fmt.Errorf("%q contains an empty label (consecutive dots)", host)
+		}
+		if len(label) > 63 {
+			return fmt.Errorf("label %q is %d characters; labels are limited to 63", label, len(label))
+		}
+		if strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return fmt.Errorf("label %q must not start or end with a hyphen", label)
+		}
+		for _, r := range label {
+			if !isHostnameRune(r) {
+				return fmt.Errorf("label %q contains invalid character %q; only letters, digits, and hyphens are allowed", label, r)
+			}
+		}
+	}
+	return nil
+}
+
+func isHostnameRune(r rune) bool {
+	return r == '-' ||
+		(r >= 'a' && r <= 'z') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= '0' && r <= '9')
 }
 
 // Slugify derives an app name from a directory basename: lowercase,
-// alphanumerics and hyphens only.
+// with every run of non-alphanumeric characters collapsed to a single
+// hyphen and leading/trailing hyphens trimmed.
 func Slugify(base string) string {
-	return ""
+	var b strings.Builder
+	lastHyphen := true // suppress a leading hyphen
+	for _, r := range strings.ToLower(base) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			lastHyphen = false
+		default:
+			if !lastHyphen {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
 }
