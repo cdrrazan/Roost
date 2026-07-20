@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>roost — your laptop, live on your own domain</title>
+<meta name="description" content="roost turns a list of local app folders into live HTTPS apps on your own domain: generated Docker Compose, Caddy routing, and a Cloudflare Tunnel from one config file.">
+<style>
+  :root {
+    --bg: #faf9f5;
+    --surface: #ffffff;
+    --ink: #1a1815;
+    --muted: #6b675f;
+    --line: #e4e1d8;
+    --accent: #c96442;
+    --accent-ink: #ffffff;
+    --code-bg: #262624;
+    --code-ink: #e8e6dd;
+    --code-dim: #918e85;
+    --ok: #4a8a5c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1f1e1b;
+      --surface: #262624;
+      --ink: #e8e6dd;
+      --muted: #a5a196;
+      --line: #3a3833;
+      --code-bg: #171614;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header.top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0;
+  }
+  .brand { font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+  .brand .tld { color: var(--accent); }
+  nav.links { display: flex; gap: 20px; font-size: 14px; }
+  nav.links a { color: var(--muted); }
+
+  .hero { padding: 56px 0 40px; display: grid; gap: 40px; grid-template-columns: 1fr 1fr; align-items: center; }
+  @media (max-width: 800px) { .hero { grid-template-columns: 1fr; } }
+  .hero h1 { font-size: clamp(30px, 4.5vw, 44px); line-height: 1.15; letter-spacing: -0.02em; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p.lede { margin-top: 16px; color: var(--muted); font-size: 18px; max-width: 34em; }
+  .cta { margin-top: 24px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 8px;
+    font-weight: 600; font-size: 15px; border: 1px solid var(--line);
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.primary:hover { text-decoration: none; filter: brightness(1.06); }
+  .btn.ghost:hover { text-decoration: none; border-color: var(--accent); }
+
+  .term {
+    background: var(--code-bg); color: var(--code-ink);
+    border-radius: 12px; padding: 18px 20px; font: 13px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+    overflow-x: auto;
+  }
+  .term .dots { display: flex; gap: 6px; margin-bottom: 12px; }
+  .term .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--code-dim); opacity: .5; }
+  .term .p { color: var(--code-dim); }
+  .term .c { color: #d3976f; }
+  .term .ok { color: #9dc4a5; }
+  .term .dim { color: var(--code-dim); }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  section h2 { font-size: 24px; letter-spacing: -0.01em; margin-bottom: 8px; }
+  section p.sub { color: var(--muted); margin-bottom: 24px; max-width: 44em; }
+
+  .cols { display: grid; gap: 20px; grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 20px;
+  }
+  .card h3 { font-size: 16px; margin-bottom: 6px; }
+  .card p { font-size: 14px; color: var(--muted); }
+  .card .k { font: 600 13px ui-monospace, Menlo, monospace; color: var(--accent); }
+
+  .flow { display: grid; gap: 8px; grid-template-columns: repeat(5, 1fr); text-align: center; font-size: 13px; color: var(--muted); align-items: stretch; }
+  @media (max-width: 800px) { .flow { grid-template-columns: 1fr; } }
+  .flow .step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 10px; }
+  .flow .step b { display: block; color: var(--ink); font-size: 14px; margin-bottom: 4px; }
+
+  pre.code {
+    background: var(--code-bg); color: var(--code-ink); border-radius: 12px;
+    padding: 18px 20px; font: 13px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    overflow-x: auto;
+  }
+  pre.code .cm { color: var(--code-dim); }
+  pre.code .key { color: #9dc4a5; }
+  pre.code .str { color: #d3976f; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  td:first-child, th:first-child { font-weight: 600; }
+  .yes { color: var(--ok); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+
+  .honest {
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 18px 20px; max-width: 44em;
+  }
+  .honest b { display: block; margin-bottom: 4px; }
+  .honest p { color: var(--muted); font-size: 15px; }
+
+  footer { border-top: 1px solid var(--line); padding: 28px 0 48px; font-size: 14px; color: var(--muted); display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; }
+  footer .fl { display: flex; gap: 18px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="brand">roost<span class="tld">.</span></div>
+  <nav class="links">
+    <a href="#how">How it works</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#compare">Compare</a>
+    <a href="https://github.com/cdrrazan/roost">GitHub</a>
+  </nav>
+</header>
+
+<div class="hero">
+  <div>
+    <h1>Every app on your laptop, <em>live on your own domain</em>.</h1>
+    <p class="lede">One config file with paths and hostnames. roost generates the
+    Dockerfiles, Compose stack, Caddy routing, and Cloudflare Tunnel — and
+    creates every DNS record via API. No files added to your repos, ever.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/cdrrazan/roost#60-second-quickstart">Get started</a>
+      <a class="btn ghost" href="https://github.com/cdrrazan/roost/tree/main/examples">See examples</a>
+    </div>
+  </div>
+  <div class="term" role="img" aria-label="Terminal: roost up brings three apps online over HTTPS">
+    <div class="dots"><i></i><i></i><i></i></div>
+    <div><span class="p">$</span> <span class="c">roost</span> up</div>
+    <div><span class="ok">up:</span> blog      → https://blog.jamiedev.io</div>
+    <div><span class="ok">up:</span> shop      → https://shop.jamiedev.io</div>
+    <div><span class="ok">up:</span> trackaru  → https://trackaru.com</div>
+    <div class="dim">&nbsp;</div>
+    <div><span class="p">$</span> <span class="c">roost</span> add ~/code/app7 --domain app7.jamiedev.io</div>
+    <div class="dim"># no DNS change, no dashboard, no new cert — just up again</div>
+  </div>
+</div>
+
+<section id="config">
+  <h2>The whole configuration</h2>
+  <p class="sub">You supply where each app lives and what hostname it answers
+  on. Framework, port, database, start command, and memory cap are inferred —
+  every one overridable, none required.</p>
+  <pre class="code"><span class="cm"># ~/.roost/config.yml</span>
+<span class="key">domain:</span> <span class="str">jamiedev.io</span>
+<span class="key">apps:</span>
+  - <span class="str">~/code/blog</span>              <span class="cm"># → https://blog.jamiedev.io  (Rails + MySQL, detected)</span>
+  - <span class="key">path:</span> <span class="str">~/code/trackaru</span>
+    <span class="key">domain:</span> <span class="str">trackaru.com</span>    <span class="cm"># any zone in your account, even a bare apex</span></pre>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <p class="sub">One tunnel, one wildcard DNS record per suffix, host-header
+  routing inside. That architecture is why adding an app is a purely local
+  change with zero API calls.</p>
+  <div class="flow">
+    <div class="step"><b>Detect</b>Gemfile? package.json? manage.py? — framework, port, DB</div>
+    <div class="step"><b>Generate</b>Dockerfiles, compose.yml, Caddyfile → ~/.roost/build</div>
+    <div class="step"><b>Run</b>docker compose, staggered starts, memory caps</div>
+    <div class="step"><b>Route</b>Caddy matches the Host header → app container</div>
+    <div class="step"><b>Expose</b>cloudflared + wildcard DNS, TLS at the edge</div>
+  </div>
+</section>
+
+<section id="quickstart">
+  <h2>60-second quickstart</h2>
+  <p class="sub">Prerequisites: Docker, and a domain on Cloudflare. You create
+  one API token — roost automates every other Cloudflare step.</p>
+  <pre class="code"><span class="cm">$</span> brew install cdrrazan/tap/roost
+<span class="cm">$</span> roost init          <span class="cm"># picks your domain from your live zone list</span>
+<span class="cm">$</span> roost auth login    <span class="cm"># paste the API token (init links the page + scopes)</span>
+<span class="cm">$</span> roost doctor        <span class="cm"># every failure comes with a specific fix</span>
+<span class="cm">$</span> roost tunnel setup  <span class="cm"># tunnel + ALL DNS records via API</span>
+<span class="cm">$</span> roost up            <span class="cm"># build, start, route — live on HTTPS</span>
+<span class="cm">$</span> roost enable        <span class="cm"># come back up at every login</span></pre>
+</section>
+
+<section>
+  <h2>Built-in guardrails</h2>
+  <p class="sub">The failure modes that cost hours are encoded, tested, and
+  checked by <span class="k" style="font-family:ui-monospace,Menlo,monospace;color:var(--accent)">roost doctor</span>.</p>
+  <div class="cols">
+    <div class="card"><h3>No Rails redirect loops</h3><p>Cloudflare terminates TLS and forwards plain HTTP; roost sets <span class="k">RAILS_ASSUME_SSL</span> so <span class="k">force_ssl</span> apps don't redirect forever.</p></div>
+    <div class="card"><h3>The SSL depth trap</h3><p>Free Universal SSL covers <b>one</b> subdomain level. Doctor flags hostnames nested deeper — before you hit an unexplainable browser TLS error.</p></div>
+    <div class="card"><h3>No shadowed wildcards</h3><p>An exact DNS record silently beats a wildcard. roost pre-flights every record and names the collision and both ways out.</p></div>
+    <div class="card"><h3>No leaked databases</h3><p>Databases and apps never publish host ports; everything rides the internal network. One shared MySQL/Postgres, one database per app.</p></div>
+    <div class="card"><h3>Access before exposure</h3><p>Hostnames leak via Certificate Transparency within hours. Set <span class="k">access.emails</span> and every suffix gets an auth wall before first <span class="k">up</span>.</p></div>
+    <div class="card"><h3>Laptop-friendly</h3><p>Memory caps per app, single-worker Rails defaults, staggered starts so six apps don't spike your CPU at once.</p></div>
+  </div>
+</section>
+
+<section id="compare">
+  <h2>How it compares</h2>
+  <p class="sub">Label-driven tools automate tunnel routing for containers you
+  already maintain. roost starts one step earlier: from source folders.</p>
+  <div class="tablewrap">
+  <table>
+    <tr><th></th><th>roost</th><th>DockFlare / TunnelDock</th><th>Coolify</th></tr>
+    <tr><td>Input</td><td class="yes">a list of source folders</td><td>running containers + labels</td><td>git repos, web UI</td></tr>
+    <tr><td>Dockerfiles &amp; Compose</td><td class="yes">generated for you</td><td>you write them</td><td>buildpacks / you</td></tr>
+    <tr><td>DNS strategy</td><td class="yes">one wildcard per suffix</td><td>per-hostname API records</td><td>your server's DNS</td></tr>
+    <tr><td>Adding an app</td><td class="yes">local change only</td><td>labels + API calls</td><td>UI / git push</td></tr>
+    <tr><td>Runs on</td><td>your laptop</td><td>your Docker host</td><td>a server you operate</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>The honest part</h2>
+  <div class="honest">
+    <b>This is not always-on hosting.</b>
+    <p>Your apps roost while the laptop is open and leave when it closes. Lid
+    shut — apps down; lid open — cloudflared reconnects in seconds. roost is
+    for demos, previews, and personal projects, and it says so plainly.</p>
+  </div>
+</section>
+
+<footer>
+  <div>MIT licensed. Built with Go, two dependencies, and a lot of tests.</div>
+  <div class="fl">
+    <a href="https://github.com/cdrrazan/roost">GitHub</a>
+    <a href="https://github.com/cdrrazan/roost/tree/main/examples">Examples</a>
+    <a href="https://github.com/cdrrazan/roost/blob/main/docs/configuration.md">Config reference</a>
+    <a href="https://github.com/cdrrazan/roost/blob/main/ROADMAP.md">Roadmap</a>
+    <a href="https://github.com/cdrrazan/roost/blob/main/CONTRIBUTING.md">Contributing</a>
+    <a href="https://github.com/cdrrazan/roost/blob/main/SECURITY.md">Security</a>
+  </div>
+</footer>
+
+</div>
+</body>
+</html>
