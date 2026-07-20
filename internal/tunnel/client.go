@@ -69,7 +69,7 @@ type envelope struct {
 
 // do performs one API call, unwrapping Cloudflare's response envelope.
 func (c *Client) do(method, path string, body, out any) error {
-	var reqBody *bytes.Buffer = bytes.NewBuffer(nil)
+	reqBody := bytes.NewBuffer(nil)
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
@@ -96,7 +96,7 @@ func (c *Client) do(method, path string, body, out any) error {
 	if err != nil {
 		return fmt.Errorf("cloudflare API %s %s: %w", method, path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var env envelope
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
