@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -131,6 +133,31 @@ func TestUpProfileFiltering(t *testing.T) {
 			t.Errorf("unprofiled blog should still start:\n%s", calls)
 		}
 	})
+}
+
+func TestComposeLoadsEnvFileWhenPresent(t *testing.T) {
+	dir := t.TempDir()
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	r.BuildDir = dir
+
+	if err := r.Down(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(allCalls(fake), "--env-file") {
+		t.Errorf("no .env exists yet, --env-file should be absent:\n%s", allCalls(fake))
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("ROOST_TUNNEL_TOKEN=x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fake.Calls = nil
+	if err := r.Down(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(allCalls(fake), "--env-file") {
+		t.Errorf("with .env present the compose call should load it:\n%s", allCalls(fake))
+	}
 }
 
 func TestDown(t *testing.T) {

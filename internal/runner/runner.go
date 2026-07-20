@@ -7,6 +7,8 @@ package runner
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -39,9 +41,15 @@ func New(buildDir string) *Runner {
 }
 
 // compose builds a docker invocation with the project name pinned to
-// roost and the generated compose file.
+// roost and the generated compose file. When tunnel setup has written
+// a .env (the cloudflared connector token), compose loads it too.
 func (r *Runner) compose(args ...string) []string {
-	return append(generate.ComposeArgs(r.BuildDir), args...)
+	base := generate.ComposeArgs(r.BuildDir)
+	envFile := filepath.Join(r.BuildDir, ".env")
+	if _, err := os.Stat(envFile); err == nil {
+		base = append(base, "--env-file", envFile)
+	}
+	return append(base, args...)
 }
 
 func (r *Runner) run(args ...string) (shell.Result, error) {

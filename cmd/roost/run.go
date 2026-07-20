@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -64,6 +66,9 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 				if runner.AppSelected(app, profiles) {
 					cmd.Printf("up: %s → https://%s\n", app.Name, app.FQDN)
 				}
+			}
+			if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
+				cmd.Println("note: no tunnel connector token found — run `roost tunnel setup` to create the tunnel and DNS records")
 			}
 			return nil
 		},
