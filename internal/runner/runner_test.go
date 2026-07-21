@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -348,6 +349,73 @@ func TestPrepareRunsSetupThenSeed(t *testing.T) {
 	}
 	if len(seeded) != 1 || seeded[0] != "blog" {
 		t.Errorf("onSeeded called for %v, want [blog]", seeded)
+	}
+}
+
+func TestMysqlVolumeID(t *testing.T) {
+	fake := &shell.Fake{RunFunc: func(name string, args ...string) (shell.Result, error) {
+		if name == "docker" && len(args) >= 2 && args[0] == "volume" && args[1] == "inspect" {
+			return shell.Result{Stdout: "2026-07-21T04:31:40Z\n"}, nil
+		}
+		return shell.Result{}, nil
+	}}
+	r, _ := newTestRunner(fake)
+	id, err := r.MysqlVolumeID()
+	if err != nil {
+		t.Fatalf("MysqlVolumeID: %v", err)
+	}
+	if id != "2026-07-21T04:31:40Z" {
+		t.Errorf("id = %q, want the trimmed CreatedAt", id)
+	}
+	if !strings.Contains(allCalls(fake), "volume inspect roost_roost-mysql-data --format {{.CreatedAt}}") {
+		t.Errorf("unexpected inspect call:\n%s", allCalls(fake))
+	}
+}
+
+func TestMysqlVolumeIDAbsentVolumeIsUnknown(t *testing.T) {
+	// An absent volume (nothing created yet, or removed) is not an error —
+	// the identity is simply unknown so drift detection is skipped.
+	fake := &shell.Fake{RunFunc: func(name string, args ...string) (shell.Result, error) {
+		return shell.Result{Stderr: "Error: No such volume"}, errors.New("exit status 1")
+	}}
+	r, _ := newTestRunner(fake)
+	id, err := r.MysqlVolumeID()
+	if err != nil {
+		t.Fatalf("absent volume must not error: %v", err)
+	}
+	if id != "" {
+		t.Errorf("absent volume id = %q, want empty", id)
+	}
+}
+
+func TestPrepareDoesNotMarkFailedSeed(t *testing.T) {
+	// The seed exec fails; setup succeeds. The app must NOT be recorded as
+	// seeded, and Prepare must surface the failure.
+	fake := &shell.Fake{RunFunc: func(name string, args ...string) (shell.Result, error) {
+		for _, a := range args {
+			if a == "SEED_DEMO=1" {
+				return shell.Result{Stderr: "seed boom"}, errors.New("exit status 1")
+			}
+		}
+		return shell.Result{}, nil
+	}}
+	r, _ := newTestRunner(fake)
+	apps := []generate.App{
+		{Name: "blog", FQDN: "blog.example.com", Framework: "rails", Database: "mysql", SetupCommand: "bin/rails db:prepare", SeedCommand: "bin/rails db:seed"},
+	}
+	var seeded []string
+	err := r.Prepare(apps, nil, func(string) bool { return true }, func(n string) error {
+		seeded = append(seeded, n)
+		return nil
+	})
+	if err == nil {
+		t.Fatal("Prepare must return an error when a seed fails")
+	}
+	if len(seeded) != 0 {
+		t.Errorf("a failed seed must not be marked; onSeeded fired for %v", seeded)
+	}
+	if !strings.Contains(allCalls(fake), "db:prepare") {
+		t.Error("setup should still have run before the failing seed")
 	}
 }
 

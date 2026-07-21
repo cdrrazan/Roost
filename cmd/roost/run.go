@@ -117,6 +117,21 @@ func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, prof
 		return err
 	}
 
+	// If the MySQL data volume was recreated since we last seeded (a Docker
+	// Desktop Clean/Purge, `docker volume rm`, or a fresh machine), the
+	// recorded "seeded" set points at a database that no longer exists.
+	// Detect the drift and clear the set so every app re-seeds against the
+	// now-empty volume. An unknown identity (docker could not report it) is
+	// left alone rather than risking a spurious wipe.
+	if vid, verr := r.MysqlVolumeID(); verr == nil && vid != "" {
+		if st.SyncMysqlVolume(vid) {
+			cmd.Println("mysql data volume was recreated — re-seeding all apps")
+		}
+		if err := st.Save(statePath); err != nil {
+			return err
+		}
+	}
+
 	shouldSeed := func(name string) bool { return reseed || !st.HasSeeded(name) }
 	onSeeded := func(name string) error {
 		cmd.Printf("seeded: %s\n", name)

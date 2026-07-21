@@ -56,6 +56,25 @@ func (r *Runner) run(args ...string) (shell.Result, error) {
 	return r.Shell.Run("docker", args...)
 }
 
+// mysqlVolume is the docker volume backing MySQL data. Compose prefixes the
+// pinned project name ("roost", see ComposeArgs) onto the compose-file
+// volume key ("roost-mysql-data"), giving "roost_roost-mysql-data".
+const mysqlVolume = "roost_roost-mysql-data"
+
+// MysqlVolumeID returns an identity for the MySQL data volume that changes
+// whenever the volume is recreated (a Docker Desktop Clean/Purge, a
+// `docker volume rm`, or a fresh machine): the volume's CreatedAt stamp.
+// An absent volume yields an empty id and no error, so callers treat the
+// identity as merely unknown rather than as a failure.
+func (r *Runner) MysqlVolumeID() (string, error) {
+	res, err := r.run("volume", "inspect", mysqlVolume, "--format", "{{.CreatedAt}}")
+	if err != nil {
+		// No such volume yet: unknown identity, not a hard error.
+		return "", nil
+	}
+	return strings.TrimSpace(res.Stdout), nil
+}
+
 // AppSelected reports whether an app runs under the selected profiles:
 // unprofiled apps always run; profiled apps only when selected. With
 // no profiles selected, everything runs.

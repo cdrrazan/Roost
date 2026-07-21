@@ -150,7 +150,7 @@ apps:
 |---|---|
 | `env:` | **runtime** environment — compose `environment:` |
 | `build_env:` | **build-time** environment — `ENV` in the Docker builder stage, for frameworks that validate config during their build (e.g. a Next.js app using `@t3-oss/env` needing `SKIP_ENV_VALIDATION`, or `NPM_CONFIG_LEGACY_PEER_DEPS` for a stubborn install). Bakes into image layers — keep secrets in `env:`. |
-| `seed:` | **DB setup on `up`.** Any database-backed app is migrated on every `up` (Rails `db:prepare`, Django `migrate`). `seed: true` also runs the framework's default seed command (Rails `db:seed`) — or `seed: "<command>"` runs yours — **once** per app, recorded in `state.json`; `roost up --reseed` re-runs. Seeds execute with `SEED_DEMO=1` so gated demo seeds fire. |
+| `seed:` | **DB setup on `up`.** Any database-backed app is migrated on every `up` (Rails `db:prepare`, Django `migrate`). `seed: true` also runs the framework's default seed command (Rails `db:seed`) — or `seed: "<command>"` runs yours — **once** per app, recorded in `state.json`; `roost up --reseed` re-runs. Seeds execute with `SEED_DEMO=1` so gated demo seeds fire. A failed seed is never marked done, and if the MySQL data volume is recreated (Clean/Purge, `volume rm`) roost re-seeds every app automatically on the next `up`. |
 
 ### 🧩 Split a big fleet across files — `include`
 
@@ -465,9 +465,11 @@ named volumes.
 That's the nuclear option: it wipes the entire Docker VM — **all containers,
 images, and named volumes**, including `roost-mysql-data`. Every database and
 all demo data is gone, and every image is deleted. The next `roost up` rebuilds
-all images from scratch, `mysql-init.sql` recreates empty databases and users,
-and Rails apps need a fresh `db:migrate` + re-seed. Back the volume up first if
-you want it reversible:
+all images from scratch and `mysql-init.sql` recreates empty databases and
+users. **roost notices the data volume was recreated** (it tracks the volume's
+identity in `state.json`) and **automatically re-migrates and re-seeds every
+`seed:` app** on that next `up` — you don't need `--reseed`. Back the volume up
+first if you want the old data back instead:
 
 ```bash
 docker run --rm -v roost-mysql-data:/data -v "$PWD":/backup alpine \

@@ -27,6 +27,12 @@ type State struct {
 	// Seeded is the set of app names roost has already run demo seeds
 	// for, so `roost up` seeds each app once instead of on every run.
 	Seeded []string `json:"seeded,omitempty"`
+	// MysqlVolumeID identifies the MySQL data volume the Seeded set was
+	// recorded against. When the volume is recreated (a Docker Desktop
+	// Clean/Purge, `docker volume rm`, a fresh machine), its identity
+	// changes and the seeded set no longer matches an empty database — see
+	// SyncMysqlVolume.
+	MysqlVolumeID string `json:"mysql_volume_id,omitempty"`
 }
 
 // Path returns the state file location under the given home dir.
@@ -92,4 +98,24 @@ func (s *State) MarkSeeded(app string) {
 		return
 	}
 	s.Seeded = append(s.Seeded, app)
+}
+
+// SyncMysqlVolume reconciles the seeded set against the current MySQL data
+// volume identity. It returns true only when a drift is both detected and
+// consequential: the recorded identity was non-empty, the new one differs
+// (the volume was recreated), and there were seeds to invalidate. In that
+// case the seeded set is cleared so `roost up` re-seeds every app against
+// the now-empty database. An empty id (identity unknown) is ignored so a
+// transient docker hiccup never wipes the set. The current identity is
+// always recorded.
+func (s *State) SyncMysqlVolume(id string) bool {
+	if id == "" || id == s.MysqlVolumeID {
+		return false
+	}
+	drifted := s.MysqlVolumeID != "" && len(s.Seeded) > 0
+	s.MysqlVolumeID = id
+	if drifted {
+		s.Seeded = nil
+	}
+	return drifted
 }
