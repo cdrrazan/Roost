@@ -7,7 +7,7 @@
 # own paths and domains, and it works.
 #
 # What Rajan gets from `roost up`:
-#   blog          → https://blog.rajan.dev        (Rails + MySQL)
+#   blog          → https://blog.rajan.dev        (Rails + MySQL, seeded on up)
 #   shop          → https://shop.rajan.dev        (Rails + MySQL, shared DB container)
 #   tiny-status   → https://status.rajan.dev      (Sinatra + Postgres)
 #   portfolio     → https://portfolio.rajan.dev   (static, served by Caddy)
@@ -27,8 +27,11 @@ defaults:
   memory: 512m
 
 apps:
-  # Bare paths ride the global domain.
-  - ~/code/blog
+  # blog gets demo data: roost migrates it every up and runs bin/rails
+  # db:seed once (tracked in state.json; roost up --reseed repeats it).
+  - path: ~/code/blog
+    seed: true
+  # shop rides the global domain with everything inferred.
   - ~/code/shop
 
   - path: ~/code/tiny-status

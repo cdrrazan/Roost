@@ -208,6 +208,7 @@
   - <span class="key">path:</span> <span class="str">~/code/trackaru</span>
     <span class="key">domain:</span> <span class="str">trackaru.com</span>   <span class="cm"># bare apex, own zone</span>
     <span class="key">profile:</span> <span class="str">extras</span>       <span class="cm"># start on demand</span>
+    <span class="key">seed:</span> <span class="str">true</span>            <span class="cm"># migrate + seed on up (once)</span>
     <span class="key">build_env:</span>            <span class="cm"># build-time env</span>
       <span class="key">SKIP_ENV_VALIDATION:</span> <span class="str">"1"</span></pre>
   </div>
@@ -318,7 +319,7 @@
     <tr><td><code>roost add</code> / <code>remove</code></td><td>edit the app list — your config comments are preserved</td></tr>
     <tr><td><code>roost list</code> / <code>detect</code></td><td>resolved apps and URLs; detection with the signal that triggered it</td></tr>
     <tr><td><code>roost generate</code></td><td>write <code>~/.roost/build/*</code> without starting anything</td></tr>
-    <tr><td><code>roost up [--profile]</code> / <code>down</code></td><td>start the whole stack (staggered, memory-capped) / stop it</td></tr>
+    <tr><td><code>roost up [--profile] [--reseed]</code> / <code>down</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps / stop it</td></tr>
     <tr><td><code>roost start</code> / <code>stop</code> / <code>restart</code></td><td>bring one app up, take it down, or bounce it — without touching the rest of the stack</td></tr>
     <tr><td><code>roost status</code> / <code>logs</code></td><td>state, health, memory vs cap, public URL; tail one app's logs</td></tr>
     <tr><td><code>roost doctor</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth — with a fix per failure</td></tr>
@@ -347,6 +348,7 @@
     <div class="card"><h3>Laptop-friendly</h3><p>Memory caps per app, single-worker Rails defaults, staggered starts so six apps don't spike your CPU at once.</p></div>
     <div class="card"><h3>Multi-database Rails</h3><p>A per-app database user so apps that connect as their own username and use Solid Cache/Queue/Cable (sibling <span class="k">&lt;app&gt;_*</span> databases) just work.</p></div>
     <div class="card"><h3>Never a stale route</h3><p>After (re)starting containers Caddy is reloaded and cloudflared refreshed on new routes — no empty responses from a dead upstream, no 404 on a just-added zone.</p></div>
+    <div class="card"><h3>DB ready on <span class="k">up</span></h3><p>Database apps are migrated every <span class="k">up</span>; add <span class="k">seed: true</span> (or a command) and they seed once — tracked in <span class="k">state.json</span>, <span class="k">--reseed</span> to repeat. No manual <span class="k">db:prepare</span> after a fresh start.</p></div>
   </div>
 </section>
 

@@ -32,6 +32,7 @@ apps:
     framework: rails # default: detected from the folder
     port: 3001 # default: framework default
     database: mysql # default: detected from the app's config
+    seed: true # after start: migrate every up, run bin/rails db:seed once
     memory: 768m # this one needs more headroom
     profile: extras # start only with: roost up --profile extras
     env: # extra container environment
@@ -47,10 +48,28 @@ apps:
   # A Next.js app that validates env at build time (e.g. @t3-oss/env).
   # build_env is set during `next build`; env is set at runtime. Keep
   # secrets in env — build_env bakes into image layers.
+  #
+  # seed: takes a command string for anything that isn't a Rails default —
+  # here, push the Drizzle schema and run the app's own seed script. It
+  # runs once (tracked in state.json); `roost up --reseed` re-runs it.
   - path: ~/projects/webapp
     domain: app.example.com
     framework: next
+    seed: "npm run db:push && npm run seed"
     build_env:
       SKIP_ENV_VALIDATION: "1"
     env:
       NEXT_PUBLIC_APP_URL: https://app.example.com
+
+# ------------------------------------------------------------------
+# Not in this file: shared demo credentials.
+# Drop a ~/.roost/seed.env (mode 0600, KEY=VALUE) and roost injects its
+# pairs into every app container, so one demo super-admin logs into all
+# of them. Point each app's seed script at the variables:
+#
+#   # ~/.roost/seed.env
+#   SEED_ADMIN_EMAIL=me@example.com
+#   SEED_ADMIN_PASSWORD=one-strong-shared-secret
+#
+# Secrets stay out of config.yml — see docs/configuration.md.
+# ------------------------------------------------------------------

@@ -13,7 +13,7 @@ roost --config examples/demo/config.yml detect
 | [`minimal.yml`](minimal.yml) | the smallest useful config: a domain and a list of paths |
 | [`explicit.yml`](explicit.yml) | explicit per-app hostnames — what `roost init` writes |
 | [`multi-domain.yml`](multi-domain.yml) | one config spanning three domains plus a bare apex |
-| [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env |
+| [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env, build_env, seed |
 | [`includes/config.yml`](includes/config.yml) | a main file that pulls apps from `apps/*.yml`, one file per feature |
 | [`demo/config.yml`](demo/config.yml) | a fully-populated fake setup for a fictional developer |
 
@@ -37,3 +37,11 @@ gets a Cloudflare Access wall before first exposure (`full.yml`).
 `include: apps/*.yml` them from the main config (`includes/config.yml`). Each
 included file holds only an `apps:` list; the domain, tunnel, and defaults
 stay in the main file.
+
+**"Set up the database and seed demo data automatically"** — add `seed:` to an
+app (`full.yml`, `demo/config.yml`). Any database-backed app is migrated on
+every `up`; `seed: true` also runs the framework's default seed (Rails
+`db:seed`), or `seed: "<command>"` runs yours — once per app, `roost up
+--reseed` to repeat. Pair it with a `~/.roost/seed.env` (a `0600` `KEY=VALUE`
+file, injected into every app container) to seed the same super-admin login
+across all of them — see [`docs/configuration.md`](../docs/configuration.md).
