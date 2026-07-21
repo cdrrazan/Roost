@@ -176,6 +176,71 @@ func TestRenderCompose(t *testing.T) {
 	})
 }
 
+func TestRenderComposeInjectsSeedEnv(t *testing.T) {
+	// ~/.roost/seed.env holds the shared demo super-admin credentials so
+	// every app seeds the same login. RenderCompose reads it relative to
+	// the build dir's parent and injects the pairs into each app's env.
+	home := t.TempDir()
+	buildDir := filepath.Join(home, "build")
+	seed := "# demo super-admin, shared across apps\n" +
+		"SEED_EMAIL=rajan@rsynk.com\n" +
+		"SEED_PASSWORD=s3cr3t-shared\n"
+	if err := os.WriteFile(filepath.Join(home, "seed.env"), []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	apps := []App{
+		{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Database: "mysql", Memory: "512m"},
+		// A per-app override must still win over the shared default.
+		{Name: "crm", FQDN: "crm.example.com", Path: "/apps/crm", Framework: "django", Port: 8000, StartCommand: "gunicorn", Memory: "512m", Env: map[string]string{"SEED_PASSWORD": "crm-only"}},
+		// Static apps carry no env at all; nothing to seed.
+		{Name: "site", FQDN: "site.example.com", Path: "/apps/site", Framework: "static", Port: 80, Memory: "512m"},
+	}
+	out, err := RenderCompose(buildDir, apps)
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("compose.yml is not valid YAML: %v\n%s", err, out)
+	}
+	services, _ := doc["services"].(map[string]any)
+	env := func(name string) map[string]any {
+		svc, _ := services[name].(map[string]any)
+		e, _ := svc["environment"].(map[string]any)
+		return e
+	}
+
+	if got := env("blog")["SEED_EMAIL"]; got != "rajan@rsynk.com" {
+		t.Errorf("blog SEED_EMAIL = %v, want rajan@rsynk.com", got)
+	}
+	if got := env("blog")["SEED_PASSWORD"]; got != "s3cr3t-shared" {
+		t.Errorf("blog SEED_PASSWORD = %v, want s3cr3t-shared", got)
+	}
+	if got := env("crm")["SEED_EMAIL"]; got != "rajan@rsynk.com" {
+		t.Errorf("crm SEED_EMAIL = %v, want the shared value", got)
+	}
+	if got := env("crm")["SEED_PASSWORD"]; got != "crm-only" {
+		t.Errorf("crm SEED_PASSWORD = %v, want the per-app override crm-only", got)
+	}
+	if e := env("site"); len(e) != 0 {
+		t.Errorf("static app should carry no environment, got %v", e)
+	}
+}
+
+func TestRenderComposeNoSeedFileIsClean(t *testing.T) {
+	// Missing ~/.roost/seed.env is not an error and injects nothing.
+	home := t.TempDir()
+	apps := []App{{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m"}}
+	out, err := RenderCompose(filepath.Join(home, "build"), apps)
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	if strings.Contains(string(out), "SEED_") {
+		t.Errorf("no seed.env present, yet SEED_ vars appeared:\n%s", out)
+	}
+}
+
 func TestRenderComposeNoMountForCompiledApps(t *testing.T) {
 	apps := []App{
 		{Name: "web", FQDN: "web.example.com", Path: "/apps/web", Framework: "next", Port: 3000, StartCommand: "npm run start", Memory: "512m"},

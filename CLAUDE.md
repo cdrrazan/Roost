@@ -52,7 +52,7 @@ config.yml → detect (framework/port/db) → generate (~/.roost/build/*) → ru
 
 ## Runtime layout on disk (`~/.roost/`)
 
-`config.yml` (only file the user edits) · `credentials` (CF API token, mode 0600 enforced — also read from `$CLOUDFLARE_API_TOKEN`, never in config.yml) · `state.json` · `build/` (all generated artifacts) · `logs/`.
+`config.yml` (only file the user edits) · `credentials` (CF API token, mode 0600 enforced — also read from `$CLOUDFLARE_API_TOKEN`, never in config.yml) · `seed.env` (optional shared demo creds, `KEY=VALUE`, 0600; `generate.loadSeedEnv` reads it next to `build/` and `appEnv` injects the pairs into every non-static app's compose `environment:`, below per-app `env:` so an app override wins) · `state.json` · `build/` (all generated artifacts) · `logs/`.
 
 ## Adding a framework
 

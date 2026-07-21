@@ -114,6 +114,37 @@ trailing dots, and over-length labels are each rejected with a message that
 names the app (and, for URLs and ports, states the correct value). Two apps
 resolving to the same FQDN is a hard error naming both apps.
 
+## Shared demo credentials — `~/.roost/seed.env`
+
+An optional `~/.roost/seed.env` holds credentials shared across every app so a
+single demo super-admin logs into all of them. It is a plain `KEY=VALUE` file —
+blank lines and `#`-comments are ignored, and matching surrounding quotes are
+stripped:
+
+```bash
+# ~/.roost/seed.env  (mode 0600)
+SEED_ADMIN_EMAIL=me@example.com
+SEED_ADMIN_PASSWORD=one-strong-shared-secret
+```
+
+roost injects every pair into the compose `environment:` of each **non-static**
+app, positioned **below** that app's own `env:` so an explicit per-app value
+still wins. Each app's seed script reads the variables with a standalone
+fallback:
+
+```ruby
+admin_email    = ENV.fetch("SEED_ADMIN_EMAIL", "demo@example.com")
+admin_password = ENV.fetch("SEED_ADMIN_PASSWORD", "password123")
+```
+
+Notes:
+
+- The file is **opt-in**: if it is absent, nothing is injected.
+- Like the API token, these secrets live outside `config.yml`. Keep the file at
+  mode `0600`; it is never written into your app repos.
+- The variable names are your convention — roost passes through whatever keys
+  the file contains; it does not interpret them.
+
 ## Things that trip people up
 
 - **Nested global domains** (`domain: demo.example.com`) put every app two

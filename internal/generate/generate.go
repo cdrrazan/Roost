@@ -154,10 +154,42 @@ func sortedPairs(env map[string]string) []envPair {
 	return pairs
 }
 
+// loadSeedEnv reads ~/.roost/seed.env — the optional file holding shared
+// demo-seed credentials (SEED_EMAIL, SEED_PASSWORD, …) that roost injects
+// into every app so they seed the same super-admin. It is a simple
+// KEY=VALUE file: blank lines and #-comments are ignored, and matching
+// surrounding quotes are stripped. A missing file is not an error (the
+// feature is opt-in); a malformed line is skipped rather than fatal.
+func loadSeedEnv(roostDir string) map[string]string {
+	data, err := os.ReadFile(filepath.Join(roostDir, "seed.env"))
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		k = strings.TrimSpace(k)
+		if !ok || k == "" {
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+			v = v[1 : len(v)-1]
+		}
+		out[k] = v
+	}
+	return out
+}
+
 // appEnv assembles the container environment for an app: roost's
-// injected values first, framework tuning, the database URL, then the
-// user's env on top so explicit config always wins.
-func appEnv(app App) []envPair {
+// injected values first, framework tuning, the shared demo-seed
+// credentials, the database URL, then the user's env on top so explicit
+// config always wins.
+func appEnv(app App, seed map[string]string) []envPair {
 	if app.Framework == "static" {
 		return nil
 	}
@@ -186,6 +218,11 @@ func appEnv(app App) []envPair {
 		env["DATABASE_URL"] = scheme + "://root:roost@mysql:3306/" + db
 	case "postgres":
 		env["DATABASE_URL"] = "postgres://roost:roost@postgres:5432/" + db
+	}
+	// Shared demo-seed credentials sit below the user's env so an explicit
+	// per-app override still wins.
+	for k, v := range seed {
+		env[k] = v
 	}
 	for k, v := range app.Env {
 		env[k] = v
@@ -221,6 +258,9 @@ type composeData struct {
 // artifacts live, used for Dockerfile and init-script mount paths.
 func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 	data := composeData{BuildDir: buildDir}
+	// seed.env lives next to build/ under ~/.roost; its pairs are shared
+	// across every app so demo seeds land the same super-admin login.
+	seed := loadSeedEnv(filepath.Dir(buildDir))
 	for _, app := range apps {
 		data.NeedsMySQL = data.NeedsMySQL || app.Database == "mysql"
 		data.NeedsPostgres = data.NeedsPostgres || app.Database == "postgres"
@@ -232,7 +272,7 @@ func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 			Profile:     app.Profile,
 			Database:    app.Database,
 			MountSource: mountsSource(app.Framework),
-			Env:         appEnv(app),
+			Env:         appEnv(app, seed),
 		})
 	}
 	return render("compose.yml.tmpl", data)

@@ -173,6 +173,29 @@ Paths in an included file resolve against *that file's* directory; a pattern
 matching no files is an error, never a silent skip. Full schema, resolution
 order, and hostname rules: **[configuration reference](docs/configuration.md)**.
 
+### 🔑 One demo login everywhere — `seed.env`
+
+Drop a `~/.roost/seed.env` (mode `0600`, kept out of `config.yml` like every
+other secret) and roost injects its `KEY=VALUE` pairs into **every app
+container's** environment. Point each app's seed script at those variables and a
+single super-admin logs into all of them:
+
+```bash
+# ~/.roost/seed.env
+SEED_ADMIN_EMAIL=me@example.com
+SEED_ADMIN_PASSWORD=one-strong-shared-secret
+```
+
+```ruby
+# db/seeds.rb, in each app — env-driven, with a standalone fallback
+admin_email    = ENV.fetch("SEED_ADMIN_EMAIL", "demo@example.com")
+admin_password = ENV.fetch("SEED_ADMIN_PASSWORD", "password123")
+```
+
+Blank lines and `#`-comments are ignored; a missing file injects nothing (the
+feature is opt-in). A per-app `env:` value with the same key still wins, so any
+app can opt out of the shared credential.
+
 ---
 
 ## 🔍 What gets inferred from a bare path
@@ -375,6 +398,7 @@ Full threat model and reporting: **[SECURITY.md](SECURITY.md)**.
 ├── config.yml        # the file you edit (may include: more app files)
 ├── apps/*.yml        # optional per-feature app files pulled in via include
 ├── credentials       # CF API token, 0600
+├── seed.env          # optional shared demo creds, injected into every app, 0600
 ├── state.json        # tunnel ID, account, created DNS records
 ├── build/            # ALL generated artifacts (compose.yml, Caddyfile, dockerfiles/)
 └── logs/
