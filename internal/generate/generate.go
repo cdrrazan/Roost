@@ -105,7 +105,18 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			app.HasOwnDockerfile = true
 		}
 		if app.Database != "" {
-			app.SetupCommand = dbSetupCommand(app.Framework)
+			// Setup (migrate) command. Default: the framework's idempotent
+			// db:prepare/migrate on every up. `migrate: false` opts out (the
+			// image migrates itself at boot, so roost must not race its
+			// entrypoint with a second prepare); `migrate: "<cmd>"` overrides.
+			switch {
+			case r.Migrate.Set && !r.Migrate.Enabled:
+				// opted out: leave SetupCommand empty
+			case r.Migrate.Command != "":
+				app.SetupCommand = r.Migrate.Command
+			default:
+				app.SetupCommand = dbSetupCommand(app.Framework)
+			}
 		}
 		if r.Seed.Enabled {
 			cmd := r.Seed.Command

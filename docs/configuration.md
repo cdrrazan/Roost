@@ -120,6 +120,28 @@ Any database-backed app is **migrated on every `roost up`** — Rails via
 `bin/rails db:prepare`, Django via `python manage.py migrate` — so a freshly
 started stack always has an up-to-date schema without a manual `exec`.
 
+**`migrate:` — opt out when the image migrates itself.** Many production images
+(anything built for Kamal, for instance) already run `db:prepare` in their
+container entrypoint. Letting roost *also* run it means two `db:prepare`
+processes race on start — harmless for a single database, but on a Rails
+multi-database app (Solid Queue/Cache/Cable) the race surfaces as
+`Mysql2::Error: No database selected` while a secondary schema loads. Set
+`migrate: false` so roost leaves migration to the entrypoint:
+
+```yaml
+apps:
+  - path: ~/code/blog
+    migrate: false                     # entrypoint runs db:prepare at boot
+  - path: ~/code/api
+    migrate: "bin/rails db:migrate"    # or run a specific command instead
+```
+
+- `migrate: false` — roost runs no setup command; seeding (if enabled) still
+  runs, once the container is healthy.
+- `migrate: "<command>"` — roost runs that command instead of the framework
+  default.
+- Absent or `migrate: true` — the framework default (`db:prepare` / `migrate`).
+
 An app can also be **seeded** by adding `seed:` to its entry:
 
 ```yaml

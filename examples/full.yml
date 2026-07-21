@@ -33,6 +33,10 @@ apps:
     port: 3001 # default: framework default
     database: mysql # default: detected from the app's config
     seed: true # after start: migrate every up, run bin/rails db:seed once
+    # migrate: false # set this if the image runs db:prepare in its own
+    #                # entrypoint — otherwise roost's prepare races it and a
+    #                # multi-db app fails with "No database selected".
+    #                # migrate: "<cmd>" runs your command instead.
     memory: 768m # this one needs more headroom
     profile: extras # start only with: roost up --profile extras
     env: # extra container environment

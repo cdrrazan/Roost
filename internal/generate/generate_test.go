@@ -217,6 +217,50 @@ func TestPlanSeedAndSetupCommands(t *testing.T) {
 	}
 }
 
+func TestPlanMigrateOptOutAndOverride(t *testing.T) {
+	cfg := &config.Config{}
+	resolved := []config.ResolvedApp{
+		// migrate: false → app self-migrates at boot; roost runs no setup.
+		{App: config.App{Framework: "rails", Database: "mysql", Migrate: config.MigrateSpec{Set: true, Enabled: false}}, Name: "self", FQDN: "self.example.com"},
+		// migrate: "<cmd>" → explicit setup command wins over db:prepare.
+		{App: config.App{Framework: "rails", Database: "mysql", Migrate: config.MigrateSpec{Set: true, Enabled: true, Command: "bin/rails db:migrate"}}, Name: "custom", FQDN: "custom.example.com"},
+		// migrate: true → framework default (db:prepare), same as absent.
+		{App: config.App{Framework: "rails", Database: "mysql", Migrate: config.MigrateSpec{Set: true, Enabled: true}}, Name: "explicit", FQDN: "explicit.example.com"},
+		// absent → framework default.
+		{App: config.App{Framework: "rails", Database: "mysql"}, Name: "default", FQDN: "default.example.com"},
+		// Opting out must not disable seeding — the app still gets its seed
+		// command; only the redundant setup step is skipped.
+		{App: config.App{Framework: "rails", Database: "mysql", Migrate: config.MigrateSpec{Set: true, Enabled: false}, Seed: config.SeedSpec{Enabled: true}}, Name: "seedonly", FQDN: "seedonly.example.com"},
+	}
+	apps, err := Plan(cfg, resolved)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	by := map[string]App{}
+	for _, a := range apps {
+		by[a.Name] = a
+	}
+
+	if by["self"].SetupCommand != "" {
+		t.Errorf("migrate: false must skip the setup command, got %q", by["self"].SetupCommand)
+	}
+	if by["custom"].SetupCommand != "bin/rails db:migrate" {
+		t.Errorf("custom migrate command = %q, want the override", by["custom"].SetupCommand)
+	}
+	if by["explicit"].SetupCommand != "bin/rails db:prepare" {
+		t.Errorf("migrate: true = %q, want the rails default db:prepare", by["explicit"].SetupCommand)
+	}
+	if by["default"].SetupCommand != "bin/rails db:prepare" {
+		t.Errorf("absent migrate = %q, want the rails default db:prepare", by["default"].SetupCommand)
+	}
+	if by["seedonly"].SetupCommand != "" {
+		t.Errorf("seedonly setup = %q, want empty (opted out)", by["seedonly"].SetupCommand)
+	}
+	if by["seedonly"].SeedCommand != "bin/rails db:seed" {
+		t.Errorf("seedonly seed = %q, want the seed still to run", by["seedonly"].SeedCommand)
+	}
+}
+
 func TestPlanSeedTrueNeedsDefaultOrError(t *testing.T) {
 	cfg := &config.Config{}
 	// A static app cannot infer a seed command; seed: true must error.

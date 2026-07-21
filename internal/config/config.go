@@ -73,6 +73,12 @@ type App struct {
 	// framework's default seed command after the app starts; `seed: "<cmd>"`
 	// runs that command in the app container. Absent or false disables it.
 	Seed SeedSpec `yaml:"seed"`
+	// Migrate is the per-app database-setup directive. Absent (the default)
+	// runs the framework's idempotent setup on every up (Rails db:prepare,
+	// Django migrate). `migrate: false` skips it — for images that migrate
+	// themselves at boot, so roost never races their entrypoint.
+	// `migrate: "<cmd>"` runs that command instead.
+	Migrate MigrateSpec `yaml:"migrate"`
 }
 
 // SeedSpec is a per-app seed directive. In YAML it accepts a boolean
@@ -101,6 +107,41 @@ func (s *SeedSpec) UnmarshalYAML(value *yaml.Node) error {
 	}
 	s.Enabled = true
 	s.Command = cmd
+	return nil
+}
+
+// MigrateSpec is a per-app database-setup directive. In YAML it accepts a
+// boolean (true = the framework's default setup command; false = skip,
+// because the image migrates itself) or a string (a custom setup command).
+// Set distinguishes an explicit value from an absent key, so absent can
+// fall back to roost's framework default.
+type MigrateSpec struct {
+	// Set is true when the migrate key was present in the config.
+	Set bool
+	// Enabled is the boolean value (or true for a command string).
+	Enabled bool
+	// Command is an explicit setup command; empty means the framework
+	// default (only when Enabled).
+	Command string
+}
+
+// UnmarshalYAML accepts a boolean or a command string for `migrate:`.
+func (m *MigrateSpec) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("migrate: must be a boolean or a command string")
+	}
+	m.Set = true
+	var b bool
+	if err := value.Decode(&b); err == nil {
+		m.Enabled = b
+		return nil
+	}
+	var cmd string
+	if err := value.Decode(&cmd); err != nil {
+		return fmt.Errorf("migrate: must be a boolean or a command string")
+	}
+	m.Enabled = true
+	m.Command = cmd
 	return nil
 }
 
