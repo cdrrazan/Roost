@@ -158,6 +158,7 @@
     <a href="#usage">Usage</a>
     <a href="#commands">Commands</a>
     <a href="#compare">Compare</a>
+    <a href="#faq">FAQ</a>
     <a href="#developer">Developer</a>
     <a href="https://github.com/cdrrazan/roost">GitHub</a>
   </nav>
@@ -363,6 +364,53 @@
     <tr><td>Runs on</td><td>your laptop</td><td>your Docker host</td><td>a server you operate</td></tr>
   </table>
   </div>
+</section>
+
+<section id="faq">
+  <h2>FAQ — lifecycle &amp; your data</h2>
+  <p class="sub">Every database runs in the shared MySQL/Postgres container, and
+  its files live in a <b>named Docker volume</b> (<span class="k">roost-mysql-data</span>)
+  — decoupled from the containers. Rebuilding images or recreating containers
+  never touches it; only deleting the volume does.</p>
+
+  <div class="cols2">
+    <div class="card">
+      <h3>If I stop Docker or close the laptop, do my apps go down?</h3>
+      <p>Yes — the engine stops, so apps, Caddy, MySQL, and cloudflared all stop
+      and every hostname goes unreachable. <b>Your data is safe</b> on disk. When
+      Docker restarts, containers carry <span class="k">restart: unless-stopped</span>
+      and come back automatically if they were running when it stopped. Enable
+      Docker Desktop's <b>Start on login</b> for hands-off recovery — roost has no
+      daemon; Docker's restart policy is the supervisor.</p>
+    </div>
+    <div class="card">
+      <h3>Does <span class="k">roost down</span> then <span class="k">up</span> drop my databases?</h3>
+      <p>No. <span class="k">down</span> removes the containers, not the named
+      volume; <span class="k">up</span> recreates the containers and reattaches
+      the same volume. Every database, user, and row is intact — no migrate, no
+      re-seed. Same for an image rebuild after you change app code.</p>
+    </div>
+  </div>
+
+  <h3>Which Docker cleanups are safe, and which wipe my data?</h3>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Action</th><th>Databases</th></tr>
+    <tr><td><code>roost down</code> / <code>up</code> / image rebuild</td><td class="yes">kept</td></tr>
+    <tr><td><code>docker system prune -f</code></td><td class="yes">kept — named volumes untouched</td></tr>
+    <tr><td><code>docker compose down -v</code></td><td>dropped</td></tr>
+    <tr><td><code>docker volume rm roost-mysql-data</code></td><td>dropped</td></tr>
+    <tr><td><code>docker system prune --volumes</code> / <code>--all --volumes</code></td><td>dropped</td></tr>
+    <tr><td>Docker Desktop → Troubleshoot → <b>Clean / Purge data</b></td><td>everything gone</td></tr>
+  </table>
+  </div>
+  <p class="sub" style="margin-top:14px">To reclaim space without losing data,
+  use <span class="k">docker system prune -f</span> — it keeps named volumes.
+  <b>Clean / Purge data</b> is the nuclear option: it wipes the entire Docker VM
+  (all containers, images, and volumes), so every database and all demo data is
+  gone and the next <span class="k">roost up</span> rebuilds every image, recreates
+  empty databases from <span class="k">mysql-init.sql</span>, and needs a fresh
+  migrate + re-seed. Back the volume up first if you want it reversible.</p>
 </section>
 
 <section>

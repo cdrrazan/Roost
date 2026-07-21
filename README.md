@@ -385,6 +385,68 @@ and deleting `~/.roost`.
 
 ---
 
+## ❓ FAQ — lifecycle & your data
+
+Where does app data live, and what's safe? Every database runs in the shared
+MySQL/Postgres container, and its files live in a **named Docker volume**
+(`roost-mysql-data`) — decoupled from the containers. Rebuilding images or
+recreating containers never touches it; only deleting the volume does.
+
+<details>
+<summary><b>If I stop Docker / close the laptop, do my apps go down?</b></summary>
+
+Yes. Docker Desktop off (or laptop asleep) stops the engine, so every container
+— apps, Caddy, MySQL, `cloudflared` — stops and all hostnames go unreachable.
+**Your data is safe** on disk. When Docker starts again the containers carry
+`restart: unless-stopped`, so they come back automatically *if they were running
+when it stopped*. For hands-off recovery, enable Docker Desktop's **Start on
+login** (Settings → General) — roost has no daemon of its own; Docker's restart
+policy is the supervisor.
+</details>
+
+<details>
+<summary><b>Does <code>roost down</code> then <code>roost up</code> drop my databases?</b></summary>
+
+No. `roost down` stops and removes the *containers*, not the named volume.
+`roost up` recreates the containers and reattaches the same `roost-mysql-data`
+volume — every database, user, and row is intact. No migrate, no re-seed needed.
+The same is true of an image rebuild after you change app code.
+</details>
+
+<details>
+<summary><b>Which Docker cleanups are safe, and which wipe my data?</b></summary>
+
+| Action | Databases |
+|---|---|
+| `roost down` / `roost up` / image rebuild | ✅ kept |
+| `docker system prune -f` (containers + dangling images) | ✅ kept — named volumes are left alone |
+| `docker compose down -v` | ❌ dropped |
+| `docker volume rm roost-mysql-data` | ❌ dropped |
+| `docker system prune --volumes` / `--all --volumes` | ❌ dropped |
+| Docker Desktop → Troubleshoot → **Clean / Purge data** | ❌ **everything** gone |
+
+To reclaim space without losing data, use `docker system prune -f` — it keeps
+named volumes.
+</details>
+
+<details>
+<summary><b>What if I hit Docker Desktop's "Clean / Purge data"?</b></summary>
+
+That's the nuclear option: it wipes the entire Docker VM — **all containers,
+images, and named volumes**, including `roost-mysql-data`. Every database and
+all demo data is gone, and every image is deleted. The next `roost up` rebuilds
+all images from scratch, `mysql-init.sql` recreates empty databases and users,
+and Rails apps need a fresh `db:migrate` + re-seed. Back the volume up first if
+you want it reversible:
+
+```bash
+docker run --rm -v roost-mysql-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/roost-mysql-data.tar.gz -C /data .
+```
+</details>
+
+---
+
 ## 🌱 Project
 
 - **[Examples](examples/)** — runnable configs from minimal to every-knob, plus a
