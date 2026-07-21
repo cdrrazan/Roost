@@ -409,6 +409,13 @@ func TestRenderCaddyfile(t *testing.T) {
 	if strings.Contains(s, "tls ") {
 		t.Error("Caddyfile must not configure TLS")
 	}
+	// Cloudflare terminates TLS at the edge, so the request reaches the app
+	// over http internally. Without telling the app the public scheme is
+	// https, Rails computes an http base_url and rejects the browser's https
+	// Origin (CSRF InvalidAuthenticityToken → 422). Force it upstream.
+	if !strings.Contains(s, "header_up X-Forwarded-Proto https") {
+		t.Errorf("Caddyfile must set X-Forwarded-Proto https upstream:\n%s", s)
+	}
 }
 
 func TestRenderMySQLInit(t *testing.T) {

@@ -7,6 +7,12 @@
 }
 {{range .}}
 http://{{.FQDN}} {
-	reverse_proxy {{.Name}}:{{.Port}}
+	# Cloudflare terminates TLS at the edge; the request reaches the app over
+	# http internally. Tell the app the public scheme is https so it builds
+	# https URLs and its Origin/CSRF check matches the browser (otherwise Rails
+	# rejects the https Origin against an http base_url with a 422).
+	reverse_proxy {{.Name}}:{{.Port}} {
+		header_up X-Forwarded-Proto https
+	}
 }
 {{end}}
