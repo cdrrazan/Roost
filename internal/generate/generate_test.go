@@ -176,6 +176,58 @@ func TestRenderCompose(t *testing.T) {
 	})
 }
 
+func TestPlanSeedAndSetupCommands(t *testing.T) {
+	cfg := &config.Config{}
+	resolved := []config.ResolvedApp{
+		// Rails app, seed: true → framework-default seed + db setup.
+		{App: config.App{Framework: "rails", Database: "mysql", Seed: config.SeedSpec{Enabled: true}}, Name: "blog", FQDN: "blog.example.com"},
+		// Rails app, explicit command wins over the default.
+		{App: config.App{Framework: "rails", Database: "mysql", Seed: config.SeedSpec{Enabled: true, Command: "bin/rails custom:seed"}}, Name: "shop", FQDN: "shop.example.com"},
+		// Rails app with no seed directive: setup only, no seed.
+		{App: config.App{Framework: "rails", Database: "mysql"}, Name: "wiki", FQDN: "wiki.example.com"},
+		// Static app: no db setup, no seed.
+		{App: config.App{Framework: "static"}, Name: "site", FQDN: "site.example.com"},
+	}
+	apps, err := Plan(cfg, resolved)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	by := map[string]App{}
+	for _, a := range apps {
+		by[a.Name] = a
+	}
+
+	if by["blog"].SeedCommand != "bin/rails db:seed" {
+		t.Errorf("blog SeedCommand = %q, want the rails default", by["blog"].SeedCommand)
+	}
+	if by["blog"].SetupCommand == "" {
+		t.Error("blog should have a db setup command")
+	}
+	if by["shop"].SeedCommand != "bin/rails custom:seed" {
+		t.Errorf("shop SeedCommand = %q, want the explicit command", by["shop"].SeedCommand)
+	}
+	if by["wiki"].SeedCommand != "" {
+		t.Errorf("wiki SeedCommand = %q, want empty (no seed directive)", by["wiki"].SeedCommand)
+	}
+	if by["wiki"].SetupCommand == "" {
+		t.Error("wiki (rails+db) should still get a setup command")
+	}
+	if by["site"].SetupCommand != "" || by["site"].SeedCommand != "" {
+		t.Errorf("static site should have no setup/seed commands, got setup=%q seed=%q", by["site"].SetupCommand, by["site"].SeedCommand)
+	}
+}
+
+func TestPlanSeedTrueNeedsDefaultOrError(t *testing.T) {
+	cfg := &config.Config{}
+	// A static app cannot infer a seed command; seed: true must error.
+	resolved := []config.ResolvedApp{
+		{App: config.App{Framework: "static", Seed: config.SeedSpec{Enabled: true}}, Name: "site", FQDN: "site.example.com"},
+	}
+	if _, err := Plan(cfg, resolved); err == nil {
+		t.Fatal("expected an error: seed: true with no framework default and no command")
+	}
+}
+
 func TestRenderComposeInjectsSeedEnv(t *testing.T) {
 	// ~/.roost/seed.env holds the shared demo super-admin credentials so
 	// every app seeds the same login. RenderCompose reads it relative to

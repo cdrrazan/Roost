@@ -118,6 +118,49 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 	return nil
 }
 
+// Prepare runs post-start database setup and seeding for the selected
+// apps. Every app with a SetupCommand (a DB-backed app) gets its
+// idempotent migrate/prepare command on each call. An app with a
+// SeedCommand is seeded — executed with SEED_DEMO=1 so gated demo seeds
+// run — only when shouldSeed approves it (first time, or a forced
+// reseed); onSeeded records each success so later runs skip it.
+//
+// Setup and seed both run through `sh -lc` so a command string may chain
+// steps or set inline env. Failures are collected per app and returned
+// together: one app's seed failing must not stop the others from being
+// prepared.
+func (r *Runner) Prepare(apps []generate.App, profiles []string, shouldSeed func(name string) bool, onSeeded func(name string) error) error {
+	var errs []string
+	for _, app := range apps {
+		if !AppSelected(app, profiles) {
+			continue
+		}
+		if app.SetupCommand != "" {
+			if _, err := r.run(r.compose("exec", "-T", app.Name, "sh", "-lc", app.SetupCommand)...); err != nil {
+				errs = append(errs, fmt.Sprintf("db setup for %q: %v", app.Name, err))
+				// Skip seeding an app whose migrations failed.
+				continue
+			}
+		}
+		if app.SeedCommand == "" || (shouldSeed != nil && !shouldSeed(app.Name)) {
+			continue
+		}
+		if _, err := r.run(r.compose("exec", "-T", "-e", "SEED_DEMO=1", app.Name, "sh", "-lc", app.SeedCommand)...); err != nil {
+			errs = append(errs, fmt.Sprintf("seed %q: %v", app.Name, err))
+			continue
+		}
+		if onSeeded != nil {
+			if err := onSeeded(app.Name); err != nil {
+				errs = append(errs, fmt.Sprintf("record seed for %q: %v", app.Name, err))
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("prepare: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
 // reloadProxy reloads Caddy so it rebuilds its reverse-proxy connection
 // pools. Apps may have been recreated with new container IPs, and Caddy —
 // started earlier as infra — can otherwise hold stale upstream keep-alives to

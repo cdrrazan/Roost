@@ -139,6 +139,7 @@ apps:
     database: mysql               #    default: detected
     memory: 768m
     profile: extras               #    only starts with --profile extras
+    seed: true                    #    migrate + seed on up (once, tracked)
     env:                          #    runtime environment (container)
       SECRET_KEY_BASE: "…"
     build_env:                    #    build-time environment (Docker builder)
@@ -149,6 +150,7 @@ apps:
 |---|---|
 | `env:` | **runtime** environment — compose `environment:` |
 | `build_env:` | **build-time** environment — `ENV` in the Docker builder stage, for frameworks that validate config during their build (e.g. a Next.js app using `@t3-oss/env` needing `SKIP_ENV_VALIDATION`, or `NPM_CONFIG_LEGACY_PEER_DEPS` for a stubborn install). Bakes into image layers — keep secrets in `env:`. |
+| `seed:` | **DB setup on `up`.** Any database-backed app is migrated on every `up` (Rails `db:prepare`, Django `migrate`). `seed: true` also runs the framework's default seed command (Rails `db:seed`) — or `seed: "<command>"` runs yours — **once** per app, recorded in `state.json`; `roost up --reseed` re-runs. Seeds execute with `SEED_DEMO=1` so gated demo seeds fire. |
 
 ### 🧩 Split a big fleet across files — `include`
 
@@ -250,6 +252,10 @@ set `framework:` yourself. Every inferred value is overridable per app.
 - **Self-healing proxy** — after (re)starting containers, Caddy is reloaded and
   `cloudflared` refreshed on new routes, so the proxy never serves stale
   upstreams or 404s a just-added zone.
+- **DB ready on `up`** — database-backed apps are migrated every `up`, and
+  `seed:` apps are seeded once (tracked in `state.json`, `--reseed` to repeat),
+  so a fresh box comes up with a working, populated database — no manual
+  `exec … db:prepare` afterwards.
 - **The SSL-depth trap** — free Universal SSL covers **one** subdomain level;
   `app.demo.example.com` needs ACM or a flatter name. `roost doctor` flags it.
 </details>
@@ -333,7 +339,7 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 **Everyday**
 | Command | What it does |
 |---|---|
-| `roost up [--profile p]` / `down` | start (staggered) / stop the whole stack |
+| `roost up [--profile p] [--reseed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |

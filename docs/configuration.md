@@ -114,6 +114,37 @@ trailing dots, and over-length labels are each rejected with a message that
 names the app (and, for URLs and ports, states the correct value). Two apps
 resolving to the same FQDN is a hard error naming both apps.
 
+## Database setup and seeding on `up` — `seed:`
+
+Any database-backed app is **migrated on every `roost up`** — Rails via
+`bin/rails db:prepare`, Django via `python manage.py migrate` — so a freshly
+started stack always has an up-to-date schema without a manual `exec`.
+
+An app can also be **seeded** by adding `seed:` to its entry:
+
+```yaml
+apps:
+  - path: ~/code/blog
+    seed: true                                    # framework default seed cmd
+  - path: ~/code/shop
+    seed: "bin/rails db:reset && bin/rails db:seed"  # explicit command
+```
+
+- `seed: true` runs the framework's default seed command (Rails: `bin/rails
+  db:seed`). Frameworks without a conventional seed task (everything but Rails)
+  must give an explicit command string, or `roost up` reports the error.
+- `seed: "<command>"` runs that command in the app container via `sh -lc`, so
+  it can chain steps or set inline env.
+- Seeds run **once per app**: the first successful seed is recorded in
+  `~/.roost/state.json`, and later ups skip it. `roost up --reseed` forces every
+  seed-enabled app to seed again.
+- The seed step always executes with `SEED_DEMO=1` in its environment, so demo
+  seeds that gate on that variable run when roost seeds them.
+- Absent or `seed: false` disables seeding; migration still runs for DB apps.
+
+Pair this with [`seed.env`](#shared-demo-credentials--roostseedenv) below to seed
+the same super-admin login across every app.
+
 ## Shared demo credentials — `~/.roost/seed.env`
 
 An optional `~/.roost/seed.env` holds credentials shared across every app so a

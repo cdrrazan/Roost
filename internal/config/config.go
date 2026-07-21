@@ -69,6 +69,39 @@ type App struct {
 	// These values bake into image layers, so use runtime `env:` for
 	// secrets; build_env is for non-secret build flags.
 	BuildEnv map[string]string `yaml:"build_env"`
+	// Seed is the per-app database-seed directive. `seed: true` runs the
+	// framework's default seed command after the app starts; `seed: "<cmd>"`
+	// runs that command in the app container. Absent or false disables it.
+	Seed SeedSpec `yaml:"seed"`
+}
+
+// SeedSpec is a per-app seed directive. In YAML it accepts a boolean
+// (true = the framework's default seed command) or a string (a custom
+// command run in the app container). Absent or false means no seeding.
+type SeedSpec struct {
+	Enabled bool
+	// Command is an explicit seed command; empty means use the
+	// framework default (only when Enabled).
+	Command string
+}
+
+// UnmarshalYAML accepts a boolean or a command string for `seed:`.
+func (s *SeedSpec) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("seed: must be a boolean or a command string")
+	}
+	var b bool
+	if err := value.Decode(&b); err == nil {
+		s.Enabled = b
+		return nil
+	}
+	var cmd string
+	if err := value.Decode(&cmd); err != nil {
+		return fmt.Errorf("seed: must be a boolean or a command string")
+	}
+	s.Enabled = true
+	s.Command = cmd
+	return nil
 }
 
 // UnmarshalYAML accepts both the bare-string form (a path) and the

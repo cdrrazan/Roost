@@ -307,3 +307,69 @@ func TestStatus(t *testing.T) {
 		t.Errorf("site status = %+v, want not created", s)
 	}
 }
+
+func TestPrepareRunsSetupThenSeed(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	apps := []generate.App{
+		{Name: "blog", FQDN: "blog.example.com", Framework: "rails", Database: "mysql", SetupCommand: "bin/rails db:prepare", SeedCommand: "bin/rails db:seed"},
+		// A profiled app not selected: must be skipped entirely.
+		{Name: "crm", FQDN: "crm.example.com", Framework: "django", Database: "postgres", Profile: "extras", SetupCommand: "python manage.py migrate --noinput", SeedCommand: "python manage.py seed"},
+		// No seed command: setup only.
+		{Name: "wiki", FQDN: "wiki.example.com", Framework: "rails", Database: "mysql", SetupCommand: "bin/rails db:prepare"},
+	}
+	var seeded []string
+	shouldSeed := func(string) bool { return true }
+	onSeeded := func(name string) error { seeded = append(seeded, name); return nil }
+
+	// Select the default profile only, so the "extras"-profiled crm is excluded.
+	if err := r.Prepare(apps, []string{"default"}, shouldSeed, onSeeded); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	out := allCalls(fake)
+
+	// blog: setup then seed, seed carries SEED_DEMO=1.
+	if !strings.Contains(out, "exec -T blog sh -lc bin/rails db:prepare") {
+		t.Errorf("missing blog setup exec:\n%s", out)
+	}
+	if !strings.Contains(out, "-e SEED_DEMO=1 blog sh -lc bin/rails db:seed") {
+		t.Errorf("blog seed must run with SEED_DEMO=1:\n%s", out)
+	}
+	// crm is profiled-out: no calls for it at all.
+	if strings.Contains(out, " crm ") {
+		t.Errorf("profiled-out crm should be skipped:\n%s", out)
+	}
+	// wiki: setup only, never seeded.
+	if !strings.Contains(out, "exec -T wiki sh -lc bin/rails db:prepare") {
+		t.Errorf("missing wiki setup exec:\n%s", out)
+	}
+	if strings.Contains(out, "SEED_DEMO=1 wiki") {
+		t.Errorf("wiki has no seed command; must not be seeded:\n%s", out)
+	}
+	if len(seeded) != 1 || seeded[0] != "blog" {
+		t.Errorf("onSeeded called for %v, want [blog]", seeded)
+	}
+}
+
+func TestPrepareSkipsSeedWhenShouldSeedFalse(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	apps := []generate.App{
+		{Name: "blog", FQDN: "blog.example.com", Framework: "rails", Database: "mysql", SetupCommand: "bin/rails db:prepare", SeedCommand: "bin/rails db:seed"},
+	}
+	called := false
+	if err := r.Prepare(apps, nil, func(string) bool { return false }, func(string) error { called = true; return nil }); err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	out := allCalls(fake)
+	// Setup still runs; seed does not.
+	if !strings.Contains(out, "db:prepare") {
+		t.Errorf("setup should still run:\n%s", out)
+	}
+	if strings.Contains(out, "SEED_DEMO=1") {
+		t.Errorf("seed must be skipped when shouldSeed is false:\n%s", out)
+	}
+	if called {
+		t.Error("onSeeded must not fire when seeding is skipped")
+	}
+}

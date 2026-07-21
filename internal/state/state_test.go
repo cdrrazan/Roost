@@ -15,6 +15,32 @@ func TestLoadMissingIsEmpty(t *testing.T) {
 	}
 }
 
+func TestSeededTracking(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	s := &State{}
+	if s.HasSeeded("blog") {
+		t.Error("blog should not be seeded on an empty state")
+	}
+	s.MarkSeeded("blog")
+	s.MarkSeeded("blog") // dedupe
+	if !s.HasSeeded("blog") {
+		t.Error("blog should be seeded after MarkSeeded")
+	}
+	if err := s.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !got.HasSeeded("blog") {
+		t.Error("seeded set did not survive a save/load round trip")
+	}
+	if len(got.Seeded) != 1 {
+		t.Errorf("seeded = %v, want a single deduplicated entry", got.Seeded)
+	}
+}
+
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "state.json")
 	s := &State{AccountID: "acc1", TunnelID: "tun-1", TunnelName: "roost"}

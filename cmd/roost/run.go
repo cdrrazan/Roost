@@ -10,6 +10,7 @@ import (
 
 	"github.com/cdrrazan/roost/internal/generate"
 	"github.com/cdrrazan/roost/internal/runner"
+	"github.com/cdrrazan/roost/internal/state"
 )
 
 // loadPlanned loads config, resolves hostnames, and plans generation,
@@ -44,6 +45,7 @@ func newRunner() (*runner.Runner, error) {
 // not a roost daemon.
 func newUpCmd(flags *rootFlags) *cobra.Command {
 	var profiles []string
+	var reseed bool
 	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Generate artifacts and start every app, routed and live",
@@ -74,6 +76,9 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 					cmd.Printf("up: %s → https://%s\n", app.Name, app.FQDN)
 				}
 			}
+			if err := prepareApps(cmd, r, apps, profiles, reseed); err != nil {
+				return err
+			}
 			if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
 				cmd.Println("note: no tunnel connector token found — run `roost tunnel setup` to create the tunnel and DNS records")
 			}
@@ -81,7 +86,45 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringSliceVar(&profiles, "profile", nil, "only start apps in these profiles (unprofiled apps always start)")
+	cmd.Flags().BoolVar(&reseed, "reseed", false, "re-run seeds for apps already seeded (default: seed each app once)")
 	return cmd
+}
+
+// prepareApps runs each app's idempotent DB setup and, for seed-enabled
+// apps, its seed command — once per app unless --reseed is passed. Seeded
+// apps are recorded in state.json so later ups skip them. A missing state
+// file is fine (first run); seeding failures are surfaced but do not tear
+// down the already-running stack.
+func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, profiles []string, reseed bool) error {
+	needsPrepare := false
+	for _, app := range apps {
+		if app.SetupCommand != "" || app.SeedCommand != "" {
+			needsPrepare = true
+			break
+		}
+	}
+	if !needsPrepare {
+		return nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	statePath := state.Path(home)
+	st, err := state.Load(statePath)
+	if err != nil {
+		return err
+	}
+
+	shouldSeed := func(name string) bool { return reseed || !st.HasSeeded(name) }
+	onSeeded := func(name string) error {
+		cmd.Printf("seeded: %s\n", name)
+		st.MarkSeeded(name)
+		return st.Save(statePath)
+	}
+	cmd.Println("preparing databases (migrate + seed)...")
+	return r.Prepare(apps, profiles, shouldSeed, onSeeded)
 }
 
 // newDownCmd stops and removes the whole stack (containers only; DNS

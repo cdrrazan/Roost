@@ -24,6 +24,9 @@ type State struct {
 	TunnelID   string   `json:"tunnel_id,omitempty"`
 	TunnelName string   `json:"tunnel_name,omitempty"`
 	Records    []Record `json:"records,omitempty"`
+	// Seeded is the set of app names roost has already run demo seeds
+	// for, so `roost up` seeds each app once instead of on every run.
+	Seeded []string `json:"seeded,omitempty"`
 }
 
 // Path returns the state file location under the given home dir.
@@ -71,4 +74,22 @@ func (s *State) AddRecord(r Record) {
 		}
 	}
 	s.Records = append(s.Records, r)
+}
+
+// HasSeeded reports whether roost has already seeded the named app.
+func (s *State) HasSeeded(app string) bool {
+	for _, have := range s.Seeded {
+		if have == app {
+			return true
+		}
+	}
+	return false
+}
+
+// MarkSeeded records that the named app has been seeded, deduplicating.
+func (s *State) MarkSeeded(app string) {
+	if s.HasSeeded(app) {
+		return
+	}
+	s.Seeded = append(s.Seeded, app)
 }

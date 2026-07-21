@@ -48,6 +48,15 @@ type App struct {
 	// StaticBuild marks a static app that needs a build step (vite)
 	// before Caddy can serve its dist/ output.
 	StaticBuild bool
+	// SetupCommand is the idempotent DB prepare/migrate command roost
+	// runs in the container on every up for database-backed apps.
+	// Empty means no setup step (e.g. static apps, or frameworks with
+	// no known migration command).
+	SetupCommand string
+	// SeedCommand is the command roost runs — with SEED_DEMO=1 so gated
+	// demo seeds execute — to seed demo data. It runs once per app
+	// (tracked in state) unless reseeding is forced. Empty disables it.
+	SeedCommand string
 }
 
 // Plan merges each resolved app with its framework detection (or the
@@ -95,9 +104,45 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 		if fileExists(filepath.Join(r.Path, "Dockerfile")) {
 			app.HasOwnDockerfile = true
 		}
+		if app.Database != "" {
+			app.SetupCommand = dbSetupCommand(app.Framework)
+		}
+		if r.Seed.Enabled {
+			cmd := r.Seed.Command
+			if cmd == "" {
+				cmd = defaultSeedCommand(app.Framework)
+				if cmd == "" {
+					return nil, fmt.Errorf("app %q: seed: true has no default command for framework %q — set seed to an explicit command string", r.Name, app.Framework)
+				}
+			}
+			app.SeedCommand = cmd
+		}
 		apps = append(apps, app)
 	}
 	return apps, nil
+}
+
+// dbSetupCommand is the idempotent database prepare/migrate command for a
+// framework, run in the app container before seeding. Empty when roost
+// knows no migration command for the framework.
+func dbSetupCommand(framework string) string {
+	switch framework {
+	case "rails":
+		return "bin/rails db:prepare"
+	case "django":
+		return "python manage.py migrate --noinput"
+	}
+	return ""
+}
+
+// defaultSeedCommand is the seed command used when an app sets seed: true
+// without an explicit command. Only frameworks with a conventional seed
+// task have one; others must supply a command string.
+func defaultSeedCommand(framework string) string {
+	if framework == "rails" {
+		return "bin/rails db:seed"
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {
