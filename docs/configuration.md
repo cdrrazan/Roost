@@ -46,6 +46,7 @@ apps:
     framework: rails          # default: detected (see `roost detect`)
     port: 3001                # default: framework default
     database: mysql           # default: detected from the app's config
+    redis: true               # default: detected (sidekiq/redis gem, REDIS_URL)
     memory: 768m              # default: defaults.memory, then 512m
     profile: extras           # start only with --profile extras
     env:                      # runtime environment (container)
@@ -61,6 +62,42 @@ using `@t3-oss/env`, whose `next build` needs `SKIP_ENV_VALIDATION` since the
 runtime env isn't present at build time. **`build_env` values bake into image
 layers** (visible via `docker history`), so keep secrets in `env`; `build_env`
 is for non-secret build flags.
+
+## Redis — `redis:`
+
+Apps that need a Redis broker (Sidekiq, Action Cable, a Redis cache) get one
+automatically: roost detects the `sidekiq`/`redis` gem or a `REDIS_URL` in the
+app's `.env.example`, provisions a single shared `redis:7-alpine` service, and
+injects `REDIS_URL=redis://redis:6379/0`. Set `redis:` to override the
+detection — `redis: true` forces it on, `redis: false` opts out. One Redis
+service is shared by every app that needs one (each connecting to database `0`).
+
+## Background workers — `worker:` + `command:`
+
+A worker is a non-HTTP process (a Sidekiq/Solid Queue consumer, a cron runner)
+that runs alongside a web app. Add a **second entry over the same `path:`** with
+`worker: true` and a `command:` to run:
+
+```yaml
+apps:
+  - path: ~/work/finance          # the web app
+    domain: finance.example.com
+  - path: ~/work/finance          # a worker over the same code
+    name: finance-worker
+    worker: true
+    command: bundle exec sidekiq
+    env:
+      # Workers get their own detected database (finance_worker); point them at
+      # the web app's database instead — an explicit env value always wins.
+      DATABASE_URL: "postgres://roost:roost@postgres:5432/finance"
+```
+
+- `command:` overrides the container's start command. On its own (without
+  `worker:`) it also overrides a normal app's web-server command.
+- `worker: true` means **no domain and no Caddy route** (a worker serves no
+  HTTP), and roost runs **no `db:prepare`/seed** for it — the web entry owns the
+  database lifecycle. A worker still runs as a restart-supervised container. It
+  **requires** a `command:`; omitting it is an error.
 
 ## Splitting the app list across files — `include`
 

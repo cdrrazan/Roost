@@ -210,8 +210,12 @@
     <span class="key">profile:</span> <span class="str">extras</span>       <span class="cm"># start on demand</span>
     <span class="key">seed:</span> <span class="str">true</span>            <span class="cm"># migrate + seed on up (once)</span>
     <span class="key">migrate:</span> <span class="str">false</span>       <span class="cm"># image self-migrates at boot</span>
+    <span class="key">redis:</span> <span class="str">true</span>           <span class="cm"># shared redis + REDIS_URL (auto-detected)</span>
     <span class="key">build_env:</span>            <span class="cm"># build-time env</span>
-      <span class="key">SKIP_ENV_VALIDATION:</span> <span class="str">"1"</span></pre>
+      <span class="key">SKIP_ENV_VALIDATION:</span> <span class="str">"1"</span>
+  - <span class="key">path:</span> <span class="str">~/code/trackaru</span>   <span class="cm"># a background worker over the same code</span>
+    <span class="key">worker:</span> <span class="str">true</span>          <span class="cm"># no domain, no route</span>
+    <span class="key">command:</span> <span class="str">bundle exec sidekiq</span></pre>
   </div>
 </section>
 

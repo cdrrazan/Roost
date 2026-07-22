@@ -72,7 +72,12 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 			for _, app := range apps {
-				if runner.AppSelected(app, profiles) {
+				if !runner.AppSelected(app, profiles) {
+					continue
+				}
+				if app.FQDN == "" {
+					cmd.Printf("up: %s → worker\n", app.Name)
+				} else {
 					cmd.Printf("up: %s → https://%s\n", app.Name, app.FQDN)
 				}
 			}

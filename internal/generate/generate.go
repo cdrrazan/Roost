@@ -34,9 +34,19 @@ type App struct {
 	Port         int
 	StartCommand string
 	Database     string // "", "mysql", "postgres"
-	Memory       string
-	Profile      string
-	Env          map[string]string
+	// Redis is true when the app needs the shared Redis service; roost
+	// injects REDIS_URL and adds a depends_on.
+	Redis bool
+	// Command overrides the container start command (config command:),
+	// e.g. a worker running "bundle exec sidekiq".
+	Command string
+	// Worker marks a non-HTTP background app: no Caddy route, and roost
+	// runs no DB setup or seed for it. It still runs as a supervised
+	// container.
+	Worker  bool
+	Memory  string
+	Profile string
+	Env     map[string]string
 	// BuildEnv is environment injected at image-build time (see
 	// config.App.BuildEnv), rendered as ENV in the Dockerfile builder
 	// stage so it is present during the app's build step.
@@ -94,6 +104,15 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			Memory:         firstNonEmpty(r.Memory, cfg.Defaults.Memory, "512m"),
 			Profile:        firstNonEmpty(r.Profile, cfg.Defaults.Profile),
 			StaticBuild:    strings.Contains(d.Signal, "vite"),
+			Redis:          d.Redis,
+			Worker:         r.Worker,
+		}
+		if r.Command != "" {
+			// Command is the compose-level override (used when the app ships
+			// its own Dockerfile); StartCommand is the CMD of a generated
+			// Dockerfile. Set both so the override wins either way.
+			app.Command = r.Command
+			app.StartCommand = r.Command
 		}
 		if r.Port != 0 {
 			app.Port = r.Port
@@ -101,10 +120,16 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 		if r.Database != "" {
 			app.Database = r.Database
 		}
+		// Redis: detection is the default; an explicit config value wins.
+		if r.Redis.Set {
+			app.Redis = r.Redis.Enabled
+		}
 		if fileExists(filepath.Join(r.Path, "Dockerfile")) {
 			app.HasOwnDockerfile = true
 		}
-		if app.Database != "" {
+		// A worker doesn't own the database lifecycle — the web entry runs
+		// setup and seed — so it never gets its own setup/seed commands.
+		if app.Database != "" && !app.Worker {
 			// Setup (migrate) command. Default: the framework's idempotent
 			// db:prepare/migrate on every up. `migrate: false` opts out (the
 			// image migrates itself at boot, so roost must not race its
@@ -118,7 +143,7 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 				app.SetupCommand = dbSetupCommand(app.Framework)
 			}
 		}
-		if r.Seed.Enabled {
+		if r.Seed.Enabled && !app.Worker {
 			cmd := r.Seed.Command
 			if cmd == "" {
 				cmd = defaultSeedCommand(app.Framework)
@@ -275,6 +300,10 @@ func appEnv(app App, seed map[string]string) []envPair {
 	case "postgres":
 		env["DATABASE_URL"] = "postgres://roost:roost@postgres:5432/" + db
 	}
+	if app.Redis {
+		// Database 0 of the shared Redis; apps reach it by service name.
+		env["REDIS_URL"] = "redis://redis:6379/0"
+	}
 	// Shared demo-seed credentials sit below the user's env so an explicit
 	// per-app override still wins.
 	for k, v := range seed {
@@ -299,6 +328,8 @@ type composeApp struct {
 	Memory      string
 	Profile     string
 	Database    string
+	Redis       bool
+	Command     string
 	MountSource bool
 	Env         []envPair
 }
@@ -308,6 +339,7 @@ type composeData struct {
 	Apps          []composeApp
 	NeedsMySQL    bool
 	NeedsPostgres bool
+	NeedsRedis    bool
 }
 
 // RenderCompose renders compose.yml. buildDir is where generated
@@ -320,6 +352,7 @@ func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 	for _, app := range apps {
 		data.NeedsMySQL = data.NeedsMySQL || app.Database == "mysql"
 		data.NeedsPostgres = data.NeedsPostgres || app.Database == "postgres"
+		data.NeedsRedis = data.NeedsRedis || app.Redis
 		data.Apps = append(data.Apps, composeApp{
 			Name:        app.Name,
 			Path:        app.Path,
@@ -327,6 +360,8 @@ func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 			Memory:      app.Memory,
 			Profile:     app.Profile,
 			Database:    app.Database,
+			Redis:       app.Redis,
+			Command:     app.Command,
 			MountSource: mountsSource(app.Framework),
 			Env:         appEnv(app, seed),
 		})
@@ -335,9 +370,17 @@ func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 }
 
 // RenderCaddyfile renders host-based routing on plain :80 with
-// automatic HTTPS off (Cloudflare terminates TLS at the edge).
+// automatic HTTPS off (Cloudflare terminates TLS at the edge). Worker
+// apps have no HTTP server, so they get no route.
 func RenderCaddyfile(apps []App) ([]byte, error) {
-	return render("Caddyfile.tmpl", apps)
+	routed := make([]App, 0, len(apps))
+	for _, app := range apps {
+		if app.Worker {
+			continue
+		}
+		routed = append(routed, app)
+	}
+	return render("Caddyfile.tmpl", routed)
 }
 
 // RenderMySQLInit renders mysql-init.sql: one database per mysql app,

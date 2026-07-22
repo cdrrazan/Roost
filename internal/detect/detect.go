@@ -29,6 +29,10 @@ type Detection struct {
 	// Database is "mysql", "postgres", or "" when no database need was
 	// detected.
 	Database string
+	// Redis is true when the app needs a Redis broker — a Sidekiq/redis
+	// gem, or a REDIS_URL in its example env. roost then provisions a
+	// shared Redis service and injects REDIS_URL.
+	Redis bool
 	// RuntimeVersion is the language runtime version inferred from
 	// .ruby-version, the Gemfile ruby line, .node-version, or
 	// package.json engines. Empty when nothing declares one.
@@ -116,6 +120,7 @@ func Detect(dir string) (Detection, error) {
 			Port:           3000,
 			StartCommand:   "bundle exec puma -b tcp://0.0.0.0:3000",
 			Database:       detectDatabase(dir, read),
+			Redis:          detectRedis(read),
 			RuntimeVersion: rubyVersion(read),
 		}, nil
 
@@ -126,6 +131,7 @@ func Detect(dir string) (Detection, error) {
 			Port:           4567,
 			StartCommand:   "bundle exec rackup -o 0.0.0.0 -p 4567",
 			Database:       detectDatabase(dir, read),
+			Redis:          detectRedis(read),
 			RuntimeVersion: rubyVersion(read),
 		}, nil
 
@@ -169,6 +175,7 @@ func Detect(dir string) (Detection, error) {
 			Port:         8000,
 			StartCommand: "gunicorn -b 0.0.0.0:8000",
 			Database:     detectDatabase(dir, read),
+			Redis:        detectRedis(read),
 		}, nil
 
 	case has("index.html"):
@@ -209,6 +216,26 @@ func detectDatabase(dir string, read func(string) string) string {
 		}
 	}
 	return ""
+}
+
+// detectRedis reports whether an app needs a Redis broker, from a
+// Sidekiq or redis gem in the Gemfile, or a REDIS_URL entry in its
+// example env file.
+func detectRedis(read func(string) string) bool {
+	if gemfile := read("Gemfile"); gemfile != "" {
+		if strings.Contains(gemfile, "sidekiq") ||
+			strings.Contains(gemfile, `"redis"`) || strings.Contains(gemfile, `'redis'`) {
+			return true
+		}
+	}
+	for _, envFile := range []string{".env.example", ".env.sample"} {
+		for _, line := range strings.Split(read(envFile), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "REDIS_URL=") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // adapterLine returns the first adapter: line from a database.yml.

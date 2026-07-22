@@ -105,6 +105,9 @@ func runDoctor(flags *rootFlags, sh shell.Runner) []doctor.Finding {
 
 	var hostnames []string
 	for _, app := range resolved {
+		if app.FQDN == "" {
+			continue // worker: no hostname to check
+		}
 		hostnames = append(hostnames, app.FQDN)
 	}
 	findings = append(findings, doctor.CheckCloudflare(client, st, tunnelName(cfg), hostnames)...)

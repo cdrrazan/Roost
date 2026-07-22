@@ -53,7 +53,11 @@ func newListCmd(flags *rootFlags) *cobra.Command {
 						framework = "unknown"
 					}
 				}
-				fmt.Fprintf(w, "%s\t%s\thttps://%s\t\n", app.Name, framework, app.FQDN)
+				url := "https://" + app.FQDN
+				if app.FQDN == "" {
+					url = "(worker)"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t\n", app.Name, framework, url)
 			}
 			for _, app := range skipped {
 				fmt.Fprintf(w, "%s\t\t\tskipped: %s\n", app.Name, app.Reason)

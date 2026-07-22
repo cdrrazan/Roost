@@ -306,10 +306,14 @@ func (r *Runner) Status(apps []generate.App) ([]AppStatus, error) {
 
 	statuses := make([]AppStatus, 0, len(apps))
 	for _, app := range apps {
+		url := "https://" + app.FQDN
+		if app.FQDN == "" {
+			url = "(worker)"
+		}
 		st := AppStatus{
 			Name:  app.Name,
 			State: "not created",
-			URL:   "https://" + app.FQDN,
+			URL:   url,
 		}
 		if p, ok := states[app.Name]; ok {
 			st.State = p.State

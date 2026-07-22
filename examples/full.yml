@@ -65,6 +65,24 @@ apps:
     env:
       NEXT_PUBLIC_APP_URL: https://app.example.com
 
+  # An app that needs Redis + a background worker (Sidekiq, Solid Queue).
+  # roost auto-detects Redis from the sidekiq/redis gem (redis: true/false
+  # overrides) and provisions one shared redis service, injecting REDIS_URL.
+  # The worker is a SECOND entry over the same path: worker: true means no
+  # domain and no route, command: is the process to run. It shares the web
+  # app's database — detection would give it finance_worker, so pin
+  # DATABASE_URL to the web app's DB (an explicit env value wins).
+  - path: ~/work/finance
+    domain: finance.example.com
+    migrate: false # sure's entrypoint runs db:prepare itself
+    # redis: true  # only needed if detection can't see the gem/REDIS_URL
+  - path: ~/work/finance
+    name: finance-worker
+    worker: true
+    command: bundle exec sidekiq
+    env:
+      DATABASE_URL: "postgres://roost:roost@postgres:5432/finance"
+
 # ------------------------------------------------------------------
 # Not in this file: shared demo credentials.
 # Drop a ~/.roost/seed.env (mode 0600, KEY=VALUE) and roost injects its

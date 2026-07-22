@@ -79,6 +79,19 @@ type App struct {
 	// themselves at boot, so roost never races their entrypoint.
 	// `migrate: "<cmd>"` runs that command instead.
 	Migrate MigrateSpec `yaml:"migrate"`
+	// Redis requests the shared Redis service and REDIS_URL injection.
+	// Detected automatically for apps whose Gemfile uses sidekiq/redis;
+	// set `redis: true` to force it on or `redis: false` to opt out.
+	Redis RedisSpec `yaml:"redis"`
+	// Command overrides the container start command. Its main use is a
+	// worker entry that runs a background process (e.g.
+	// "bundle exec sidekiq") instead of the framework's web server.
+	Command string `yaml:"command"`
+	// Worker marks a non-HTTP background process — typically a second
+	// entry sharing another app's path. A worker gets no domain and no
+	// Caddy route, and roost runs no DB setup or seed for it; it must
+	// carry a command:. roost still starts and supervises its container.
+	Worker bool `yaml:"worker"`
 }
 
 // SeedSpec is a per-app seed directive. In YAML it accepts a boolean
@@ -142,6 +155,31 @@ func (m *MigrateSpec) UnmarshalYAML(value *yaml.Node) error {
 	}
 	m.Enabled = true
 	m.Command = cmd
+	return nil
+}
+
+// RedisSpec is a per-app Redis directive. In YAML it accepts a boolean:
+// true forces the shared Redis service and REDIS_URL injection, false
+// opts out of auto-detected Redis. Set distinguishes an explicit value
+// from an absent key, so absent falls back to detection.
+type RedisSpec struct {
+	// Set is true when the redis key was present in the config.
+	Set bool
+	// Enabled is the boolean value.
+	Enabled bool
+}
+
+// UnmarshalYAML accepts a boolean for `redis:`.
+func (rs *RedisSpec) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.ScalarNode {
+		return fmt.Errorf("redis: must be a boolean")
+	}
+	var b bool
+	if err := value.Decode(&b); err != nil {
+		return fmt.Errorf("redis: must be a boolean")
+	}
+	rs.Set = true
+	rs.Enabled = b
 	return nil
 }
 
@@ -373,6 +411,16 @@ func Resolve(cfg *Config) ([]ResolvedApp, []SkippedApp, error) {
 			continue
 		} else if !info.IsDir() {
 			skipped = append(skipped, SkippedApp{App: app, Name: name, Reason: "path is not a directory: " + app.Path})
+			continue
+		}
+
+		// A worker is a non-HTTP background process: it needs a command to
+		// run and gets no hostname or Caddy route.
+		if app.Worker {
+			if app.Command == "" {
+				return nil, nil, fmt.Errorf("worker app %q needs a command: (the process to run, e.g. \"bundle exec sidekiq\")", name)
+			}
+			resolved = append(resolved, ResolvedApp{App: app, Name: name, FQDN: ""})
 			continue
 		}
 

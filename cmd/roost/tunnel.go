@@ -80,6 +80,9 @@ func loadTunnelContext(cmd *cobra.Command, flags *rootFlags, accountFlag string)
 	}
 	var hostnames []string
 	for _, app := range resolved {
+		if app.FQDN == "" {
+			continue // worker: no hostname, no DNS record
+		}
 		hostnames = append(hostnames, app.FQDN)
 	}
 

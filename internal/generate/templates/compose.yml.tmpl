@@ -9,6 +9,9 @@ services:
       dockerfile: {{.Dockerfile}}
     restart: unless-stopped
     mem_limit: {{.Memory}}
+{{- if .Command}}
+    command: {{.Command}}
+{{- end}}
 {{- if .Env}}
     environment:
 {{- range .Env}}
@@ -23,9 +26,14 @@ services:
     volumes:
       - {{.Path}}:/app:ro
 {{- end}}
-{{- if .Database}}
+{{- if or .Database .Redis}}
     depends_on:
+{{- if .Database}}
       - {{.Database}}
+{{- end}}
+{{- if .Redis}}
+      - redis
+{{- end}}
 {{- end}}
     networks:
       - roost
@@ -77,10 +85,22 @@ services:
     networks:
       - roost
 {{- end}}
+{{- if .NeedsRedis}}
+
+  # Redis backs Action Cable, the Rails cache, and the Sidekiq broker.
+  # Not published to the host — apps reach it by service name.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - roost-redis-data:/data
+    networks:
+      - roost
+{{- end}}
 
 networks:
   roost: {}
-{{- if or .NeedsMySQL .NeedsPostgres}}
+{{- if or .NeedsMySQL .NeedsPostgres .NeedsRedis}}
 
 volumes:
 {{- if .NeedsMySQL}}
@@ -88,5 +108,8 @@ volumes:
 {{- end}}
 {{- if .NeedsPostgres}}
   roost-postgres-data: {}
+{{- end}}
+{{- if .NeedsRedis}}
+  roost-redis-data: {}
 {{- end}}
 {{- end}}
