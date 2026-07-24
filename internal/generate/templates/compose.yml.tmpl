@@ -41,6 +41,11 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    {{- if .ControlHost}}
+    # Let Caddy reach the roost web control panel running on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    {{- end}}
     volumes:
       - {{.BuildDir}}/Caddyfile:/etc/caddy/Caddyfile:ro
     networks:

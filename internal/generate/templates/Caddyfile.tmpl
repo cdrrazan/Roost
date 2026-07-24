@@ -5,7 +5,7 @@
 {
 	auto_https off
 }
-{{range .}}
+{{range .Apps}}
 http://{{.FQDN}} {
 	# Cloudflare terminates TLS at the edge; the request reaches the app over
 	# http internally. Tell the app the public scheme is https so it builds
@@ -16,3 +16,13 @@ http://{{.FQDN}} {
 	}
 }
 {{end}}
+{{- if .ControlHost}}
+http://{{.ControlHost}} {
+	# roost web control panel. It runs on the host (outside the stack, so
+	# "stop" can't kill its own control plane); Caddy reaches it via the
+	# host gateway declared in compose.yml.
+	reverse_proxy host.docker.internal:4600 {
+		header_up X-Forwarded-Proto https
+	}
+}
+{{- end}}

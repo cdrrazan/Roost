@@ -28,6 +28,11 @@ type Config struct {
 	Defaults Defaults `yaml:"defaults"`
 	Apps     []App    `yaml:"apps"`
 
+	// ControlHost, when set, exposes the `roost web` control panel at this
+	// hostname through the tunnel: Caddy routes it to the panel running on
+	// the host (outside the stack). Empty means no panel route is generated.
+	ControlHost string `yaml:"control_host"`
+
 	// Dir is the directory containing the config file; relative app
 	// paths are resolved against it.
 	Dir string `yaml:"-"`
