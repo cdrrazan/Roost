@@ -353,7 +353,7 @@
     <div class="card"><h3>Laptop-friendly</h3><p>Memory caps per app, single-worker Rails defaults, staggered starts so six apps don't spike your CPU at once.</p></div>
     <div class="card"><h3>Multi-database Rails</h3><p>A per-app database user so apps that connect as their own username and use Solid Cache/Queue/Cable (sibling <span class="k">&lt;app&gt;_*</span> databases) just work.</p></div>
     <div class="card"><h3>Never a stale route</h3><p>After (re)starting containers Caddy is reloaded and cloudflared refreshed on new routes — no empty responses from a dead upstream, no 404 on a just-added zone.</p></div>
-    <div class="card"><h3>DB ready on <span class="k">up</span></h3><p>Database apps are migrated every <span class="k">up</span>; add <span class="k">seed: true</span> (or a command) and they seed once — tracked in <span class="k">state.json</span>, <span class="k">--reseed</span> to repeat. No manual <span class="k">db:prepare</span> after a fresh start.</p></div>
+    <div class="card"><h3>DB ready on <span class="k">up</span></h3><p>Database apps are migrated every <span class="k">up</span>; add <span class="k">seed: true</span> (or a command) and they seed once — tracked in <span class="k">state.json</span>, <span class="k">--reseed</span> to repeat, <span class="k">--no-seed</span> to skip for a clean start. No manual <span class="k">db:prepare</span> after a fresh start.</p></div>
   </div>
 </section>
 

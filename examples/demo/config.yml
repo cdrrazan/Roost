@@ -28,7 +28,8 @@ defaults:
 
 apps:
   # blog gets demo data: roost migrates it every up and runs bin/rails
-  # db:seed once (tracked in state.json; roost up --reseed repeats it).
+  # db:seed once (tracked in state.json; roost up --reseed repeats it,
+  # roost up --no-seed brings the stack up clean with no demo data).
   - path: ~/code/blog
     seed: true
   # shop rides the global domain with everything inferred.

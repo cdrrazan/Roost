@@ -45,3 +45,10 @@ every `up`; `seed: true` also runs the framework's default seed (Rails
 --reseed` to repeat. Pair it with a `~/.roost/seed.env` (a `0600` `KEY=VALUE`
 file, injected into every app container) to seed the same super-admin login
 across all of them — see [`docs/configuration.md`](../docs/configuration.md).
+
+**"Bring the stack up clean, without demo data"** — `roost up --no-seed`
+migrates every DB app but skips all seeding for that run (it's mutually
+exclusive with `--reseed`). Even on a recreated data volume — which normally
+re-seeds everything — `--no-seed` leaves the databases empty. Keep schema
+creation in `migrate:` (not `seed:`, see the Next.js app in `full.yml`) so the
+tables still exist under `--no-seed`; then register your own accounts.

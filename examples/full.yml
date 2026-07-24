@@ -53,13 +53,17 @@ apps:
   # build_env is set during `next build`; env is set at runtime. Keep
   # secrets in env — build_env bakes into image layers.
   #
-  # seed: takes a command string for anything that isn't a Rails default —
-  # here, push the Drizzle schema and run the app's own seed script. It
-  # runs once (tracked in state.json); `roost up --reseed` re-runs it.
+  # migrate: and seed: both take a command string for anything that isn't a
+  # Rails default. Schema creation belongs in migrate: (it runs on EVERY up,
+  # including `roost up --no-seed`) — NOT in seed:, or a --no-seed clean run
+  # would leave the DB with zero tables. seed: is demo data only; it runs once
+  # (tracked in state.json), `roost up --reseed` re-runs it. drizzle push is
+  # idempotent, so running it each up is safe.
   - path: ~/projects/webapp
     domain: app.example.com
     framework: next
-    seed: "npm run db:push && npm run seed"
+    migrate: "npm run db:push"
+    seed: "npm run seed"
     build_env:
       SKIP_ENV_VALIDATION: "1"
     env:

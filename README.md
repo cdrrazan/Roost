@@ -150,7 +150,7 @@ apps:
 |---|---|
 | `env:` | **runtime** environment — compose `environment:` |
 | `build_env:` | **build-time** environment — `ENV` in the Docker builder stage, for frameworks that validate config during their build (e.g. a Next.js app using `@t3-oss/env` needing `SKIP_ENV_VALIDATION`, or `NPM_CONFIG_LEGACY_PEER_DEPS` for a stubborn install). Bakes into image layers — keep secrets in `env:`. |
-| `seed:` | **DB setup on `up`.** Any database-backed app is migrated on every `up` (Rails `db:prepare`, Django `migrate`). `seed: true` also runs the framework's default seed command (Rails `db:seed`) — or `seed: "<command>"` runs yours — **once** per app, recorded in `state.json`; `roost up --reseed` re-runs. Seeds execute with `SEED_DEMO=1` so gated demo seeds fire. A failed seed is never marked done, and if the MySQL data volume is recreated (Clean/Purge, `volume rm`) roost re-seeds every app automatically on the next `up`. |
+| `seed:` | **DB setup on `up`.** Any database-backed app is migrated on every `up` (Rails `db:prepare`, Django `migrate`). `seed: true` also runs the framework's default seed command (Rails `db:seed`) — or `seed: "<command>"` runs yours — **once** per app, recorded in `state.json`; `roost up --reseed` re-runs, `roost up --no-seed` skips all seeding for that run (migrations still run — a clean start with no demo data). Seeds execute with `SEED_DEMO=1` so gated demo seeds fire. A failed seed is never marked done, and if the MySQL data volume is recreated (Clean/Purge, `volume rm`) roost re-seeds every app automatically on the next `up` — unless you pass `--no-seed`. Put schema creation in `migrate:` (not `seed:`) so it still runs under `--no-seed`. |
 | `migrate:` | **Opt out of roost's migrate step.** Default runs the framework's `db:prepare`/`migrate` on every `up`. Set `migrate: false` when the image already migrates itself at boot (Kamal-style entrypoints) — otherwise the two `db:prepare`s race and a multi-db app (Solid Queue/Cache/Cable) fails with `No database selected`. `migrate: "<command>"` runs your command instead. |
 | `redis:` | **Shared Redis broker.** Auto-detected from the `sidekiq`/`redis` gem or a `REDIS_URL` in `.env.example` — roost provisions one `redis:7-alpine` shared by every app that needs it and injects `REDIS_URL=redis://redis:6379/0`. `redis: true`/`false` overrides the detection. |
 | `worker:` + `command:` | **Background workers.** `command:` overrides an app's start command. A second entry over the same `path:` with `worker: true` runs a non-HTTP process (Sidekiq, Solid Queue) — no domain, no Caddy route, no `db:prepare`/seed (the web entry owns the DB). It **requires** a `command:`. Point its `DATABASE_URL` at the web app's DB (an explicit `env:` value wins over roost's per-app default). |
@@ -256,9 +256,9 @@ set `framework:` yourself. Every inferred value is overridable per app.
   `cloudflared` refreshed on new routes, so the proxy never serves stale
   upstreams or 404s a just-added zone.
 - **DB ready on `up`** — database-backed apps are migrated every `up`, and
-  `seed:` apps are seeded once (tracked in `state.json`, `--reseed` to repeat),
-  so a fresh box comes up with a working, populated database — no manual
-  `exec … db:prepare` afterwards.
+  `seed:` apps are seeded once (tracked in `state.json`, `--reseed` to repeat,
+  `--no-seed` to skip seeding for a clean start), so a fresh box comes up with a
+  working, populated database — no manual `exec … db:prepare` afterwards.
 - **The SSL-depth trap** — free Universal SSL covers **one** subdomain level;
   `app.demo.example.com` needs ACM or a flatter name. `roost doctor` flags it.
 </details>
@@ -471,7 +471,8 @@ all demo data is gone, and every image is deleted. The next `roost up` rebuilds
 all images from scratch and `mysql-init.sql` recreates empty databases and
 users. **roost notices the data volume was recreated** (it tracks the volume's
 identity in `state.json`) and **automatically re-migrates and re-seeds every
-`seed:` app** on that next `up` — you don't need `--reseed`. Back the volume up
+`seed:` app** on that next `up` — you don't need `--reseed`. Pass `--no-seed` on
+that `up` to rebuild empty (migrations run, no demo data). Back the volume up
 first if you want the old data back instead:
 
 ```bash

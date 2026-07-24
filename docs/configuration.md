@@ -197,6 +197,11 @@ apps:
 - Seeds run **once per app**: the first successful seed is recorded in
   `~/.roost/state.json`, and later ups skip it. `roost up --reseed` forces every
   seed-enabled app to seed again.
+- `roost up --no-seed` skips seeding for that run entirely — migrations still
+  run, so the databases come up empty (a clean start with no demo data). It even
+  suppresses the automatic re-seed that a recreated data volume triggers, and is
+  mutually exclusive with `--reseed`. Put schema creation in `migrate:` rather
+  than `seed:` so the tables still exist under `--no-seed`.
 - The seed step always executes with `SEED_DEMO=1` in its environment, so demo
   seeds that gate on that variable run when roost seeds them.
 - Absent or `seed: false` disables seeding; migration still runs for DB apps.
