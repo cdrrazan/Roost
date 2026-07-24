@@ -50,6 +50,7 @@ roost infers everything else.`,
 		newAuthCmd(),
 		newTunnelCmd(flags),
 		newDoctorCmd(flags),
+		newDeployCmd(flags),
 	)
 
 	return root
