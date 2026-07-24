@@ -51,6 +51,7 @@ roost infers everything else.`,
 		newTunnelCmd(flags),
 		newDoctorCmd(flags),
 		newWebCmd(flags),
+		newDeployCmd(flags),
 	)
 
 	return root
