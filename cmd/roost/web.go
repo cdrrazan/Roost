@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -34,33 +35,75 @@ func (c *stackController) Status() ([]runner.AppStatus, error) {
 	return r.Status(apps)
 }
 
-// Up mirrors `roost up`: regenerate artifacts, then bring the stack up. It does
-// not run migrations/seed — the panel is on/off for an already-configured
-// stack; DB setup is owned by `roost up` on the CLI.
+// appResumer is the runner subset Up needs: resume one stopped app container.
+type appResumer interface {
+	Resume(app string) error
+}
+
+// startApps resumes every stopped app container (fast — no rebuild), the
+// counterpart to stopApps. Errors are joined so one failure doesn't skip the
+// rest.
+func startApps(r appResumer, apps []generate.App) error {
+	var errs []error
+	for _, app := range apps {
+		if err := r.Resume(app.Name); err != nil {
+			errs = append(errs, fmt.Errorf("start %s: %w", app.Name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Up resumes the app containers the panel's Stop paused. It is a fast runtime
+// toggle, not a provisioner: it does NOT rebuild images or regenerate
+// artifacts, and it leaves shared infrastructure (which Stop never touched)
+// alone. Initial provisioning and config changes are `roost up` on the CLI.
 func (c *stackController) Up() error {
-	apps, controlHost, err := loadPlanned(c.cmd, c.flags)
+	apps, _, err := loadPlanned(c.cmd, c.flags)
 	if err != nil {
 		return err
 	}
 	if len(apps) == 0 {
 		return fmt.Errorf("nothing to run: no app resolves to a hostname")
 	}
-	dir, err := buildDir()
-	if err != nil {
-		return err
-	}
-	if _, err := generate.Generate(dir, apps, controlHost); err != nil {
-		return err
-	}
-	return runner.New(dir).Up(apps, nil)
-}
-
-func (c *stackController) Down() error {
 	r, err := newRunner()
 	if err != nil {
 		return err
 	}
-	return r.Down()
+	return startApps(r, apps)
+}
+
+// appStopper is the runner subset Down needs: stop one app container.
+type appStopper interface {
+	Stop(app string) error
+}
+
+// stopApps stops every app container while leaving shared infrastructure
+// (Caddy, cloudflared, databases) running. Errors are joined so one failure
+// doesn't skip the rest.
+func stopApps(r appStopper, apps []generate.App) error {
+	var errs []error
+	for _, app := range apps {
+		if err := r.Stop(app.Name); err != nil {
+			errs = append(errs, fmt.Errorf("stop %s: %w", app.Name, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Down stops the app containers only. It deliberately does NOT run the full
+// `roost down` (which also stops Caddy + cloudflared): that would kill the
+// tunnel route to this very panel, leaving no way to start again from the web.
+// The CLI `roost down` is still the way to take everything down.
+func (c *stackController) Down() error {
+	apps, _, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return err
+	}
+	r, err := newRunner()
+	if err != nil {
+		return err
+	}
+	return stopApps(r, apps)
 }
 
 // newWebCmd serves the control panel. It is a long-running process, meant to be

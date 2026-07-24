@@ -142,6 +142,23 @@ func TestStopStopsOnlyThatApp(t *testing.T) {
 	}
 }
 
+func TestResumeStartsWithoutRebuilding(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Resume("blog"); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	calls := allCalls(fake)
+	if !strings.Contains(calls, "start blog") {
+		t.Errorf("Resume should start blog:\n%s", calls)
+	}
+	// The fast path: no rebuild, no up (the build-dir path also contains the
+	// word "build", so match the subcommands, not the substring).
+	if strings.Contains(calls, "build blog") || strings.Contains(calls, "up -d") {
+		t.Errorf("Resume must not build or up:\n%s", calls)
+	}
+}
+
 func TestUpStreamsBuilds(t *testing.T) {
 	// First builds take minutes (base image pulls, dependency installs);
 	// their output must stream to the terminal, not be captured — a

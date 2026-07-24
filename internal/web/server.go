@@ -146,9 +146,10 @@ var statusTmpl = template.Must(template.New("status").Parse(`<!doctype html>
 {{if .Busy}}<p class="msg">⏳ {{.Busy}}… refresh in a moment.</p>
 {{else if .Last}}<p class="msg">{{.Last}}</p>{{end}}
 <p>
- <form method="post" action="/up">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="on" {{if .Busy}}disabled{{end}}>Start stack</button></form>
- <form method="post" action="/down">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="off" {{if .Busy}}disabled{{end}}>Stop stack</button></form>
+ <form method="post" action="/up">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="on" {{if .Busy}}disabled{{end}}>Start apps</button></form>
+ <form method="post" action="/down">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="off" {{if .Busy}}disabled{{end}}>Stop apps</button></form>
 </p>
+<p style="font-size:.85rem;color:#666">Stop leaves the proxy &amp; tunnel running, so this panel stays reachable.</p>
 {{if .Error}}<p class="down">status error: {{.Error}}</p>{{else}}
 <table><thead><tr><th>App</th><th>State</th><th>Health</th><th>Memory</th><th>URL</th></tr></thead><tbody>
 {{range .Apps}}<tr>
