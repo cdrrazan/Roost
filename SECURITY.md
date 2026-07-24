@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please **do not open a public issue** for security problems. Email
-**cdrrazan@gmail.com** with the details, or use GitHub's private
+**irajanbhattarai@gmail.com** with the details, or use GitHub's private
 [security advisory](https://github.com/cdrrazan/roost/security/advisories/new)
 form. You should hear back within a week; fixes for confirmed issues ship as
 a patch release with credit (unless you prefer otherwise).
