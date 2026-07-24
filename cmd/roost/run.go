@@ -109,6 +109,17 @@ func seedDecision(noSeed, reseed bool, st *state.State) func(string) bool {
 	return func(name string) bool { return reseed || !st.HasSeeded(name) }
 }
 
+// mysqlVolumeRecreatedNotice is the line printed when roost detects the MySQL
+// data volume was recreated (Clean/Purge, volume rm, fresh machine) and clears
+// its seeded set. Under --no-seed no re-seed follows, so the message must not
+// promise one.
+func mysqlVolumeRecreatedNotice(noSeed bool) string {
+	if noSeed {
+		return "mysql data volume was recreated — seeding skipped (--no-seed)"
+	}
+	return "mysql data volume was recreated — re-seeding all apps"
+}
+
 // prepareApps runs each app's idempotent DB setup and, for seed-enabled
 // apps, its seed command — once per app unless --reseed is passed. Seeded
 // apps are recorded in state.json so later ups skip them. A missing state
@@ -144,7 +155,7 @@ func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, prof
 	// left alone rather than risking a spurious wipe.
 	if vid, verr := r.MysqlVolumeID(); verr == nil && vid != "" {
 		if st.SyncMysqlVolume(vid) {
-			cmd.Println("mysql data volume was recreated — re-seeding all apps")
+			cmd.Println(mysqlVolumeRecreatedNotice(noSeed))
 		}
 		if err := st.Save(statePath); err != nil {
 			return err

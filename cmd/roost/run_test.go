@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/cdrrazan/roost/internal/state"
@@ -36,5 +37,20 @@ func TestSeedDecision(t *testing.T) {
 			t.Errorf("%s: seedDecision(noSeed=%v, reseed=%v)(%q) = %v, want %v — %s",
 				c.name, c.noSeed, c.reseed, c.app, got, c.want, c.comment)
 		}
+	}
+}
+
+// The volume-recreated notice must not promise a re-seed under --no-seed,
+// since seeding is suppressed for that run.
+func TestMysqlVolumeRecreatedNotice(t *testing.T) {
+	if got := mysqlVolumeRecreatedNotice(false); !strings.Contains(got, "re-seeding") {
+		t.Errorf("default notice should mention re-seeding, got %q", got)
+	}
+	got := mysqlVolumeRecreatedNotice(true)
+	if strings.Contains(got, "re-seeding") {
+		t.Errorf("--no-seed notice must not promise re-seeding, got %q", got)
+	}
+	if !strings.Contains(got, "skip") {
+		t.Errorf("--no-seed notice should say seeding is skipped, got %q", got)
 	}
 }
