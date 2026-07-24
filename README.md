@@ -481,6 +481,32 @@ docker run --rm -v roost-mysql-data:/data -v "$PWD":/backup alpine \
 ```
 </details>
 
+<details>
+<summary><b>How do I back up the databases regularly?</b></summary>
+
+roost stores data in Docker named volumes (`roost-mysql-data`,
+`roost-postgres-data`); it does **not** back them up for you. For anything you
+care about, dump the databases to files on the host — those survive a volume
+wipe. The stack must be running (`roost up`):
+
+```bash
+# MySQL apps — all databases in one file
+docker exec roost-mysql-1 mysqldump -uroot -proost --all-databases \
+  --single-transaction --routines --triggers | gzip > mysql-$(date +%F).sql.gz
+
+# Postgres apps — all databases in one file
+docker exec roost-postgres-1 pg_dumpall -U roost | gzip > postgres-$(date +%F).sql.gz
+```
+
+`--single-transaction` makes the MySQL dump consistent with no downtime.
+Restore by piping a dump back into `mysql`/`psql` in the same container. To run
+it on a schedule, wrap those two lines in a script and drive it with `cron`, a
+launchd agent (macOS), or a systemd timer (Linux) — and mirror the output to
+off-machine storage (another disk, S3, a synced cloud folder) so a dead disk
+doesn't take the backups with it.
+
+</details>
+
 ---
 
 ## 🌱 Project
