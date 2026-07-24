@@ -324,7 +324,7 @@
     <tr><td><code>roost add</code> / <code>remove</code></td><td>edit the app list — your config comments are preserved</td></tr>
     <tr><td><code>roost list</code> / <code>detect</code></td><td>resolved apps and URLs; detection with the signal that triggered it</td></tr>
     <tr><td><code>roost generate</code></td><td>write <code>~/.roost/build/*</code> without starting anything</td></tr>
-    <tr><td><code>roost up [--profile] [--reseed]</code> / <code>down</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps / stop it</td></tr>
+    <tr><td><code>roost up [--profile] [--reseed] [--no-seed]</code> / <code>down</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps (<code>--no-seed</code> skips seeding for a clean start) / stop it</td></tr>
     <tr><td><code>roost start</code> / <code>stop</code> / <code>restart</code></td><td>bring one app up, take it down, or bounce it — without touching the rest of the stack</td></tr>
     <tr><td><code>roost status</code> / <code>logs</code></td><td>state, health, memory vs cap, public URL; tail one app's logs</td></tr>
     <tr><td><code>roost doctor</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth — with a fix per failure</td></tr>

@@ -342,7 +342,7 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 **Everyday**
 | Command | What it does |
 |---|---|
-| `roost up [--profile p] [--reseed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack |
+| `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |

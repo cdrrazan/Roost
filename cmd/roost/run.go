@@ -46,6 +46,7 @@ func newRunner() (*runner.Runner, error) {
 func newUpCmd(flags *rootFlags) *cobra.Command {
 	var profiles []string
 	var reseed bool
+	var noSeed bool
 	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Generate artifacts and start every app, routed and live",
@@ -81,7 +82,7 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 					cmd.Printf("up: %s → https://%s\n", app.Name, app.FQDN)
 				}
 			}
-			if err := prepareApps(cmd, r, apps, profiles, reseed); err != nil {
+			if err := prepareApps(cmd, r, apps, profiles, reseed, noSeed); err != nil {
 				return err
 			}
 			if _, err := os.Stat(filepath.Join(dir, ".env")); err != nil {
@@ -92,7 +93,20 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 	}
 	cmd.Flags().StringSliceVar(&profiles, "profile", nil, "only start apps in these profiles (unprofiled apps always start)")
 	cmd.Flags().BoolVar(&reseed, "reseed", false, "re-run seeds for apps already seeded (default: seed each app once)")
+	cmd.Flags().BoolVar(&noSeed, "no-seed", false, "skip all seeding this run (migrations still run); useful for a clean start without demo data")
+	cmd.MarkFlagsMutuallyExclusive("reseed", "no-seed")
 	return cmd
+}
+
+// seedDecision returns the predicate prepareApps uses to decide whether an app
+// should be seeded. --no-seed suppresses seeding entirely (it wins over
+// --reseed, which the CLI also rejects as mutually exclusive); --reseed forces
+// a re-seed; otherwise an app is seeded only if state has no record of it.
+func seedDecision(noSeed, reseed bool, st *state.State) func(string) bool {
+	if noSeed {
+		return func(string) bool { return false }
+	}
+	return func(name string) bool { return reseed || !st.HasSeeded(name) }
 }
 
 // prepareApps runs each app's idempotent DB setup and, for seed-enabled
@@ -100,7 +114,7 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 // apps are recorded in state.json so later ups skip them. A missing state
 // file is fine (first run); seeding failures are surfaced but do not tear
 // down the already-running stack.
-func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, profiles []string, reseed bool) error {
+func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, profiles []string, reseed, noSeed bool) error {
 	needsPrepare := false
 	for _, app := range apps {
 		if app.SetupCommand != "" || app.SeedCommand != "" {
@@ -137,7 +151,7 @@ func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, prof
 		}
 	}
 
-	shouldSeed := func(name string) bool { return reseed || !st.HasSeeded(name) }
+	shouldSeed := seedDecision(noSeed, reseed, st)
 	onSeeded := func(name string) error {
 		cmd.Printf("seeded: %s\n", name)
 		st.MarkSeeded(name)
