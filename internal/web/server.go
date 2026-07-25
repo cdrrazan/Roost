@@ -290,6 +290,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{"hu
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
 {{if .Busy}}<meta http-equiv="refresh" content="2">{{end}}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
 <style>
  :root{
   --bg:#f3f4f7; --panel:#ffffff; --panel2:#f7f8fa; --line:#e6e8ee; --line2:#eef0f4;
