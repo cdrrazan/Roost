@@ -3,8 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>roost — your laptop, live on your own domain</title>
-<meta name="description" content="roost turns a list of local app folders into live HTTPS apps on your own domain: generated Docker Compose, Caddy routing, and a Cloudflare Tunnel from one config file.">
+<title>roost — your fleet, live on your own domain</title>
+<meta name="description" content="roost turns a list of local app folders into live HTTPS apps on your own domain: generated Docker Compose, Caddy routing, and a Cloudflare Tunnel from one config file — plus a browser control panel to run the whole fleet.">
+<link rel="canonical" href="https://roost.app.rsynk.com/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://roost.app.rsynk.com/">
+<meta property="og:title" content="roost — your fleet, live on your own domain">
+<meta property="og:description" content="One config file → generated Compose, Caddy, and a Cloudflare Tunnel, with every DNS record made via API. Plus a browser control panel to start, stop, add, and remove apps.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
@@ -154,6 +160,7 @@
   <div class="brand">roost<span class="tld">.</span></div>
   <nav class="links">
     <a href="#how">How it works</a>
+    <a href="#panel">Control panel</a>
     <a href="#quickstart">Quickstart</a>
     <a href="#usage">Usage</a>
     <a href="#commands">Commands</a>
@@ -170,7 +177,9 @@
     <h1>Every app on your laptop, <em>live on your own domain</em>.</h1>
     <p class="lede">One config file with paths and hostnames. roost generates the
     Dockerfiles, Compose stack, Caddy routing, and Cloudflare Tunnel — and
-    creates every DNS record via API. No files added to your repos, ever.</p>
+    creates every DNS record via API. No files added to your repos, ever. Run it
+    on your laptop or a small always-on box, and drive the whole fleet from a
+    browser.</p>
     <div class="cta">
       <a class="btn primary" href="#quickstart">Get started</a>
       <a class="btn ghost" href="https://github.com/cdrrazan/roost/tree/main/examples">See examples</a>
@@ -200,6 +209,7 @@
   - <span class="str">~/code/blog</span>       <span class="cm"># → blog.rajan.dev</span>
   - <span class="str">~/code/shop</span>       <span class="cm"># → shop.rajan.dev</span></pre>
     <pre class="code"><span class="cm"># …or with every knob</span>
+<span class="key">control_host:</span> <span class="str">control.rajan.dev</span>  <span class="cm"># route this host to the web panel</span>
 <span class="key">tunnel:</span>
   <span class="key">name:</span> <span class="str">roost</span>
   <span class="key">access:</span>
@@ -208,6 +218,7 @@
 <span class="key">apps:</span>
   - <span class="key">path:</span> <span class="str">~/code/trackaru</span>
     <span class="key">domain:</span> <span class="str">trackaru.com</span>   <span class="cm"># bare apex, own zone</span>
+    <span class="key">category:</span> <span class="str">main</span>         <span class="cm"># panel grouping: main | utility</span>
     <span class="key">profile:</span> <span class="str">extras</span>       <span class="cm"># start on demand</span>
     <span class="key">seed:</span> <span class="str">true</span>            <span class="cm"># migrate + seed on up (once)</span>
     <span class="key">migrate:</span> <span class="str">false</span>       <span class="cm"># image self-migrates at boot</span>
@@ -250,6 +261,45 @@
   need (one shared MySQL/Postgres, one database per app), and memory caps.
   Detection is explainable — <span class="k">roost detect</span> prints the exact
   signal — and never guesses silently.</p>
+</section>
+
+<section id="panel">
+  <h2>Run the whole fleet from a browser</h2>
+  <p class="sub"><span class="k">roost web</span> serves a control panel — start,
+  stop, add, and remove apps and watch health at a glance. It runs as a host
+  process <em>outside</em> the stack, so stopping the apps can never take down the
+  thing that restarts them. Set <span class="k">control_host:</span> to route a
+  hostname through the tunnel, put Cloudflare Access in front, and reach it from
+  anywhere.</p>
+  <div class="cols2">
+    <div class="card">
+      <h3>See everything</h3>
+      <p>Apps grouped into <b>Main&nbsp;/ Utilities&nbsp;/ Workers</b>, each with a
+      live status pill and a colour-coded memory bar. A <i>needs&nbsp;attention</i>
+      strip surfaces anything that isn't running, over metric cards for running,
+      memory, and stopped.</p>
+    </div>
+    <div class="card">
+      <h3>Control anything</h3>
+      <p>Start or stop the whole stack, or a single app. Add one from a path — the
+      panel runs <span class="k">roost doctor</span> first, then builds and starts
+      just that app, streaming each step. Remove drops it and keeps it for
+      one-click re-add; shared databases are never touched.</p>
+    </div>
+    <div class="card">
+      <h3>Comfortable</h3>
+      <p>Search, a status filter, <b>list or grid</b> views, light and <b>dark</b>
+      mode, and it's mobile-responsive. The dashboard you'd expect — generated for
+      you, no front-end to maintain.</p>
+    </div>
+    <div class="card">
+      <h3>Yours, gated</h3>
+      <p>Loopback (<span class="k">127.0.0.1:4600</span>) by default, with a
+      <span class="k">--token</span> bearer check on the actions. Behind Cloudflare
+      Access it's a private control plane for your fleet — the Add form builds real
+      code, so it never faces the open internet.</p>
+    </div>
+  </div>
 </section>
 
 <section id="quickstart">
@@ -500,10 +550,14 @@
 <section>
   <h2>The honest part</h2>
   <div class="honest">
-    <b>This is not always-on hosting.</b>
+    <b>On a laptop, this is not always-on hosting.</b>
     <p>Your apps roost while the laptop is open and leave when it closes. Lid
-    shut — apps down; lid open — cloudflared reconnects in seconds. roost is
-    for demos, previews, and personal projects, and it says so plainly.</p>
+    shut — apps down; lid open — cloudflared reconnects in seconds. For demos,
+    previews, and personal projects, that's the whole point — and it says so
+    plainly. Want 24/7? The same config runs unchanged on a small always-on box:
+    copy <span class="k">config.yml</span> and credentials, restore your database
+    dumps, <span class="k">roost up</span>, and drive the fleet from the web
+    panel. Same tool, your call on where it lives.</p>
   </div>
 </section>
 
