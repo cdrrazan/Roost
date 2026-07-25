@@ -513,7 +513,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .metric{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
  .metric .mh{display:flex;align-items:center;justify-content:space-between}
  .metric .mt{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
- .metric .mi{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:13px}
+ .metric .mi{width:30px;height:30px;border-radius:9px;display:grid;place-items:center}
+ .metric .mi svg{width:17px;height:17px;stroke:currentColor}
  .metric.teal .mi{background:var(--teal-bg);color:var(--teal-ink)}
  .metric.amber .mi{background:var(--amber-bg);color:var(--amber-ink)}
  .metric.red .mi{background:var(--red-bg);color:var(--red-ink)}
@@ -539,7 +540,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .glist.grid .srv-acts{flex-basis:100%;justify-content:flex-start;margin-top:2px}
  .srv-top{display:flex;align-items:flex-start;gap:12px}
  .srv-idb{min-width:0;flex:1}
- .srv-ico{width:30px;height:30px;border-radius:9px;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;font-size:14px;flex:none;margin-top:1px}
+ .srv-ico{width:32px;height:32px;border-radius:9px;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;flex:none;margin-top:1px}
+ .srv-ico svg{width:17px;height:17px;stroke:currentColor}
  .srv-nm{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
  .srv-name{font-weight:650;font-size:14px}
  .dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -693,19 +695,19 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 
    <div class="metrics">
     <div class="metric teal">
-     <div class="mh"><div class="mt"><span class="mi">◉</span> Apps running</div></div>
+     <div class="mh"><div class="mt"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="7.5" x2="7.01" y2="7.5"/><line x1="7" y1="16.5" x2="7.01" y2="16.5"/></svg></span> Apps running</div></div>
      <div class="mv">{{.RunningCount}}<span style="font-size:15px;color:var(--faint)">/{{.Total}}</span></div>
      <div class="msub">processes online</div>
      <div class="bar"><span class="fill teal" style="width:{{.RunningPct}}%"></span></div>
     </div>
     <div class="metric amber">
-     <div class="mh"><div class="mt"><span class="mi">▤</span> Memory usage</div></div>
+     <div class="mh"><div class="mt"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="7" y1="18" x2="7" y2="21"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="17" y1="18" x2="17" y2="21"/><line x1="7" y1="3" x2="7" y2="6"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="17" y1="3" x2="17" y2="6"/></svg></span> Memory usage</div></div>
      <div class="mv">{{.MemPct}}%</div>
      <div class="msub">{{if .MemCap}}{{.MemUsed}} / {{.MemCap}} used{{else}}usage unavailable{{end}}</div>
      <div class="bar"><span class="fill amber" style="width:{{.MemPct}}%"></span></div>
     </div>
     <div class="metric red">
-     <div class="mh"><div class="mt"><span class="mi">◍</span> Stopped</div></div>
+     <div class="mh"><div class="mt"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></span> Stopped</div></div>
      <div class="mv">{{.StoppedCount}}</div>
      <div class="msub">not running{{if not .DockerOK}} · docker unreachable{{end}}</div>
      <div class="bar"><span class="fill bad" style="width:{{if .Total}}{{.StoppedCount}}{{else}}0{{end}}%"></span></div>
@@ -722,7 +724,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
       {{range .Apps}}
        <div class="srv" data-name="{{humanize .Name}}" data-state="{{if eq .State "running"}}running{{else}}stopped{{end}}">
         <div class="srv-top">
-         <span class="srv-ico">{{if .URL}}◍{{else}}⚙{{end}}</span>
+         <span class="srv-ico">{{if .URL}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>{{end}}</span>
          <div class="srv-idb">
           <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}</div>
           <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}</div>
