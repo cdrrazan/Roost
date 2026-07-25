@@ -97,6 +97,11 @@ type App struct {
 	// Caddy route, and roost runs no DB setup or seed for it; it must
 	// carry a command:. roost still starts and supervises its container.
 	Worker bool `yaml:"worker"`
+	// Category is a display grouping for the web control panel only —
+	// "main", "utility", or left empty (treated as main). It has no effect
+	// on how roost builds or runs the app. Worker entries are grouped as
+	// workers regardless of this value.
+	Category string `yaml:"category"`
 }
 
 // SeedSpec is a per-app seed directive. In YAML it accepts a boolean

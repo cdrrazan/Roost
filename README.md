@@ -154,6 +154,7 @@ apps:
 | `migrate:` | **Opt out of roost's migrate step.** Default runs the framework's `db:prepare`/`migrate` on every `up`. Set `migrate: false` when the image already migrates itself at boot (Kamal-style entrypoints) — otherwise the two `db:prepare`s race and a multi-db app (Solid Queue/Cache/Cable) fails with `No database selected`. `migrate: "<command>"` runs your command instead. |
 | `redis:` | **Shared Redis broker.** Auto-detected from the `sidekiq`/`redis` gem or a `REDIS_URL` in `.env.example` — roost provisions one `redis:7-alpine` shared by every app that needs it and injects `REDIS_URL=redis://redis:6379/0`. `redis: true`/`false` overrides the detection. |
 | `worker:` + `command:` | **Background workers.** `command:` overrides an app's start command. A second entry over the same `path:` with `worker: true` runs a non-HTTP process (Sidekiq, Solid Queue) — no domain, no Caddy route, no `db:prepare`/seed (the web entry owns the DB). It **requires** a `command:`. Point its `DATABASE_URL` at the web app's DB (an explicit `env:` value wins over roost's per-app default). |
+| `category:` | **Display grouping for `roost web` only** — `main` or `utility` (empty = main). Buckets the app under *Main apps* / *Utilities* in the control panel; `worker: true` apps always show under *Workers*. No effect on how roost builds or runs anything. |
 
 ### 🧩 Split a big fleet across files — `include`
 

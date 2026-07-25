@@ -372,6 +372,48 @@ func TestProcessingStepsRendered(t *testing.T) {
 	close(f.release)
 }
 
+func TestHumanize(t *testing.T) {
+	cases := map[string]string{
+		"trackaru":    "Trackaru",
+		"sure-worker": "Sure Worker",
+		"linkart":     "Linkart",
+		"kamandar":    "Kamandar",
+		"my_cool_app": "My Cool App",
+		"":            "",
+	}
+	for in, want := range cases {
+		if got := humanize(in); got != want {
+			t.Errorf("humanize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGroupAppsOrderAndFallback(t *testing.T) {
+	apps := []runner.AppStatus{
+		{Name: "trackaru", Category: "main"},
+		{Name: "sure", Category: "utility"},
+		{Name: "sure-worker", Category: "worker"},
+		{Name: "unlabeled", Category: ""}, // empty → Main apps
+	}
+	groups := groupApps(apps)
+	if len(groups) != 3 {
+		t.Fatalf("groups = %d, want 3 (empty groups omitted)", len(groups))
+	}
+	if groups[0].Title != "Main apps" || groups[1].Title != "Utilities" || groups[2].Title != "Workers" {
+		t.Fatalf("titles = %q/%q/%q", groups[0].Title, groups[1].Title, groups[2].Title)
+	}
+	if len(groups[0].Apps) != 2 {
+		t.Fatalf("Main apps = %d, want 2 (trackaru + unlabeled)", len(groups[0].Apps))
+	}
+}
+
+func TestGroupAppsOmitsEmpty(t *testing.T) {
+	groups := groupApps([]runner.AppStatus{{Name: "a", Category: "utility"}})
+	if len(groups) != 1 || groups[0].Title != "Utilities" {
+		t.Fatalf("groups = %+v, want only Utilities", groups)
+	}
+}
+
 func TestBusyBlocksConcurrentAction(t *testing.T) {
 	f := &fakeController{release: make(chan struct{})}
 	srv := NewServer(f, "")

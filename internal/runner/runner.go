@@ -268,11 +268,12 @@ func (r *Runner) Logs(app string, follow bool) error {
 
 // AppStatus is one app's runtime state.
 type AppStatus struct {
-	Name   string
-	State  string // running, exited, restarting, not created, skipped...
-	Health string
-	Memory string // "used / cap" from docker stats, "" when unknown
-	URL    string
+	Name     string
+	State    string // running, exited, restarting, not created, skipped...
+	Health   string
+	Memory   string // "used / cap" from docker stats, "" when unknown
+	URL      string
+	Category string // display grouping for the panel: main, utility, worker
 }
 
 // psLine is the subset of `docker compose ps --format json` output we
@@ -338,9 +339,10 @@ func (r *Runner) Status(apps []generate.App) ([]AppStatus, error) {
 			url = "(worker)"
 		}
 		st := AppStatus{
-			Name:  app.Name,
-			State: "not created",
-			URL:   url,
+			Name:     app.Name,
+			State:    "not created",
+			URL:      url,
+			Category: app.Category,
 		}
 		if p, ok := states[app.Name]; ok {
 			st.State = p.State
