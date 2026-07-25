@@ -31,6 +31,7 @@ type fakeController struct {
 	removeImage        bool
 	removeCalls        int
 	removed            []RemovedApp
+	server             ServerInfo
 	emitLines          []string // lines AddApp/RemoveApp emit when called
 }
 
@@ -117,6 +118,8 @@ func (f *fakeController) RemovedApps() ([]RemovedApp, error) {
 	defer f.mu.Unlock()
 	return append([]RemovedApp(nil), f.removed...), nil
 }
+
+func (f *fakeController) ServerInfo() ServerInfo { return f.server }
 
 func (f *fakeController) snapshot() fakeController {
 	f.mu.Lock()

@@ -165,6 +165,11 @@ type Controller interface {
 	// RemovedApps lists apps removed via the panel, so it can offer a
 	// one-click re-add without the user retyping the path.
 	RemovedApps() ([]RemovedApp, error)
+
+	// ServerInfo returns host metadata for the panel's Server card (disk,
+	// host/OS/uptime, and the configured IP + SSH login). Best-effort:
+	// unknown fields are left empty.
+	ServerInfo() ServerInfo
 }
 
 // RemovedApp is a previously-removed app the panel offers to re-add.
@@ -172,6 +177,21 @@ type RemovedApp struct {
 	Name   string
 	Path   string
 	Domain string
+}
+
+// ServerInfo is host metadata shown in the panel's Server card (private page).
+type ServerInfo struct {
+	IP       string // public IP (from config)
+	SSH      string // ssh <user>@<ip> (from config)
+	Label    string // provider / shape / region (from config)
+	Host     string // hostname
+	OS       string // pretty OS name
+	Uptime   string // humanized
+	Cores    int
+	RAM      string // total RAM, human
+	DiskUsed string
+	DiskCap  string
+	DiskPct  int
 }
 
 // Server renders the panel and serialises on/off actions. A single in-flight
@@ -331,6 +351,7 @@ type statusView struct {
 	Last         string
 	Steps        []string     // processing-pane progress lines
 	Removed      []RemovedApp // apps removed via the panel, offered for re-add
+	Server       ServerInfo   // host metadata for the Server card
 	Error        string
 	Token        string // embedded in the form when non-empty
 }
@@ -386,6 +407,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	if removed, err := s.ctrl.RemovedApps(); err == nil {
 		view.Removed = removed
 	}
+	view.Server = s.ctrl.ServerInfo()
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := statusTmpl.Execute(w, view); err != nil {
@@ -597,6 +619,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .ov{padding:16px 18px}
  .ov-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line2)}
  .ov-row:last-child{border-bottom:0} .ov-row .k{color:var(--muted)} .ov-row .v{font-weight:600}
+ .ov-row .v.mono{font-family:var(--mono);font-size:12px;font-weight:600}
+ .sshbox{display:flex;align-items:center;gap:8px;margin-top:12px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:7px 8px 7px 11px}
+ .sshbox code{font-family:var(--mono);font-size:11.5px;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .sshbox button{flex:none;padding:5px 11px}
  .ov-bar{margin:6px 0 14px}
  .ov-bar .mlabel{margin-bottom:6px}
  .procbody{padding:15px 18px}
@@ -806,6 +832,21 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     </div>
    </div>
 
+   <div class="card" id="server">
+    <div class="card-h"><h2>Server</h2>{{if .Server.Label}}<span class="csub">{{.Server.Label}}</span>{{end}}</div>
+    <div class="ov">
+     {{if .Server.DiskCap}}<div class="ov-bar"><div class="mlabel">Disk <b>{{.Server.DiskPct}}%</b></div><div class="bar"><span class="fill {{if ge .Server.DiskPct 90}}bad{{else if ge .Server.DiskPct 70}}warn{{else}}ok{{end}}" style="width:{{.Server.DiskPct}}%"></span></div></div>{{end}}
+     {{if .Server.IP}}<div class="ov-row"><span class="k">IP address</span><span class="v mono">{{.Server.IP}}</span></div>{{end}}
+     {{if .Server.Host}}<div class="ov-row"><span class="k">Host</span><span class="v">{{.Server.Host}}</span></div>{{end}}
+     {{if .Server.OS}}<div class="ov-row"><span class="k">OS</span><span class="v">{{.Server.OS}}</span></div>{{end}}
+     {{if .Server.Cores}}<div class="ov-row"><span class="k">CPU / RAM</span><span class="v">{{.Server.Cores}} vCPU{{if .Server.RAM}} · {{.Server.RAM}}{{end}}</span></div>{{end}}
+     {{if .Server.Uptime}}<div class="ov-row"><span class="k">Uptime</span><span class="v">{{.Server.Uptime}}</span></div>{{end}}
+     {{if .Server.DiskCap}}<div class="ov-row"><span class="k">Disk</span><span class="v">{{.Server.DiskUsed}} / {{.Server.DiskCap}}</span></div>{{end}}
+     {{if .Server.SSH}}<div class="sshbox"><code>ssh {{.Server.SSH}}</code><button class="btn btn-sm" data-copy="ssh {{.Server.SSH}}" title="Copy login command">Copy</button></div>{{end}}
+     {{if not .Server.IP}}<p class="empty" style="padding:2px 0 0">Set a <code>server:</code> block in config.yml to show IP + SSH login.</p>{{end}}
+    </div>
+   </div>
+
    <div class="card" id="processing">
     <div class="card-h"><h2>Activity <span class="csub">latest actions</span></h2></div>
     <div class="procbody">
@@ -906,6 +947,14 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  // from the current origin so it works on any host.
  var lo=document.getElementById("logout");
  if(lo)lo.href="/cdn-cgi/access/logout?returnTo="+encodeURIComponent(location.origin+"/");
+ // Copy-to-clipboard (e.g. the ssh login command).
+ document.querySelectorAll("[data-copy]").forEach(function(b){
+  b.addEventListener("click",function(){
+   (navigator.clipboard?navigator.clipboard.writeText(b.dataset.copy):Promise.reject()).then(function(){
+    var t=b.textContent; b.textContent="Copied"; setTimeout(function(){b.textContent=t;},1200);
+   }).catch(function(){});
+  });
+ });
  var tb=document.getElementById("themebtn");
  if(tb)tb.addEventListener("click",function(){
   var d=document.documentElement.dataset.theme==="dark"?"light":"dark";

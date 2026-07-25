@@ -33,9 +33,20 @@ type Config struct {
 	// the host (outside the stack). Empty means no panel route is generated.
 	ControlHost string `yaml:"control_host"`
 
+	// Server is optional display metadata for the web panel's Server card
+	// (the box's public IP + SSH login). It has no effect on how roost runs.
+	Server Server `yaml:"server"`
+
 	// Dir is the directory containing the config file; relative app
 	// paths are resolved against it.
 	Dir string `yaml:"-"`
+}
+
+// Server is optional host metadata surfaced in the web panel (display only).
+type Server struct {
+	IP      string `yaml:"ip"`       // public IP shown + used in the ssh command
+	SSHUser string `yaml:"ssh_user"` // ssh <user>@<ip>
+	Label   string `yaml:"label"`    // free-text (provider / shape / region)
 }
 
 // Tunnel holds the cloudflared tunnel settings.

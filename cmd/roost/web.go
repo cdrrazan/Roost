@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -277,6 +280,113 @@ func (c *stackController) RemoveApp(name string, deleteImage bool, emit func(str
 	}
 	emit("done — moved to the Removed list")
 	return nil
+}
+
+// ServerInfo gathers host metadata for the panel's Server card: disk usage
+// (statfs of the home filesystem), hostname/OS/uptime/CPU/RAM, and the
+// display-only IP + SSH login from the config's `server:` block. Best-effort —
+// anything it can't read is left empty and the template hides that row.
+func (c *stackController) ServerInfo() web.ServerInfo {
+	si := web.ServerInfo{Cores: runtime.NumCPU(), OS: osPretty(), Uptime: hostUptime(), RAM: hostMemTotal()}
+	if h, err := os.Hostname(); err == nil {
+		si.Host = h
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = "/"
+	}
+	si.DiskUsed, si.DiskCap, si.DiskPct = diskUsage(home)
+	if cfgPath, err := config.FindConfig(c.flags.configPath); err == nil {
+		if cfg, err := config.Load(cfgPath); err == nil {
+			si.IP, si.Label = cfg.Server.IP, cfg.Server.Label
+			if cfg.Server.IP != "" {
+				user := cfg.Server.SSHUser
+				if user == "" {
+					user = "root"
+				}
+				si.SSH = user + "@" + cfg.Server.IP
+			}
+		}
+	}
+	return si
+}
+
+// diskUsage returns used/total (human) and the used percentage for the
+// filesystem holding path, via statfs.
+func diskUsage(path string) (used, capacity string, pct int) {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs(path, &st); err != nil {
+		return "", "", 0
+	}
+	bs := uint64(st.Bsize)
+	total := st.Blocks * bs
+	avail := st.Bavail * bs
+	if total == 0 {
+		return "", "", 0
+	}
+	u := total - avail
+	return humanGiB(u), humanGiB(total), int(float64(u)/float64(total)*100 + 0.5)
+}
+
+// humanGiB formats bytes in IEC units (GiB when large enough, else MiB).
+func humanGiB(b uint64) string {
+	if b >= 1<<30 {
+		return fmt.Sprintf("%.0fGiB", float64(b)/(1<<30))
+	}
+	return fmt.Sprintf("%.0fMiB", float64(b)/(1<<20))
+}
+
+// osPretty reads PRETTY_NAME from /etc/os-release (Linux), else the GOOS.
+func osPretty() string {
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if v, ok := strings.CutPrefix(line, "PRETTY_NAME="); ok {
+				return strings.Trim(v, "\"")
+			}
+		}
+	}
+	if runtime.GOOS == "" {
+		return ""
+	}
+	return strings.ToUpper(runtime.GOOS[:1]) + runtime.GOOS[1:]
+}
+
+// hostUptime reads /proc/uptime (Linux) and humanizes it; empty elsewhere.
+func hostUptime() string {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return ""
+	}
+	var secs float64
+	if _, err := fmt.Sscanf(string(data), "%f", &secs); err != nil || secs <= 0 {
+		return ""
+	}
+	s := int(secs)
+	switch d, h, m := s/86400, (s%86400)/3600, (s%3600)/60; {
+	case d > 0:
+		return fmt.Sprintf("%dd %dh", d, h)
+	case h > 0:
+		return fmt.Sprintf("%dh %dm", h, m)
+	default:
+		return fmt.Sprintf("%dm", m)
+	}
+}
+
+// hostMemTotal reads MemTotal from /proc/meminfo (Linux); empty elsewhere.
+func hostMemTotal() string {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "MemTotal:") {
+			var kb uint64
+			if _, err := fmt.Sscanf(line, "MemTotal: %d kB", &kb); err == nil && kb > 0 {
+				return humanGiB(kb * 1024)
+			}
+		}
+	}
+	return ""
 }
 
 // RemovedApps returns the apps the panel has removed, for one-click re-add.
