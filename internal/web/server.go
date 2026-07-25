@@ -439,11 +439,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
  h1,h2,h3{margin:0}
  /* window shell */
- .shell{max-width:1340px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:22px;
+ .shell{max-width:1340px;height:calc(100vh - 44px);margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:22px;
   box-shadow:var(--shadow-lg);overflow:hidden;display:grid;grid-template-columns:234px minmax(0,1fr)}
- .content{display:flex;flex-direction:column;min-width:0}
- /* sidebar */
- .side{border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px}
+ .content{display:flex;flex-direction:column;min-width:0;overflow:hidden}
+ /* sidebar — fixed column, scrolls on its own */
+ .side{border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto}
  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px}
  .logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#6f67f0,#a855f7 55%,#ec4899);
   display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:var(--shadow)}
@@ -482,7 +482,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .btn-danger:hover{background:var(--red-bg);border-color:var(--danger)}
  form.inline{display:inline}
  /* body grid */
- .body{padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 322px;gap:18px;align-items:start}
+ .body{padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 322px;gap:18px;align-items:start;flex:1;overflow-y:auto}
  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px}
  .card:last-child{margin-bottom:0}
  .card-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line2)}
@@ -521,12 +521,17 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .fill.bad{background:linear-gradient(90deg,#ef5a5f,#e5484d)}
  .fill.teal{background:linear-gradient(90deg,#2bd07f,#12a150)}
  .fill.amber{background:linear-gradient(90deg,#eba33a,#e08a1e)}
- /* server/app rows */
- .applist.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:14px}
- .grouphdr{display:flex;align-items:center;gap:9px;padding:12px 18px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+ /* server/app rows — grouped: header then a list/grid of items */
+ .grouphdr{display:flex;align-items:center;gap:9px;padding:14px 18px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
  .grouphdr .gc{margin-left:auto;font-size:11px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:2px 9px;text-transform:none;letter-spacing:0}
+ .group.hide{display:none}
+ .glist.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;padding:4px 16px 14px}
  .srv{display:flex;flex-direction:column;gap:11px;padding:13px 18px;border-top:1px solid var(--line2)}
- .applist.grid .srv{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel2)}
+ .glist.grid .srv{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--panel2)}
+ .glist.grid .grouphdr{padding-left:4px}
+ .glist.grid .srv-top{flex-wrap:wrap;align-items:center}
+ .glist.grid .srv-idb{flex:1 1 55%}
+ .glist.grid .srv-acts{flex-basis:100%;justify-content:flex-start;margin-top:2px}
  .srv-top{display:flex;align-items:flex-start;gap:12px}
  .srv-idb{min-width:0;flex:1}
  .srv-ico{width:30px;height:30px;border-radius:9px;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;font-size:14px;flex:none;margin-top:1px}
@@ -542,9 +547,23 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .srv-bar{width:100%}
  .mlabel{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
  .mlabel b{color:var(--ink);font-weight:700}
- .srv-acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex:none}
- .srv-acts .free{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--faint);cursor:pointer}
- .srv-acts .free input{accent-color:var(--danger)}
+ .srv-acts{display:flex;align-items:center;gap:8px;justify-content:flex-end;flex:none}
+ .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel)}
+ .seg form{display:flex}
+ .segbtn{font:inherit;font-size:12.5px;font-weight:600;border:0;background:none;padding:6px 14px;cursor:pointer;color:var(--ink)}
+ .seg form+form .segbtn{border-left:1px solid var(--line)}
+ .segbtn.go{color:var(--teal-ink)} .segbtn.go:hover:not([disabled]){background:var(--teal-bg)}
+ .segbtn.st:hover:not([disabled]){background:var(--panel2)}
+ .segbtn[disabled]{opacity:.4;cursor:not-allowed}
+ .menu{position:relative}
+ .menu>summary{list-style:none} .menu>summary::-webkit-details-marker{display:none} .menu>summary::marker{content:""}
+ .kebab{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:31px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--muted);cursor:pointer;font-size:16px;line-height:1;letter-spacing:1px}
+ .kebab:hover{background:var(--panel2);color:var(--ink)}
+ .menu[open] .kebab{background:var(--panel2);color:var(--ink)}
+ .menu-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:20;width:216px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg);padding:12px}
+ .menu-pop .free{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;margin-bottom:11px}
+ .menu-pop .free span{color:var(--faint)} .menu-pop .free input{accent-color:var(--danger)}
+ .applist.grid .srv-acts,.glist.grid .srv-acts{justify-content:flex-start}
  /* right rail */
  .ov{padding:16px 18px}
  .ov-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line2)}
@@ -583,7 +602,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  @media(max-width:1080px){.body{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}}
  @media(max-width:860px){
   body{padding:0}
-  .shell{border-radius:0;border:0;min-height:100vh;grid-template-columns:1fr}
+  .shell{border-radius:0;border:0;height:100vh;grid-template-columns:1fr}
   .side{position:fixed;left:0;top:0;bottom:0;z-index:30;width:240px;background:var(--panel);transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow-lg)}
   body.nav-open .side{transform:none}
   body.nav-open:after{content:"";position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:20}
@@ -603,10 +622,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   </div>
   <nav class="nav">
    <div class="navlabel">Resources</div>
-   <a href="#top" class="active"><span class="ico">▦</span> All apps</a>
-   <a href="#main-apps"><span class="ico">◆</span> Main apps</a>
-   <a href="#utilities"><span class="ico">◈</span> Utilities</a>
-   <a href="#workers"><span class="ico">⚙</span> Workers</a>
+   <a href="#" class="navf active" data-cat=""><span class="ico">▦</span> All apps</a>
+   <a href="#" class="navf" data-cat="Main apps"><span class="ico">◆</span> Main apps</a>
+   <a href="#" class="navf" data-cat="Utilities"><span class="ico">◈</span> Utilities</a>
+   <a href="#" class="navf" data-cat="Workers"><span class="ico">⚙</span> Workers</a>
    <div class="navlabel">Monitoring</div>
    <a href="#attention"><span class="ico">⚠</span> Attention</a>
    <a href="#processing"><span class="ico">◷</span> Activity</a>
@@ -686,24 +705,38 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <div class="card-h"><h2>Applications <span class="csub">manage and monitor your fleet</span></h2><span class="count">{{.RunningCount}}/{{.Total}} up</span></div>
     <div class="applist">
     {{range .Groups}}
-     <div class="grouphdr" id="{{slug .Title}}">{{.Title}}<span class="gc">{{len .Apps}}</span></div>
-     {{range .Apps}}
-     <div class="srv" data-name="{{humanize .Name}}" data-state="{{if eq .State "running"}}running{{else}}stopped{{end}}">
-      <div class="srv-top">
-       <span class="srv-ico">{{if .URL}}◍{{else}}⚙{{end}}</span>
-       <div class="srv-idb">
-        <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}</div>
-        <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}</div>
+     <div class="group" data-cat="{{.Title}}">
+      <div class="grouphdr" id="{{slug .Title}}">{{.Title}}<span class="gc">{{len .Apps}}</span></div>
+      <div class="glist">
+      {{range .Apps}}
+       <div class="srv" data-name="{{humanize .Name}}" data-state="{{if eq .State "running"}}running{{else}}stopped{{end}}">
+        <div class="srv-top">
+         <span class="srv-ico">{{if .URL}}◍{{else}}⚙{{end}}</span>
+         <div class="srv-idb">
+          <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}</div>
+          <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}</div>
+         </div>
+         <div class="srv-acts">
+          <div class="seg">
+           <form class="inline" method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="segbtn go" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
+           <form class="inline" method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="segbtn st" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>
+          </div>
+          <details class="menu">
+           <summary class="kebab" title="More actions">⋯</summary>
+           <div class="menu-pop">
+            <form method="post" action="/remove" onsubmit="return confirm('Remove {{humanize .Name}} from the config?')"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}
+             <label class="free"><input type="checkbox" name="image" value="on"> Also delete image <span>(free disk)</span></label>
+             <button class="btn btn-sm btn-danger" style="width:100%;justify-content:center" {{if $.Busy}}disabled{{end}}>Remove app</button>
+            </form>
+           </div>
+          </details>
+         </div>
+        </div>
+        {{if .Memory}}<div class="srv-bar"><div class="mlabel">Memory <b>{{mempct .Memory}}%</b></div><div class="bar"><span class="fill {{memcolor .Memory}}" style="width:{{mempct .Memory}}%"></span></div></div>{{end}}
        </div>
-       <div class="srv-acts">
-        <form class="inline" method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="btn btn-sm btn-ok" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
-        <form class="inline" method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="btn btn-sm" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>
-        <form class="inline" method="post" action="/remove" onsubmit="return confirm('Remove {{humanize .Name}} from the config?')"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<label class="free" title="also delete the built image to free disk"><input type="checkbox" name="image" value="on"> disk</label><button class="btn btn-sm btn-danger" {{if $.Busy}}disabled{{end}}>Remove</button></form>
-       </div>
+      {{end}}
       </div>
-      {{if .Memory}}<div class="srv-bar"><div class="mlabel">Memory <b>{{mempct .Memory}}%</b></div><div class="bar"><span class="fill {{memcolor .Memory}}" style="width:{{mempct .Memory}}%"></span></div></div>{{end}}
      </div>
-     {{end}}
     {{else}}
      <div class="empty">No apps configured yet — use “New app”.</div>
     {{end}}
@@ -767,9 +800,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 
 <script>
 (function(){
- var KEY="roost-view";
+ var KEY="roost-view", cat="";
  function apply(v){
-  document.querySelectorAll(".applist").forEach(function(e){e.classList.toggle("grid",v==="grid")});
+  document.querySelectorAll(".glist").forEach(function(e){e.classList.toggle("grid",v==="grid")});
   document.querySelectorAll("[data-view]").forEach(function(b){b.classList.toggle("active",b.dataset.view===v)});
  }
  apply(localStorage.getItem(KEY)||"list");
@@ -778,20 +811,33 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  });
  var q=document.getElementById("q"), sf=document.getElementById("statusfilter");
  function filter(){
-  var term=(q.value||"").toLowerCase(), st=sf.value;
-  document.querySelectorAll(".srv").forEach(function(r){
-   var okName=r.dataset.name.toLowerCase().indexOf(term)>-1;
-   var okSt=st==="all"||r.dataset.state===st;
-   r.classList.toggle("hide",!(okName&&okSt));
-  });
-  document.querySelectorAll(".grouphdr").forEach(function(h){
-   var any=false,n=h.nextElementSibling;
-   while(n&&n.classList.contains("srv")){ if(!n.classList.contains("hide"))any=true; n=n.nextElementSibling; }
-   h.classList.toggle("hide",!any);
+  var term=(q?q.value:"").toLowerCase(), st=sf?sf.value:"all";
+  document.querySelectorAll(".group").forEach(function(g){
+   var catOk=!cat||g.dataset.cat===cat, any=false;
+   g.querySelectorAll(".srv").forEach(function(r){
+    var show=catOk && r.dataset.name.toLowerCase().indexOf(term)>-1 && (st==="all"||r.dataset.state===st);
+    r.classList.toggle("hide",!show);
+    if(show)any=true;
+   });
+   g.classList.toggle("hide",!(catOk&&any));
   });
  }
  if(q)q.addEventListener("input",filter);
  if(sf)sf.addEventListener("change",filter);
+ // Sidebar category filter (show only that group, no page jump).
+ document.querySelectorAll(".navf").forEach(function(a){
+  a.addEventListener("click",function(e){
+   e.preventDefault();
+   cat=a.dataset.cat;
+   document.querySelectorAll(".navf").forEach(function(x){x.classList.toggle("active",x===a)});
+   filter();
+   document.body.classList.remove("nav-open");
+  });
+ });
+ // Close any open kebab menu when clicking elsewhere.
+ document.addEventListener("click",function(e){
+  document.querySelectorAll("details.menu[open]").forEach(function(d){ if(!d.contains(e.target)) d.removeAttribute("open"); });
+ });
  var dlg=document.getElementById("addapp");
  var o=document.getElementById("openadd"), c=document.getElementById("closeadd");
  if(o&&dlg)o.addEventListener("click",function(){dlg.showModal();});
@@ -799,7 +845,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  if(dlg)dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});
  var burger=document.getElementById("burger");
  if(burger)burger.addEventListener("click",function(){document.body.classList.toggle("nav-open");});
- document.querySelectorAll(".side .nav a").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});
+ document.querySelectorAll(".side .nav a:not(.navf)").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});
 })();
 </script>
 </body></html>`))
