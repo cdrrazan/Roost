@@ -434,13 +434,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
  }}
  *{box-sizing:border-box}
- body{margin:0;min-height:100vh;padding:22px;color:var(--ink);font:14.5px/1.55 var(--font);-webkit-font-smoothing:antialiased;
-  background:linear-gradient(120deg,var(--bg1),var(--bg2) 38%,var(--bg3) 68%,var(--bg4))}
+ body{margin:0;height:100vh;overflow:hidden;color:var(--ink);font:14.5px/1.55 var(--font);-webkit-font-smoothing:antialiased;background:var(--bg)}
  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
  h1,h2,h3{margin:0}
- /* window shell */
- .shell{max-width:1340px;height:calc(100vh - 44px);margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:22px;
-  box-shadow:var(--shadow-lg);overflow:hidden;display:grid;grid-template-columns:234px minmax(0,1fr)}
+ /* full-screen shell */
+ .shell{width:100vw;height:100vh;background:var(--bg);overflow:hidden;display:grid;grid-template-columns:246px minmax(0,1fr)}
  .content{display:flex;flex-direction:column;min-width:0;overflow:hidden}
  /* sidebar — fixed column, scrolls on its own */
  .side{border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto}
@@ -460,7 +458,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .avatar{width:30px;height:30px;border-radius:50%;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;font-size:11px;font-weight:700}
  .user .un{font-size:12.5px;font-weight:600} .user .ue{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  /* topbar */
- .topbar{display:flex;align-items:center;gap:10px;padding:13px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+ .topbar{display:flex;align-items:center;gap:10px;padding:13px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--panel);flex:none}
  .burger{display:none;font-size:19px;background:none;border:0;color:var(--ink);cursor:pointer}
  .search{flex:1;min-width:180px;position:relative}
  .search input{width:100%;font:inherit;font-size:13.5px;padding:9px 12px 9px 32px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
@@ -482,7 +480,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .btn-danger:hover{background:var(--red-bg);border-color:var(--danger)}
  form.inline{display:inline}
  /* body grid */
- .body{padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 322px;gap:18px;align-items:start;flex:1;overflow-y:auto}
+ /* main scrolls; rail is a fixed panel that scrolls on its own */
+ .body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;overflow:hidden}
+ main{overflow-y:auto;padding:20px;min-width:0}
+ .rail{overflow-y:auto;height:100%;padding:20px;border-left:1px solid var(--line);background:var(--bg)}
  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px}
  .card:last-child{margin-bottom:0}
  .card-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line2)}
@@ -599,10 +600,14 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .hint{font-size:12px;color:var(--faint);margin:10px 0 14px}
  .hide{display:none!important}
  /* responsive */
- @media(max-width:1080px){.body{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}}
+ @media(max-width:1080px){
+  .body{grid-template-columns:1fr;overflow-y:auto}
+  main{overflow:visible}
+  .rail{overflow:visible;height:auto;border-left:0;border-top:1px solid var(--line)}
+  .metrics{grid-template-columns:1fr}
+ }
  @media(max-width:860px){
-  body{padding:0}
-  .shell{border-radius:0;border:0;height:100vh;grid-template-columns:1fr}
+  .shell{grid-template-columns:1fr}
   .side{position:fixed;left:0;top:0;bottom:0;z-index:30;width:240px;background:var(--panel);transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow-lg)}
   body.nav-open .side{transform:none}
   body.nav-open:after{content:"";position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:20}
