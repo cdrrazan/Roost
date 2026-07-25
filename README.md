@@ -556,7 +556,10 @@ Restore by piping a dump back into `mysql`/`psql` in the same container. To run
 it on a schedule, wrap those two lines in a script and drive it with `cron`, a
 launchd agent (macOS), or a systemd timer (Linux) — and mirror the output to
 off-machine storage (another disk, S3, a synced cloud folder) so a dead disk
-doesn't take the backups with it.
+doesn't take the backups with it. **[`scripts/roost-backup.sh`](scripts/)** does
+exactly this on a box, and also `age`-encrypts your `~/.roost` secrets (config,
+credentials, tunnel token) into the same offsite mirror — so a dead disk takes
+neither your data nor your keys.
 
 </details>
 
@@ -615,9 +618,15 @@ if you want the apps up 24/7 (a laptop only serves while it's awake — see *the
 honest part*). To move: install roost + Docker on the box, copy
 `~/.roost/config.yml` and `~/.roost/credentials`, restore your database dumps
 into the fresh volumes, then `roost up`. The tunnel is **outbound**, so there are
-no ports or inbound firewall rules to open. Run `cloudflared` from **one machine
-at a time** — two connectors sharing the same tunnel token split traffic between
-them.
+no ports or inbound firewall rules to open, and **no DNS change** on a new box —
+Cloudflare finds it by the tunnel token, not its IP. Run `cloudflared` from **one
+machine at a time** — two connectors sharing the same tunnel token split traffic
+between them.
+
+Moving to a *new* box is scripted: **[`scripts/roost-box-bootstrap.sh`](scripts/)**
+fetches and decrypts the latest backup, restores `~/.roost` + the systemd units,
+installs the binary, clones the app repos, then brings the stack up and restores
+the data — the only IP-bound thing is your SSH access.
 </details>
 
 <details>
