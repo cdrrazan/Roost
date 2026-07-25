@@ -344,6 +344,8 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 |---|---|
 | `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
+| `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
+| `roost web [--addr] [--token]` | serve a control panel (status + Start/Stop apps) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
 | `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
@@ -505,6 +507,80 @@ launchd agent (macOS), or a systemd timer (Linux) — and mirror the output to
 off-machine storage (another disk, S3, a synced cloud folder) so a dead disk
 doesn't take the backups with it.
 
+</details>
+
+---
+
+## ❓ FAQ — running it for real
+
+<details>
+<summary><b>Can I control the whole stack from a browser?</b></summary>
+
+Yes — `roost web` serves a small control panel: a live status table plus
+**Start apps** / **Stop apps** buttons. It runs as a **host process outside** the
+compose stack, so stopping the apps can't take down the thing that starts them
+back up. It binds `127.0.0.1:4600` by default; expose it only behind
+**Cloudflare Access** (set `control_host:` in `config.yml` to route a hostname to
+it), and set `--token` / `$ROOST_WEB_TOKEN` as defense-in-depth on the on/off
+actions. Anyone who reaches an unprotected panel can stop and start your stack.
+</details>
+
+<details>
+<summary><b>If I click "Stop apps" in the panel, does the panel go down too?</b></summary>
+
+No. **Stop** stops only the app containers; Caddy and `cloudflared` — the proxy
+and the tunnel — keep running, so the panel stays reachable and can bring the
+apps back. **Start** *resumes* the existing stopped containers (`docker compose
+start`) rather than rebuilding them, so a full stack comes back in seconds, not
+minutes. (`roost down`, by contrast, removes the whole stack including the
+tunnel — that's the terminal-only full stop.)
+</details>
+
+<details>
+<summary><b>Can I run roost on an always-on server instead of my laptop?</b></summary>
+
+Yes — nothing ties it to a laptop. roost is a Go binary driving Docker, so it
+runs anywhere Docker does: a small always-on VPS or cloud VM is the natural home
+if you want the apps up 24/7 (a laptop only serves while it's awake — see *the
+honest part*). To move: install roost + Docker on the box, copy
+`~/.roost/config.yml` and `~/.roost/credentials`, restore your database dumps
+into the fresh volumes, then `roost up`. The tunnel is **outbound**, so there are
+no ports or inbound firewall rules to open. Run `cloudflared` from **one machine
+at a time** — two connectors sharing the same tunnel token split traffic between
+them.
+</details>
+
+<details>
+<summary><b>How do I ship a code change to a running app?</b></summary>
+
+Push to the app's repo, then on the host run `roost deploy <app>`. It does a
+`git pull --ff-only` on that app's clone and rebuilds + restarts **only that
+container**, leaving the rest of the stack up. Fast-forward-only is deliberate:
+if the box's clone has diverged, the deploy fails loudly instead of silently
+merging. roost still never writes into your repo — the clone is yours, it only
+reads and pulls.
+</details>
+
+<details>
+<summary><b>Can I auto-deploy on a push to GitHub?</b></summary>
+
+Yes — `roost deploy` is built to be driven by CI over SSH. Add a GitHub Actions
+workflow that triggers on `push: branches: [main]`, SSHes into the box with a
+deploy key, and runs `roost deploy <app>`. Keep a dedicated key: its public half
+in the box's `~/.ssh/authorized_keys`, its private half as a repo secret. Because
+the pull is fast-forward-only, a force-push or diverged branch surfaces as a
+failed deploy rather than a silent bad merge.
+</details>
+
+<details>
+<summary><b>How do I keep it running after a reboot, with no one logged in?</b></summary>
+
+`roost enable` installs a boot unit — launchd on macOS, a systemd `--user` unit
+on Linux — that runs `roost up` at login. On a headless Linux box, also run
+`loginctl enable-linger <user>` so the user's units start at boot without an
+interactive login. Docker itself must start on boot too (it does by default on a
+server install); roost has no daemon — Docker's `restart: unless-stopped` policy
+is the supervisor.
 </details>
 
 ---

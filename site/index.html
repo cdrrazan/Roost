@@ -159,6 +159,7 @@
     <a href="#commands">Commands</a>
     <a href="#compare">Compare</a>
     <a href="#faq">FAQ</a>
+    <a href="#faq-run">Running it</a>
     <a href="#developer">Developer</a>
     <a href="https://github.com/cdrrazan/roost">GitHub</a>
   </nav>
@@ -418,6 +419,68 @@
   gone and the next <span class="k">roost up</span> rebuilds every image, recreates
   empty databases from <span class="k">mysql-init.sql</span>, and needs a fresh
   migrate + re-seed. Back the volume up first if you want it reversible.</p>
+</section>
+
+<section id="faq-run">
+  <h2>FAQ — running it for real</h2>
+  <div class="cols2">
+    <div class="card">
+      <h3>Can I control the whole stack from a browser?</h3>
+      <p>Yes — <span class="k">roost web</span> serves a control panel: a live
+      status table plus <b>Start apps</b> / <b>Stop apps</b> buttons. It runs as a
+      <b>host process outside</b> the stack, so stopping the apps can't take down
+      the thing that starts them back up. It binds <span class="k">127.0.0.1:4600</span>
+      by default — expose it only behind <b>Cloudflare Access</b>
+      (<span class="k">control_host:</span> routes a hostname to it), with
+      <span class="k">--token</span> as defense-in-depth. An unprotected panel lets
+      anyone who reaches it stop and start your stack.</p>
+    </div>
+    <div class="card">
+      <h3>Does clicking "Stop apps" take the panel down too?</h3>
+      <p>No. <b>Stop</b> stops only the app containers; Caddy and cloudflared — the
+      proxy and tunnel — keep running, so the panel stays reachable and can bring
+      the apps back. <b>Start</b> <i>resumes</i> the stopped containers rather than
+      rebuilding, so a full stack returns in seconds. Only
+      <span class="k">roost down</span> in the terminal removes the whole stack,
+      tunnel included.</p>
+    </div>
+    <div class="card">
+      <h3>Can I run roost on an always-on server, not my laptop?</h3>
+      <p>Yes — nothing ties it to a laptop. It's a Go binary driving Docker, so it
+      runs on any always-on VPS or cloud VM if you want the apps up 24/7. To move:
+      install roost + Docker, copy <span class="k">~/.roost/config.yml</span> and
+      <span class="k">credentials</span>, restore your DB dumps, then
+      <span class="k">roost up</span>. The tunnel is <b>outbound</b> — no ports to
+      open. Run cloudflared from <b>one machine at a time</b>; two connectors on
+      the same token split traffic.</p>
+    </div>
+    <div class="card">
+      <h3>How do I ship a code change to a running app?</h3>
+      <p>Push to the repo, then run <span class="k">roost deploy &lt;app&gt;</span>
+      on the host. It does a fast-forward-only <span class="k">git pull</span> on
+      that app's clone and rebuilds + restarts <b>only that container</b>, leaving
+      the rest up. Diverged clone? The deploy fails loudly instead of silently
+      merging. roost still only reads your repo — never writes to it.</p>
+    </div>
+    <div class="card">
+      <h3>Can I auto-deploy on a push to GitHub?</h3>
+      <p>Yes — <span class="k">roost deploy</span> is built to run from CI over SSH.
+      A GitHub Actions workflow on <span class="k">push: branches: [main]</span>
+      SSHes to the box with a deploy key and runs
+      <span class="k">roost deploy &lt;app&gt;</span>. Fast-forward-only pull means a
+      force-push or diverged branch surfaces as a failed deploy, not a bad merge.</p>
+    </div>
+    <div class="card">
+      <h3>How do I keep it running after a reboot, with no one logged in?</h3>
+      <p><span class="k">roost enable</span> installs a boot unit — launchd on
+      macOS, systemd <span class="k">--user</span> on Linux — that runs
+      <span class="k">roost up</span> at login. On a headless Linux box, also run
+      <span class="k">loginctl enable-linger &lt;user&gt;</span> so units start at
+      boot without a login. Docker must start on boot too (default on a server
+      install); its <span class="k">restart: unless-stopped</span> policy is the
+      supervisor — roost has no daemon.</p>
+    </div>
+  </div>
 </section>
 
 <section>
