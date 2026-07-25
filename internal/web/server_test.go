@@ -414,6 +414,38 @@ func TestGroupAppsOmitsEmpty(t *testing.T) {
 	}
 }
 
+func TestMemPct(t *testing.T) {
+	cases := map[string]int{
+		"180MiB / 512MiB": 35,
+		"512MiB / 512MiB": 100,
+		"1.2GiB / 2GiB":   60,
+		"9MiB / 512MiB":   2,
+		"":                0, // unknown → 0, not a crash
+		"garbage":         0,
+		"10MiB / 0MiB":    0, // zero cap → 0, no divide panic
+	}
+	for in, want := range cases {
+		if got := memPct(in); got != want {
+			t.Errorf("memPct(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
+
+func TestMemColor(t *testing.T) {
+	if memColor("500MiB / 512MiB") != "bad" { // ~98% → red
+		t.Error("near-full memory should be bad")
+	}
+	if memColor("400MiB / 512MiB") != "warn" { // ~78% → amber
+		t.Error("high memory should be warn")
+	}
+	if memColor("100MiB / 512MiB") != "ok" { // ~20% → green
+		t.Error("low memory should be ok")
+	}
+	if memColor("") != "ok" { // unknown → neutral/ok, never red
+		t.Error("unknown memory should not be red")
+	}
+}
+
 func TestBusyBlocksConcurrentAction(t *testing.T) {
 	f := &fakeController{release: make(chan struct{})}
 	srv := NewServer(f, "")

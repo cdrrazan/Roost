@@ -13,11 +13,84 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/cdrrazan/roost/internal/runner"
 )
+
+// parseBytes reads a docker-style size like "180MiB" or "1.2GiB" into bytes.
+func parseBytes(s string) (float64, bool) {
+	s = strings.TrimSpace(s)
+	i := 0
+	for i < len(s) && (s[i] == '.' || (s[i] >= '0' && s[i] <= '9')) {
+		i++
+	}
+	if i == 0 {
+		return 0, false
+	}
+	num, err := strconv.ParseFloat(s[:i], 64)
+	if err != nil {
+		return 0, false
+	}
+	switch strings.TrimSpace(s[i:]) {
+	case "B", "":
+		return num, true
+	case "KiB", "KB", "kB":
+		return num * 1024, true
+	case "MiB", "MB":
+		return num * 1024 * 1024, true
+	case "GiB", "GB":
+		return num * 1024 * 1024 * 1024, true
+	case "TiB", "TB":
+		return num * 1024 * 1024 * 1024 * 1024, true
+	}
+	return 0, false
+}
+
+// parseMem splits a docker MemUsage string ("used / cap") into bytes.
+func parseMem(s string) (used, capacity float64, ok bool) {
+	parts := strings.SplitN(s, "/", 2)
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	u, ok1 := parseBytes(parts[0])
+	c, ok2 := parseBytes(parts[1])
+	if !ok1 || !ok2 || c <= 0 {
+		return 0, 0, false
+	}
+	return u, c, true
+}
+
+// memPct is the memory-used percentage (0 when unknown), clamped to 0..100.
+func memPct(s string) int {
+	u, c, ok := parseMem(s)
+	if !ok {
+		return 0
+	}
+	p := int(u/c*100 + 0.5)
+	if p > 100 {
+		p = 100
+	}
+	if p < 0 {
+		p = 0
+	}
+	return p
+}
+
+// memColor maps memory pressure to a bar colour class. Unknown stays neutral
+// (ok), never red.
+func memColor(s string) string {
+	switch p := memPct(s); {
+	case p >= 90:
+		return "bad"
+	case p >= 70:
+		return "warn"
+	default:
+		return "ok"
+	}
+}
 
 // humanize turns an app's config name into a display label: "-"/"_" become
 // spaces and each word is capitalised. "sure-worker" → "Sure Worker".
@@ -244,16 +317,36 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, verb string, 
 
 type statusView struct {
 	Apps         []runner.AppStatus
-	Groups       []appGroup // apps bucketed into Main / Utilities / Workers
+	Groups       []appGroup         // apps bucketed into Main / Utilities / Workers
+	Attention    []runner.AppStatus // apps not running — surfaced up top
 	Total        int
 	RunningCount int
-	DockerOK     bool // false when Status() failed (Docker unreachable)
+	RunningPct   int
+	StoppedCount int
+	MemUsed      string // human total used across apps
+	MemCap       string // human total cap across apps
+	MemPct       int    // total used/cap percentage
+	DockerOK     bool   // false when Status() failed (Docker unreachable)
 	Busy         string
 	Last         string
 	Steps        []string     // processing-pane progress lines
 	Removed      []RemovedApp // apps removed via the panel, offered for re-add
 	Error        string
 	Token        string // embedded in the form when non-empty
+}
+
+// humanBytes formats a byte count in docker-style IEC units.
+func humanBytes(b float64) string {
+	switch {
+	case b >= 1<<30:
+		return fmt.Sprintf("%.1fGiB", b/(1<<30))
+	case b >= 1<<20:
+		return fmt.Sprintf("%.0fMiB", b/(1<<20))
+	case b >= 1<<10:
+		return fmt.Sprintf("%.0fKiB", b/(1<<10))
+	default:
+		return fmt.Sprintf("%.0fB", b)
+	}
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
@@ -269,10 +362,25 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		view.Apps = apps
 		view.Groups = groupApps(apps)
 		view.Total = len(apps)
+		var used, capacity float64
 		for _, a := range apps {
 			if a.State == "running" {
 				view.RunningCount++
+			} else {
+				view.Attention = append(view.Attention, a)
 			}
+			if u, c, ok := parseMem(a.Memory); ok {
+				used += u
+				capacity += c
+			}
+		}
+		view.StoppedCount = view.Total - view.RunningCount
+		if view.Total > 0 {
+			view.RunningPct = view.RunningCount * 100 / view.Total
+		}
+		if capacity > 0 {
+			view.MemUsed, view.MemCap = humanBytes(used), humanBytes(capacity)
+			view.MemPct = int(used/capacity*100 + 0.5)
 		}
 	}
 	if removed, err := s.ctrl.RemovedApps(); err == nil {
@@ -285,154 +393,205 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{"humanize": humanize, "slug": slug}).Parse(`<!doctype html>
+var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
+	"humanize": humanize, "slug": slug, "mempct": memPct, "memcolor": memColor,
+}).Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
-{{if .Busy}}<meta http-equiv="refresh" content="2">{{end}}
+{{if .Busy}}<meta http-equiv="refresh" content="3">{{end}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
 <style>
  :root{
-  --bg:#f3f4f7; --panel:#ffffff; --panel2:#f7f8fa; --line:#e6e8ee; --line2:#eef0f4;
-  --ink:#0f1222; --muted:#666d7d; --faint:#98a0b0;
-  --brand:#4f46e5; --brand-ink:#fff; --brand-soft:#ecebfc;
-  --ok:#16a34a; --ok-bg:#e8f7ef; --ok-ink:#0f7a37;
-  --danger:#dc2626; --danger-bg:#fdecec;
-  --shadow:0 1px 2px rgba(16,19,34,.04),0 10px 26px -14px rgba(16,19,34,.14);
+  --bg1:#fdf1f8; --bg2:#eef1ff; --bg3:#ecfdfb; --bg4:#fff2f1;
+  --panel:#ffffff; --panel2:#f8f9fc; --line:#ecedf3; --line2:#f2f3f7; --track:#edeff5;
+  --ink:#12141c; --muted:#5f6675; --faint:#98a0b0;
+  --brand:#5b54e6; --brand-ink:#fff;
+  --ok:#12a150; --amber:#e08a1e; --danger:#e5484d;
+  --red-bg:#fff1f2; --red-ink:#d64550; --red-line:#fbdde0;
+  --amber-bg:#fff7ed; --amber-ink:#c2790f; --amber-line:#f8e6ce;
+  --teal-bg:#ecfdf5; --teal-ink:#0e7a54;
+  --indigo-bg:#eef0ff; --indigo-ink:#4f46e5;
+  --shadow:0 1px 2px rgba(16,19,34,.04),0 12px 30px -18px rgba(16,19,34,.14);
+  --shadow-lg:0 40px 80px -40px rgba(24,20,60,.30);
   --radius:16px;
   --font:"Google Sans","Product Sans","Google Sans Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
  }
  @media(prefers-color-scheme:dark){:root{
-  --bg:#0a0d13; --panel:#111620; --panel2:#151b26; --line:#212836; --line2:#1b2230;
+  --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
+  --panel:#12161f; --panel2:#161c27; --line:#222a38; --line2:#1b2230; --track:#212836;
   --ink:#e7ecf5; --muted:#9aa4b6; --faint:#68738a;
-  --brand:#7c75f5; --brand-soft:#1b1e3a;
-  --ok:#37d383; --ok-bg:#0f2a1c; --ok-ink:#5bdc90;
-  --danger:#f0616a; --danger-bg:#2a1618;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -16px rgba(0,0,0,.7);
+  --brand:#7c75f5;
+  --ok:#37d383; --amber:#e6a84a; --danger:#f0616a;
+  --red-bg:#2a1618; --red-ink:#f0868c; --red-line:#3a1e22;
+  --amber-bg:#271c10; --amber-ink:#e6b877; --amber-line:#372711;
+  --teal-bg:#0f2a1c; --teal-ink:#5bdc90;
+  --indigo-bg:#191d38; --indigo-ink:#a9a3ff;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -18px rgba(0,0,0,.7);
+  --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
  }}
  *{box-sizing:border-box}
- body{margin:0;background:var(--bg);color:var(--ink);font:14.5px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+ body{margin:0;min-height:100vh;padding:22px;color:var(--ink);font:14.5px/1.55 var(--font);-webkit-font-smoothing:antialiased;
+  background:linear-gradient(120deg,var(--bg1),var(--bg2) 38%,var(--bg3) 68%,var(--bg4))}
  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
  h1,h2,h3{margin:0}
- /* shell */
- .shell{display:grid;grid-template-columns:246px minmax(0,1fr);min-height:100vh}
+ /* window shell */
+ .shell{max-width:1340px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:22px;
+  box-shadow:var(--shadow-lg);overflow:hidden;display:grid;grid-template-columns:234px minmax(0,1fr)}
  .content{display:flex;flex-direction:column;min-width:0}
  /* sidebar */
- .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;
-  position:sticky;top:0;height:100vh;padding:18px 14px}
- .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 16px}
- .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--brand),#8b5cf6);
+ .side{border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px}
+ .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px}
+ .logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#6f67f0,#a855f7 55%,#ec4899);
   display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:var(--shadow)}
- .brand .bt{font-size:15px;font-weight:700;letter-spacing:-.2px}
- .brand .bs{font-size:11.5px;color:var(--faint)}
- .nav{display:flex;flex-direction:column;gap:2px;margin-top:6px}
- .nav a{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;color:var(--muted);font-weight:550;font-size:13.5px}
+ .brand .bt{font-size:14.5px;font-weight:700;letter-spacing:-.2px}
+ .brand .bs{font-size:11px;color:var(--faint)}
+ .nav{display:flex;flex-direction:column;gap:1px}
+ .nav a{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:9px;color:var(--muted);font-weight:550;font-size:13px}
  .nav a:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
- .nav .ico{width:16px;text-align:center;opacity:.8}
- .navlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:14px 11px 5px;font-weight:700}
- .side .grow{flex:1}
- .statusbox{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2)}
- .statusbox .st{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:700;margin-bottom:8px}
- .srow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);padding:3px 0}
- .srow b{margin-left:auto;color:var(--ink);font-weight:600}
- .sdot{width:8px;height:8px;border-radius:50%;flex:none}
- .sdot.ok{background:var(--ok)} .sdot.bad{background:var(--danger)} .sdot.warn{background:#e0a325}
+ .nav a.active{background:var(--indigo-bg);color:var(--indigo-ink)}
+ .nav .ico{width:15px;text-align:center;opacity:.85;font-size:13px}
+ .navlabel{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:14px 11px 5px;font-weight:700}
+ .side .grow{flex:1;min-height:12px}
+ .user{display:flex;align-items:center;gap:10px;padding:10px 8px;border-top:1px solid var(--line);margin-top:8px}
+ .avatar{width:30px;height:30px;border-radius:50%;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;font-size:11px;font-weight:700}
+ .user .un{font-size:12.5px;font-weight:600} .user .ue{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  /* topbar */
- .topbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 78%,transparent);
-  backdrop-filter:blur(8px);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;
-  padding:13px 22px;flex-wrap:wrap}
- .topbar .burger{display:none;font-size:20px;background:none;border:0;color:var(--ink);cursor:pointer}
- .topbar .tt{font-size:16px;font-weight:700;letter-spacing:-.2px}
- .topbar .ts{font-size:12px;color:var(--muted)}
- .topbar .spacer{flex:1}
+ .topbar{display:flex;align-items:center;gap:10px;padding:13px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+ .burger{display:none;font-size:19px;background:none;border:0;color:var(--ink);cursor:pointer}
+ .search{flex:1;min-width:180px;position:relative}
+ .search input{width:100%;font:inherit;font-size:13.5px;padding:9px 12px 9px 32px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
+ .search input:focus{outline:none;border-color:var(--brand)}
+ .search .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:13px}
+ select.filter{font:inherit;font-size:13px;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer}
  .toggle{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px}
- .toggle button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:none;color:var(--muted);
-  padding:5px 11px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+ .toggle button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:none;color:var(--muted);padding:5px 10px;border-radius:7px;cursor:pointer}
  .toggle button.active{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
  /* buttons */
- .btn{font:inherit;font-weight:600;font-size:13px;border:1px solid var(--line);border-radius:10px;
-  padding:8px 14px;cursor:pointer;color:var(--ink);background:var(--panel);transition:.12s;
-  white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
- .btn:hover{transform:translateY(-1px)} .btn:active{transform:none}
- .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
- .btn-sm{padding:6px 11px;font-size:12.5px;border-radius:9px}
+ .btn{font:inherit;font-weight:600;font-size:13px;border:1px solid var(--line);border-radius:10px;padding:8px 13px;cursor:pointer;
+  color:var(--ink);background:var(--panel);transition:.12s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+ .btn:hover{transform:translateY(-1px)} .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+ .btn-sm{padding:6px 10px;font-size:12px;border-radius:9px}
  .btn-primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
- .btn-ok{background:var(--ok-bg);border-color:transparent;color:var(--ok-ink)}
+ .btn-ok{background:var(--teal-bg);border-color:transparent;color:var(--teal-ink)}
  .btn-ok:hover{background:var(--ok);color:#fff}
  .btn-danger{background:transparent;color:var(--danger)}
- .btn-danger:hover{background:var(--danger-bg);border-color:var(--danger)}
+ .btn-danger:hover{background:var(--red-bg);border-color:var(--danger)}
  form.inline{display:inline}
  /* body grid */
- .body{padding:22px;display:grid;grid-template-columns:minmax(0,1fr) 336px;gap:20px;align-items:start;flex:1}
- .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px}
+ .body{padding:20px;display:grid;grid-template-columns:minmax(0,1fr) 322px;gap:18px;align-items:start}
+ .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px}
  .card:last-child{margin-bottom:0}
  .card-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line2)}
- .card-h h2{font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--ink)}
+ .card-h h2{font-size:13.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px}
+ .card-h .csub{font-size:11.5px;color:var(--faint);font-weight:400;margin-top:2px}
  .count{font-size:12px;color:var(--faint);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
- /* app list / grid */
- .applist.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:12px;padding:14px}
- .app{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--line2)}
- .app:last-child{border-bottom:0}
- .applist.grid .app{flex-direction:column;align-items:stretch;gap:11px;border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel2)}
- .app .id{min-width:0;flex:1}
- .app .nm{display:flex;align-items:center;gap:9px}
- .app .nm .name{font-weight:650;font-size:14.5px;letter-spacing:-.1px}
- .pill{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 8px;border-radius:999px;border:1px solid transparent}
- .pill.run{background:var(--ok-bg);color:var(--ok-ink)}
- .pill.stop{background:var(--panel);color:var(--faint);border-color:var(--line)}
- .app .sub{margin-top:3px;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
- .app .sub .meta{color:var(--faint)}
- .app .acts{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
- .applist.grid .app .acts{justify-content:flex-start}
- .app .acts .free{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--faint);cursor:pointer}
- .app .acts .free input{accent-color:var(--danger)}
- /* processing */
+ .badge-n{background:var(--danger);color:#fff;border:0;font-weight:700}
+ /* needs attention */
+ .attn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;padding:14px 16px}
+ .att{border-radius:12px;padding:11px 13px;border:1px solid}
+ .att.red{background:var(--red-bg);border-color:var(--red-line)}
+ .att.amber{background:var(--amber-bg);border-color:var(--amber-line)}
+ .att-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+ .att-t{font-weight:700;font-size:13px} .att.red .att-t{color:var(--red-ink)} .att.amber .att-t{color:var(--amber-ink)}
+ .att-s{font-size:11.5px;color:var(--muted);margin-top:3px}
+ .att-b{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:999px}
+ .att.red .att-b{background:#fff;color:var(--red-ink)} .att.amber .att-b{background:#fff;color:var(--amber-ink)}
+ @media(prefers-color-scheme:dark){.att.red .att-b,.att.amber .att-b{background:rgba(255,255,255,.08)}}
+ .allclear{display:flex;align-items:center;gap:10px;padding:16px 18px;color:var(--teal-ink);font-weight:600;font-size:13.5px}
+ .allclear .ico{width:26px;height:26px;border-radius:8px;background:var(--teal-bg);display:grid;place-items:center}
+ /* metric cards */
+ .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
+ .metric{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
+ .metric .mh{display:flex;align-items:center;justify-content:space-between}
+ .metric .mt{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
+ .metric .mi{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:13px}
+ .metric.teal .mi{background:var(--teal-bg);color:var(--teal-ink)}
+ .metric.amber .mi{background:var(--amber-bg);color:var(--amber-ink)}
+ .metric.red .mi{background:var(--red-bg);color:var(--red-ink)}
+ .metric .mv{font-size:24px;font-weight:800;letter-spacing:-.5px}
+ .metric .msub{font-size:11.5px;color:var(--faint);margin:2px 0 12px}
+ .bar{height:7px;background:var(--track);border-radius:999px;overflow:hidden}
+ .fill{display:block;height:100%;border-radius:999px}
+ .fill.ok{background:linear-gradient(90deg,#18b45c,#12a150)}
+ .fill.warn{background:linear-gradient(90deg,#eba33a,#e08a1e)}
+ .fill.bad{background:linear-gradient(90deg,#ef5a5f,#e5484d)}
+ .fill.teal{background:linear-gradient(90deg,#2bd07f,#12a150)}
+ .fill.amber{background:linear-gradient(90deg,#eba33a,#e08a1e)}
+ /* server/app rows */
+ .applist.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:14px}
+ .grouphdr{display:flex;align-items:center;gap:9px;padding:12px 18px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
+ .grouphdr .gc{margin-left:auto;font-size:11px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:2px 9px;text-transform:none;letter-spacing:0}
+ .srv{display:flex;flex-direction:column;gap:11px;padding:13px 18px;border-top:1px solid var(--line2)}
+ .applist.grid .srv{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel2)}
+ .srv-top{display:flex;align-items:flex-start;gap:12px}
+ .srv-idb{min-width:0;flex:1}
+ .srv-ico{width:30px;height:30px;border-radius:9px;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;font-size:14px;flex:none;margin-top:1px}
+ .srv-nm{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .srv-name{font-weight:650;font-size:14px}
+ .dot{width:8px;height:8px;border-radius:50%;flex:none}
+ .dot.run{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 22%,transparent)}
+ .dot.stop{background:var(--faint)}
+ .pill{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:999px}
+ .pill.run{background:var(--teal-bg);color:var(--teal-ink)}
+ .pill.stop{background:var(--red-bg);color:var(--red-ink)}
+ .srv-sub{font-size:12px;color:var(--muted);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .srv-bar{width:100%}
+ .mlabel{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
+ .mlabel b{color:var(--ink);font-weight:700}
+ .srv-acts{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;flex:none}
+ .srv-acts .free{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--faint);cursor:pointer}
+ .srv-acts .free input{accent-color:var(--danger)}
+ /* right rail */
+ .ov{padding:16px 18px}
+ .ov-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line2)}
+ .ov-row:last-child{border-bottom:0} .ov-row .k{color:var(--muted)} .ov-row .v{font-weight:600}
+ .ov-bar{margin:6px 0 14px}
+ .ov-bar .mlabel{margin-bottom:6px}
  .procbody{padding:15px 18px}
  .status-line{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600}
  .spin{width:15px;height:15px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--brand);animation:spin .7s linear infinite;flex:none}
  @keyframes spin{to{transform:rotate(360deg)}}
  .steps{list-style:none;margin:12px 0 0;padding:0}
- .steps li{position:relative;padding:4px 0 4px 20px;font-size:12.5px;font-family:var(--mono);color:var(--muted)}
- .steps li:before{content:"";position:absolute;left:5px;top:10px;width:6px;height:6px;border-radius:50%;background:var(--brand)}
+ .steps li{position:relative;padding:4px 0 4px 20px;font-size:12px;font-family:var(--mono);color:var(--muted)}
+ .steps li:before{content:"";position:absolute;left:5px;top:9px;width:6px;height:6px;border-radius:50%;background:var(--brand)}
  .idle{color:var(--faint);font-size:13px;display:flex;align-items:center;gap:8px}
  .idle .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
- .result{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:12.5px;color:var(--muted)}
- .result.err{background:var(--danger-bg);border-color:transparent;color:var(--danger)}
- /* removed */
+ .result{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+ .result.err{background:var(--red-bg);border-color:transparent;color:var(--danger)}
  .rrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 18px;border-bottom:1px solid var(--line2)}
- .rrow:last-child{border-bottom:0} .rrow .rn{font-weight:600;font-size:13.5px}
+ .rrow:last-child{border-bottom:0} .rrow .rn{font-weight:600;font-size:13px}
  .rrow .rp{font-size:11px;color:var(--faint);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .empty{padding:16px 18px;color:var(--faint);font-size:13px}
- /* footer */
- .footer{border-top:1px solid var(--line);padding:16px 22px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--faint)}
+ .footer{border-top:1px solid var(--line);padding:14px 22px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--faint)}
  /* modal */
- dialog{border:1px solid var(--line);border-radius:var(--radius);padding:0;width:min(440px,92vw);background:var(--panel);color:var(--ink);box-shadow:0 24px 60px -20px rgba(0,0,0,.4)}
- dialog::backdrop{background:rgba(8,10,16,.55);backdrop-filter:blur(2px)}
+ dialog{border:1px solid var(--line);border-radius:var(--radius);padding:0;width:min(440px,92vw);background:var(--panel);color:var(--ink);box-shadow:var(--shadow-lg)}
+ dialog::backdrop{background:rgba(8,10,16,.5);backdrop-filter:blur(3px)}
  .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line2)}
  .modal-h h2{font-size:15px} .modal-x{background:none;border:0;font-size:20px;color:var(--faint);cursor:pointer;line-height:1}
  .modal-b{padding:18px}
  .field{margin-bottom:12px}
  .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
  .field input{width:100%;font:inherit;font-size:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
- .field input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 22%,transparent)}
+ .field input:focus{outline:none;border-color:var(--brand)}
  .hint{font-size:12px;color:var(--faint);margin:10px 0 14px}
+ .hide{display:none!important}
  /* responsive */
- @media(max-width:1040px){.body{grid-template-columns:1fr}}
- @media(max-width:820px){
-  .shell{grid-template-columns:1fr}
-  .side{position:fixed;left:0;top:0;z-index:30;width:246px;transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow)}
+ @media(max-width:1080px){.body{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}}
+ @media(max-width:860px){
+  body{padding:0}
+  .shell{border-radius:0;border:0;min-height:100vh;grid-template-columns:1fr}
+  .side{position:fixed;left:0;top:0;bottom:0;z-index:30;width:240px;background:var(--panel);transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow-lg)}
   body.nav-open .side{transform:none}
   body.nav-open:after{content:"";position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:20}
-  .topbar .burger{display:inline-block}
+  .burger{display:inline-block}
  }
- @media(max-width:560px){
-  .body{padding:16px}
-  .app{flex-direction:column;align-items:stretch;gap:10px}
-  .app .acts{justify-content:flex-start}
-  .toggle{order:5}
+ @media(max-width:600px){
+  .srv{flex-direction:column;align-items:stretch;gap:11px}
+  .srv-acts{justify-content:flex-start}
  }
 </style></head><body>
 <div class="shell">
@@ -440,82 +599,142 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{"hu
  <aside class="side">
   <div class="brand">
    <div class="logo">r</div>
-   <div><div class="bt">roost</div><div class="bs">control panel</div></div>
+   <div><div class="bt">roost</div><div class="bs">Control panel</div></div>
   </div>
   <nav class="nav">
-   <a href="#top"><span class="ico">▚</span> Overview</a>
-   <div class="navlabel">Applications</div>
+   <div class="navlabel">Resources</div>
+   <a href="#top" class="active"><span class="ico">▦</span> All apps</a>
    <a href="#main-apps"><span class="ico">◆</span> Main apps</a>
    <a href="#utilities"><span class="ico">◈</span> Utilities</a>
    <a href="#workers"><span class="ico">⚙</span> Workers</a>
+   <div class="navlabel">Monitoring</div>
+   <a href="#attention"><span class="ico">⚠</span> Attention</a>
+   <a href="#processing"><span class="ico">◷</span> Activity</a>
    <div class="navlabel">Manage</div>
    <a href="#removed"><span class="ico">↺</span> Removed</a>
    <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico">↗</span> Repository</a>
   </nav>
   <div class="grow"></div>
-  <div class="statusbox">
-   <div class="st">Status</div>
-   <div class="srow"><span class="sdot ok"></span>Server <b>online</b></div>
-   <div class="srow"><span class="sdot {{if .DockerOK}}ok{{else}}bad{{end}}"></span>Docker <b>{{if .DockerOK}}connected{{else}}unreachable{{end}}</b></div>
-   <div class="srow"><span class="sdot {{if and .DockerOK (eq .RunningCount .Total)}}ok{{else if .RunningCount}}warn{{else}}bad{{end}}"></span>Site <b>{{.RunningCount}}/{{.Total}} up</b></div>
+  <div class="user">
+   <div class="avatar">RB</div>
+   <div style="min-width:0"><div class="un">Admin</div><div class="ue">roost control</div></div>
   </div>
  </aside>
 
  <div class="content" id="top">
   <header class="topbar">
    <button class="burger" id="burger" aria-label="Menu">☰</button>
-   <div><div class="tt">Dashboard</div><div class="ts">{{.RunningCount}} of {{.Total}} apps running</div></div>
-   <div class="spacer"></div>
+   <div class="search"><span class="si">⌕</span><input id="q" type="text" placeholder="Search apps…" autocomplete="off"></div>
+   <select class="filter" id="statusfilter">
+    <option value="all">All statuses</option>
+    <option value="running">Running</option>
+    <option value="stopped">Stopped</option>
+   </select>
    <div class="toggle"><button data-view="list">▤ List</button><button data-view="grid">▦ Grid</button></div>
    <form class="inline" method="post" action="/up">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-ok" {{if .Busy}}disabled{{end}}>Start all</button></form>
    <form class="inline" method="post" action="/down">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn" {{if .Busy}}disabled{{end}}>Stop all</button></form>
-   <button class="btn btn-primary" id="openadd" {{if .Busy}}disabled{{end}}>＋ Add app</button>
+   <button class="btn btn-primary" id="openadd" {{if .Busy}}disabled{{end}}>＋ New app</button>
   </header>
 
   <div class="body">
   <main>
    {{if .Error}}
    <div class="card"><div class="result err" style="margin:16px">status error: {{.Error}}</div></div>
-   {{else}}{{range .Groups}}
-   <section class="card" id="{{slug .Title}}">
-    <div class="card-h"><h2>{{.Title}}</h2><span class="count">{{len .Apps}}</span></div>
-    <div class="applist">
-    {{range .Apps}}
-     <div class="app">
-      <div class="id">
-       <div class="nm">
-        <span class="name">{{humanize .Name}}</span>
-        {{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}
-       </div>
-       <div class="sub">
-        {{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}<span class="meta">background worker</span>{{end}}
-        {{if .Health}}<span class="meta"> · {{.Health}}</span>{{end}}
-        {{if .Memory}}<span class="meta"> · {{.Memory}}</span>{{end}}
-       </div>
-      </div>
-      <div class="acts">
-       <form class="inline" method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="btn btn-sm btn-ok" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
-       <form class="inline" method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="btn btn-sm" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>
-       <form class="inline" method="post" action="/remove" onsubmit="return confirm('Remove {{humanize .Name}} from the config?')"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<label class="free" title="also delete the built image to free disk"><input type="checkbox" name="image" value="on"> free disk</label><button class="btn btn-sm btn-danger" {{if $.Busy}}disabled{{end}}>Remove</button></form>
-      </div>
+   {{else}}
+
+   <section class="card" id="attention">
+    <div class="card-h">
+     <h2>⚠ Needs attention <span class="csub">{{if .Attention}}apps not currently running{{else}}everything is running{{end}}</span></h2>
+     {{if .Attention}}<span class="count badge-n">{{len .Attention}}</span>{{end}}
+    </div>
+    {{if .Attention}}
+    <div class="attn-grid">
+     {{range .Attention}}
+     <div class="att {{if eq .State "not created"}}amber{{else}}red{{end}}">
+      <div class="att-top"><span class="att-t">{{humanize .Name}}</span><span class="att-b">{{.State}}</span></div>
+      <div class="att-s">{{if .URL}}{{.URL}}{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}</div>
      </div>
+     {{end}}
+    </div>
+    {{else}}
+    <div class="allclear"><span class="ico">✓</span> All {{.Total}} apps are up and running.</div>
+    {{end}}
+   </section>
+
+   <div class="metrics">
+    <div class="metric teal">
+     <div class="mh"><div class="mt"><span class="mi">◉</span> Apps running</div></div>
+     <div class="mv">{{.RunningCount}}<span style="font-size:15px;color:var(--faint)">/{{.Total}}</span></div>
+     <div class="msub">processes online</div>
+     <div class="bar"><span class="fill teal" style="width:{{.RunningPct}}%"></span></div>
+    </div>
+    <div class="metric amber">
+     <div class="mh"><div class="mt"><span class="mi">▤</span> Memory usage</div></div>
+     <div class="mv">{{.MemPct}}%</div>
+     <div class="msub">{{if .MemCap}}{{.MemUsed}} / {{.MemCap}} used{{else}}usage unavailable{{end}}</div>
+     <div class="bar"><span class="fill amber" style="width:{{.MemPct}}%"></span></div>
+    </div>
+    <div class="metric red">
+     <div class="mh"><div class="mt"><span class="mi">◍</span> Stopped</div></div>
+     <div class="mv">{{.StoppedCount}}</div>
+     <div class="msub">not running{{if not .DockerOK}} · docker unreachable{{end}}</div>
+     <div class="bar"><span class="fill bad" style="width:{{if .Total}}{{.StoppedCount}}{{else}}0{{end}}%"></span></div>
+    </div>
+   </div>
+
+   <section class="card">
+    <div class="card-h"><h2>Applications <span class="csub">manage and monitor your fleet</span></h2><span class="count">{{.RunningCount}}/{{.Total}} up</span></div>
+    <div class="applist">
+    {{range .Groups}}
+     <div class="grouphdr" id="{{slug .Title}}">{{.Title}}<span class="gc">{{len .Apps}}</span></div>
+     {{range .Apps}}
+     <div class="srv" data-name="{{humanize .Name}}" data-state="{{if eq .State "running"}}running{{else}}stopped{{end}}">
+      <div class="srv-top">
+       <span class="srv-ico">{{if .URL}}◍{{else}}⚙{{end}}</span>
+       <div class="srv-idb">
+        <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}</div>
+        <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}</div>
+       </div>
+       <div class="srv-acts">
+        <form class="inline" method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="btn btn-sm btn-ok" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
+        <form class="inline" method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="btn btn-sm" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>
+        <form class="inline" method="post" action="/remove" onsubmit="return confirm('Remove {{humanize .Name}} from the config?')"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<label class="free" title="also delete the built image to free disk"><input type="checkbox" name="image" value="on"> disk</label><button class="btn btn-sm btn-danger" {{if $.Busy}}disabled{{end}}>Remove</button></form>
+       </div>
+      </div>
+      {{if .Memory}}<div class="srv-bar"><div class="mlabel">Memory <b>{{mempct .Memory}}%</b></div><div class="bar"><span class="fill {{memcolor .Memory}}" style="width:{{mempct .Memory}}%"></span></div></div>{{end}}
+     </div>
+     {{end}}
+    {{else}}
+     <div class="empty">No apps configured yet — use “New app”.</div>
     {{end}}
     </div>
    </section>
-   {{else}}
-   <div class="card"><div class="empty">No apps configured yet — use “Add app”.</div></div>
-   {{end}}{{end}}
+   {{end}}
   </main>
 
   <aside class="rail">
+   <div class="card">
+    <div class="card-h"><h2>Overview <span class="csub">fleet at a glance</span></h2></div>
+    <div class="ov">
+     <div class="ov-bar"><div class="mlabel">Uptime <b>{{.RunningPct}}%</b></div><div class="bar"><span class="fill teal" style="width:{{.RunningPct}}%"></span></div></div>
+     <div class="ov-bar"><div class="mlabel">Memory <b>{{.MemPct}}%</b></div><div class="bar"><span class="fill amber" style="width:{{.MemPct}}%"></span></div></div>
+     <div class="ov-row"><span class="k">Docker</span><span class="v">{{if .DockerOK}}connected{{else}}unreachable{{end}}</span></div>
+     <div class="ov-row"><span class="k">Total apps</span><span class="v">{{.Total}}</span></div>
+     <div class="ov-row"><span class="k">Running</span><span class="v">{{.RunningCount}}</span></div>
+     <div class="ov-row"><span class="k">Stopped</span><span class="v">{{.StoppedCount}}</span></div>
+     {{if .MemCap}}<div class="ov-row"><span class="k">Memory</span><span class="v">{{.MemUsed}} / {{.MemCap}}</span></div>{{end}}
+    </div>
+   </div>
+
    <div class="card" id="processing">
-    <div class="card-h"><h2>Processing</h2></div>
+    <div class="card-h"><h2>Activity <span class="csub">latest actions</span></h2></div>
     <div class="procbody">
      {{if .Busy}}<div class="status-line"><span class="spin"></span>{{.Busy}}…</div>{{else}}<div class="idle"><span class="dot"></span>Idle — no action running</div>{{end}}
      {{if .Steps}}<ul class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ul>{{end}}
      {{if and (not .Busy) .Last}}<div class="result">{{.Last}}</div>{{end}}
     </div>
    </div>
+
    <div class="card" id="removed">
     <div class="card-h"><h2>Removed apps</h2>{{if .Removed}}<span class="count">{{len .Removed}}</span>{{end}}</div>
     {{if .Removed}}{{range .Removed}}<div class="rrow">
@@ -557,6 +776,22 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{"hu
  document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){localStorage.setItem(KEY,b.dataset.view);apply(b.dataset.view);});
  });
+ var q=document.getElementById("q"), sf=document.getElementById("statusfilter");
+ function filter(){
+  var term=(q.value||"").toLowerCase(), st=sf.value;
+  document.querySelectorAll(".srv").forEach(function(r){
+   var okName=r.dataset.name.toLowerCase().indexOf(term)>-1;
+   var okSt=st==="all"||r.dataset.state===st;
+   r.classList.toggle("hide",!(okName&&okSt));
+  });
+  document.querySelectorAll(".grouphdr").forEach(function(h){
+   var any=false,n=h.nextElementSibling;
+   while(n&&n.classList.contains("srv")){ if(!n.classList.contains("hide"))any=true; n=n.nextElementSibling; }
+   h.classList.toggle("hide",!any);
+  });
+ }
+ if(q)q.addEventListener("input",filter);
+ if(sf)sf.addEventListener("change",filter);
  var dlg=document.getElementById("addapp");
  var o=document.getElementById("openadd"), c=document.getElementById("closeadd");
  if(o&&dlg)o.addEventListener("click",function(){dlg.showModal();});
