@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/cdrrazan/roost?include_prereleases)](https://github.com/cdrrazan/roost/releases)
 [![Dependencies: 2](https://img.shields.io/badge/deps-cobra%20%2B%20yaml.v3-blue)](go.mod)
 
-**[Website](https://roost.pages.dev) · [Examples](examples/) · [Config reference](docs/configuration.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)**
+**[Website](https://roost.app.rsynk.com) · [Examples](examples/) · [Config reference](docs/configuration.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)**
 
 </div>
 
@@ -329,6 +329,56 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 
 ---
 
+## 🖥️ Web control panel — `roost web`
+
+`roost web` serves a small **dashboard** so you can run the whole fleet from a
+browser — start/stop apps, add or remove them, and watch status — without
+touching the terminal.
+
+```bash
+roost web                        # http://127.0.0.1:4600
+roost web --addr 0.0.0.0:4600 --token "$(openssl rand -hex 24)"
+```
+
+It runs as a **host process outside** the compose stack, on purpose: stopping
+the apps from the panel can't take down the thing that starts them again. What
+it does:
+
+- **Live status** — every app grouped into **Main apps / Utilities / Workers**
+  (from the per-app [`category:`](#-one-config-every-knob) key), with a state
+  pill, health, and a colour-coded **memory bar**; a *Needs attention* strip
+  surfaces anything not running, and metric cards summarise running / memory /
+  stopped.
+- **Control** — **Start all** / **Stop all**, or per-app **Start** / **Stop**.
+  Stop leaves Caddy + the tunnel up so the panel stays reachable (only the CLI
+  `roost down` tears down everything).
+- **Add / remove apps** — an *Add app* modal takes a host path (+ optional
+  hostname), runs **`roost doctor`** as a preflight gate, then edits the config,
+  regenerates, and builds + starts just that app — streaming each step into a
+  **Processing** log. Remove drops it (optionally deleting the image to free
+  disk) and lists it under **Removed** for one-click re-add. Shared database
+  volumes are never touched.
+- **Comfort** — search, status filter, **list / grid** views, light / **dark**
+  mode, and the whole thing is mobile-responsive.
+
+**Exposing it.** Set the top-level `control_host:` in `config.yml` and roost
+routes that hostname through the tunnel to the panel; then put **Cloudflare
+Access** in front of it. The default bind is loopback (`127.0.0.1:4600`); the
+`--token` / `$ROOST_WEB_TOKEN` bearer check is defense-in-depth on the mutating
+actions. **The Add form builds whatever Dockerfile lives at the path you give
+it — never expose the panel without Cloudflare Access.**
+
+```yaml
+# ~/.roost/config.yml
+control_host: control.example.com   # routed through the tunnel to roost web
+```
+
+Run it always-on with a systemd `--user` unit or a launchd agent (the same
+mechanism as `roost enable`), and front it with Access. See the
+[running-it FAQ](#-faq--running-it-for-real) for the always-on-box playbook.
+
+---
+
 ## 🧰 Commands
 
 **Setup**
@@ -610,7 +660,7 @@ is the supervisor.
 - **[Examples](examples/)** — runnable configs from minimal to every-knob, plus a
   [demo with fake data](examples/demo/config.yml) and an
   [`include` walkthrough](examples/includes/).
-- **[Website](https://roost.pages.dev)** — one-page overview ([source](site/)).
+- **[Website](https://roost.app.rsynk.com)** — one-page overview ([source](site/)).
 - **[Roadmap](ROADMAP.md)** — what's next, and the non-goals that keep roost small.
 - **[Contributing](CONTRIBUTING.md)** — house rules (TDD, no real Docker/network in
   tests, two dependencies) and how to add a framework.
