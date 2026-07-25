@@ -520,17 +520,28 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .allclear{display:flex;align-items:center;gap:10px;padding:16px 18px;color:var(--teal-ink);font-weight:600;font-size:13.5px}
  .allclear .ico{width:26px;height:26px;border-radius:8px;background:var(--teal-bg);display:grid;place-items:center}
  /* metric cards */
- .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px}
- .metric{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
- .metric .mh{display:flex;align-items:center;justify-content:space-between}
- .metric .mt{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
- .metric .mi{width:30px;height:30px;border-radius:9px;display:grid;place-items:center}
- .metric .mi svg{width:17px;height:17px;stroke:currentColor}
- .metric.teal .mi{background:var(--teal-bg);color:var(--teal-ink)}
- .metric.amber .mi{background:var(--amber-bg);color:var(--amber-ink)}
- .metric.red .mi{background:var(--red-bg);color:var(--red-ink)}
- .metric .mv{font-size:24px;font-weight:800;letter-spacing:-.5px}
- .metric .msub{font-size:11.5px;color:var(--faint);margin:2px 0 12px}
+ /* stat graphs row — two gauges + a per-app memory bar chart */
+ .graphs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:18px}
+ .gcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 17px}
+ .gcard .gh{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:14px}
+ .gcard .gh .mi{width:28px;height:28px;border-radius:8px;display:grid;place-items:center}
+ .gcard.teal .mi{background:var(--teal-bg);color:var(--teal-ink)}
+ .gcard.amber .mi{background:var(--amber-bg);color:var(--amber-ink)}
+ .gcard.indigo .mi{background:var(--indigo-bg);color:var(--indigo-ink)}
+ .gcard .mi svg{width:16px;height:16px;stroke:currentColor}
+ .donutrow{display:flex;align-items:center;gap:16px}
+ .donut{--v:0;--c:var(--ok);width:96px;height:96px;flex:none;border-radius:50%;position:relative;background:conic-gradient(var(--c) calc(var(--v)*1%),var(--track) 0)}
+ .donut::after{content:"";position:absolute;inset:11px;border-radius:50%;background:var(--panel);z-index:0}
+ .donut .dc{position:absolute;inset:0;z-index:1;display:grid;place-items:center;text-align:center;line-height:1.05}
+ .donut .dc b{font-size:21px;font-weight:800;letter-spacing:-.5px}
+ .donut .dc span{display:block;font-size:10px;color:var(--faint);margin-top:2px}
+ .dleg{display:flex;flex-direction:column;gap:9px;font-size:12.5px;color:var(--muted);min-width:0;flex:1}
+ .dleg .li{display:flex;align-items:center;gap:8px} .dleg .li b{color:var(--ink);font-weight:700;margin-left:auto}
+ .dleg .sw{width:9px;height:9px;border-radius:3px;flex:none}
+ .spark{display:flex;align-items:flex-end;gap:3px;height:82px}
+ .spark .sb{flex:1;min-width:2px;height:100%;background:var(--track);border-radius:3px;display:flex;align-items:flex-end;overflow:hidden}
+ .spark .sb i{display:block;width:100%;min-height:2px;border-radius:3px}
+ .sparkcap{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:9px}
  .bar{height:7px;background:var(--track);border-radius:999px;overflow:hidden}
  .fill{display:block;height:100%;border-radius:999px}
  .fill.ok{background:linear-gradient(90deg,#18b45c,#12a150)}
@@ -623,7 +634,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   .body{grid-template-columns:1fr;overflow-y:auto}
   main{overflow:visible}
   .rail{overflow:visible;height:auto;border-left:0;border-top:1px solid var(--line)}
-  .metrics{grid-template-columns:1fr}
+  .graphs{grid-template-columns:1fr}
  }
  @media(max-width:860px){
   .shell{grid-template-columns:1fr}
@@ -706,24 +717,34 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     {{end}}
    </section>
 
-   <div class="metrics">
-    <div class="metric teal">
-     <div class="mh"><div class="mt"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="7.5" x2="7.01" y2="7.5"/><line x1="7" y1="16.5" x2="7.01" y2="16.5"/></svg></span> Apps running</div></div>
-     <div class="mv">{{.RunningCount}}<span style="font-size:15px;color:var(--faint)">/{{.Total}}</span></div>
-     <div class="msub">processes online</div>
-     <div class="bar"><span class="fill teal" style="width:{{.RunningPct}}%"></span></div>
+   <div class="graphs">
+    <div class="gcard teal">
+     <div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="7.5" x2="7.01" y2="7.5"/><line x1="7" y1="16.5" x2="7.01" y2="16.5"/></svg></span> Fleet status</div>
+     <div class="donutrow">
+      <div class="donut" style="--v:{{.RunningPct}};--c:var(--ok)"><div class="dc"><div><b>{{.RunningCount}}</b><span>of {{.Total}} up</span></div></div></div>
+      <div class="dleg">
+       <div class="li"><span class="sw" style="background:var(--ok)"></span> Running <b>{{.RunningCount}}</b></div>
+       <div class="li"><span class="sw" style="background:var(--track)"></span> Stopped <b>{{.StoppedCount}}</b></div>
+       <div class="li"><span class="sw" style="background:{{if .DockerOK}}var(--ok){{else}}var(--danger){{end}}"></span> Docker <b>{{if .DockerOK}}OK{{else}}down{{end}}</b></div>
+      </div>
+     </div>
     </div>
-    <div class="metric amber">
-     <div class="mh"><div class="mt"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="7" y1="18" x2="7" y2="21"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="17" y1="18" x2="17" y2="21"/><line x1="7" y1="3" x2="7" y2="6"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="17" y1="3" x2="17" y2="6"/></svg></span> Memory usage</div></div>
-     <div class="mv">{{.MemPct}}%</div>
-     <div class="msub">{{if .MemCap}}{{.MemUsed}} / {{.MemCap}} used{{else}}usage unavailable{{end}}</div>
-     <div class="bar"><span class="fill amber" style="width:{{.MemPct}}%"></span></div>
+    <div class="gcard amber">
+     <div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="7" y1="18" x2="7" y2="21"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="17" y1="18" x2="17" y2="21"/><line x1="7" y1="3" x2="7" y2="6"/><line x1="12" y1="3" x2="12" y2="6"/><line x1="17" y1="3" x2="17" y2="6"/></svg></span> Memory usage</div>
+     <div class="donutrow">
+      <div class="donut" style="--v:{{.MemPct}};--c:var(--amber)"><div class="dc"><div><b>{{.MemPct}}%</b><span>used</span></div></div></div>
+      <div class="dleg">
+       <div class="li"><span class="sw" style="background:var(--amber)"></span> Used <b>{{if .MemCap}}{{.MemUsed}}{{else}}—{{end}}</b></div>
+       <div class="li"><span class="sw" style="background:var(--track)"></span> Cap <b>{{if .MemCap}}{{.MemCap}}{{else}}—{{end}}</b></div>
+      </div>
+     </div>
     </div>
-    <div class="metric red">
-     <div class="mh"><div class="mt"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></span> Stopped</div></div>
-     <div class="mv">{{.StoppedCount}}</div>
-     <div class="msub">not running{{if not .DockerOK}} · docker unreachable{{end}}</div>
-     <div class="bar"><span class="fill bad" style="width:{{if .Total}}{{.StoppedCount}}{{else}}0{{end}}%"></span></div>
+    <div class="gcard indigo">
+     <div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg></span> Memory by app</div>
+     <div class="spark">
+      {{range .Apps}}<div class="sb" title="{{humanize .Name}} — {{if .Memory}}{{mempct .Memory}}% ({{.Memory}}){{else}}n/a{{end}}"><i class="fill {{memcolor .Memory}}" style="height:{{mempct .Memory}}%"></i></div>{{end}}
+     </div>
+     <div class="sparkcap"><span>{{.Total}} apps</span><span>% of cap</span></div>
     </div>
    </div>
 
