@@ -661,7 +661,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   <div class="user">
    <div class="avatar"><img src="https://github.com/cdrrazan.png?size=80" alt="Rajan Bhattarai" referrerpolicy="no-referrer"></div>
    <div style="min-width:0;flex:1"><div class="un">Rajan Bhattarai</div><div class="ue">@cdrrazan</div></div>
-   <a class="logout" href="/cdn-cgi/access/logout" title="Sign out (Cloudflare Access)" aria-label="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+   <a class="logout" id="logout" href="/cdn-cgi/access/logout" title="Sign out (Cloudflare Access)" aria-label="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
  </aside>
 
@@ -880,6 +880,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  if(o&&dlg)o.addEventListener("click",function(){dlg.showModal();});
  if(c&&dlg)c.addEventListener("click",function(){dlg.close();});
  if(dlg)dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});
+ // After Cloudflare Access clears the session, return to the app root so the
+ // login page shows again (instead of the generic "logged out" page). Built
+ // from the current origin so it works on any host.
+ var lo=document.getElementById("logout");
+ if(lo)lo.href="/cdn-cgi/access/logout?returnTo="+encodeURIComponent(location.origin+"/");
  var tb=document.getElementById("themebtn");
  if(tb)tb.addEventListener("click",function(){
   var d=document.documentElement.dataset.theme==="dark"?"light":"dark";
