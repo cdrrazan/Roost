@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/cdrrazan/roost?include_prereleases)](https://github.com/cdrrazan/roost/releases)
 [![Dependencies: 2](https://img.shields.io/badge/deps-cobra%20%2B%20yaml.v3-blue)](go.mod)
 
-**[Website](https://roost.pages.dev) · [Examples](examples/) · [Config reference](docs/configuration.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)**
+**[Website](https://roost.app.rsynk.com) · [Examples](examples/) · [Config reference](docs/configuration.md) · [Roadmap](ROADMAP.md) · [Contributing](CONTRIBUTING.md)**
 
 </div>
 
@@ -154,6 +154,7 @@ apps:
 | `migrate:` | **Opt out of roost's migrate step.** Default runs the framework's `db:prepare`/`migrate` on every `up`. Set `migrate: false` when the image already migrates itself at boot (Kamal-style entrypoints) — otherwise the two `db:prepare`s race and a multi-db app (Solid Queue/Cache/Cable) fails with `No database selected`. `migrate: "<command>"` runs your command instead. |
 | `redis:` | **Shared Redis broker.** Auto-detected from the `sidekiq`/`redis` gem or a `REDIS_URL` in `.env.example` — roost provisions one `redis:7-alpine` shared by every app that needs it and injects `REDIS_URL=redis://redis:6379/0`. `redis: true`/`false` overrides the detection. |
 | `worker:` + `command:` | **Background workers.** `command:` overrides an app's start command. A second entry over the same `path:` with `worker: true` runs a non-HTTP process (Sidekiq, Solid Queue) — no domain, no Caddy route, no `db:prepare`/seed (the web entry owns the DB). It **requires** a `command:`. Point its `DATABASE_URL` at the web app's DB (an explicit `env:` value wins over roost's per-app default). |
+| `category:` | **Display grouping for `roost web` only** — `main` or `utility` (empty = main). Buckets the app under *Main apps* / *Utilities* in the control panel; `worker: true` apps always show under *Workers*. No effect on how roost builds or runs anything. |
 
 ### 🧩 Split a big fleet across files — `include`
 
@@ -328,6 +329,56 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 
 ---
 
+## 🖥️ Web control panel — `roost web`
+
+`roost web` serves a small **dashboard** so you can run the whole fleet from a
+browser — start/stop apps, add or remove them, and watch status — without
+touching the terminal.
+
+```bash
+roost web                        # http://127.0.0.1:4600
+roost web --addr 0.0.0.0:4600 --token "$(openssl rand -hex 24)"
+```
+
+It runs as a **host process outside** the compose stack, on purpose: stopping
+the apps from the panel can't take down the thing that starts them again. What
+it does:
+
+- **Live status** — every app grouped into **Main apps / Utilities / Workers**
+  (from the per-app [`category:`](#-one-config-every-knob) key), with a state
+  pill, health, and a colour-coded **memory bar**; a *Needs attention* strip
+  surfaces anything not running, and metric cards summarise running / memory /
+  stopped.
+- **Control** — **Start all** / **Stop all**, or per-app **Start** / **Stop**.
+  Stop leaves Caddy + the tunnel up so the panel stays reachable (only the CLI
+  `roost down` tears down everything).
+- **Add / remove apps** — an *Add app* modal takes a host path (+ optional
+  hostname), runs **`roost doctor`** as a preflight gate, then edits the config,
+  regenerates, and builds + starts just that app — streaming each step into a
+  **Processing** log. Remove drops it (optionally deleting the image to free
+  disk) and lists it under **Removed** for one-click re-add. Shared database
+  volumes are never touched.
+- **Comfort** — search, status filter, **list / grid** views, light / **dark**
+  mode, and the whole thing is mobile-responsive.
+
+**Exposing it.** Set the top-level `control_host:` in `config.yml` and roost
+routes that hostname through the tunnel to the panel; then put **Cloudflare
+Access** in front of it. The default bind is loopback (`127.0.0.1:4600`); the
+`--token` / `$ROOST_WEB_TOKEN` bearer check is defense-in-depth on the mutating
+actions. **The Add form builds whatever Dockerfile lives at the path you give
+it — never expose the panel without Cloudflare Access.**
+
+```yaml
+# ~/.roost/config.yml
+control_host: control.example.com   # routed through the tunnel to roost web
+```
+
+Run it always-on with a systemd `--user` unit or a launchd agent (the same
+mechanism as `roost enable`), and front it with Access. See the
+[running-it FAQ](#-faq--running-it-for-real) for the always-on-box playbook.
+
+---
+
 ## 🧰 Commands
 
 **Setup**
@@ -344,6 +395,8 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 |---|---|
 | `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
+| `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
+| `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add/remove apps with a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
 | `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
@@ -509,12 +562,105 @@ doesn't take the backups with it.
 
 ---
 
+## ❓ FAQ — running it for real
+
+<details>
+<summary><b>Can I control the whole stack from a browser?</b></summary>
+
+Yes — `roost web` serves a small control panel: a live status table with
+whole-stack **Start apps** / **Stop apps** buttons *and* per-row **Start** /
+**Stop** for each individual app. It runs as a **host process outside** the
+compose stack, so stopping the apps can't take down the thing that starts them
+back up. Per-app actions are name-checked against your config, so the panel can
+never toggle an infra container (Caddy, cloudflared). It binds
+`127.0.0.1:4600` by default; expose it only behind
+**Cloudflare Access** (set `control_host:` in `config.yml` to route a hostname to
+it), and set `--token` / `$ROOST_WEB_TOKEN` as defense-in-depth on the on/off
+actions. Anyone who reaches an unprotected panel can stop and start your stack.
+</details>
+
+<details>
+<summary><b>Can I add or remove apps from the panel?</b></summary>
+
+Yes. The panel has an **Add an app** form (host path + optional hostname) and a
+per-row **Remove** button with a *free disk* checkbox. **Add** runs `roost
+doctor` first and proceeds only if preflight passes, then edits the config,
+regenerates artifacts, and builds + starts just the new app — the **Processing**
+pane streams each step live. **Remove** stops and removes that app's container
+(and its image if you tick *free disk*), drops it from the config, and lists it
+under **Removed apps** for one-click re-add; the shared database volumes are
+never touched, so the app's data survives a remove. Because the Add form accepts
+**any host path**, the panel builds and runs whatever Dockerfile lives there —
+that's a host admin tool, so keep it behind **Cloudflare Access** and the on/off
+token. An unauthenticated Add is code execution on the box.
+</details>
+
+<details>
+<summary><b>If I click "Stop apps" in the panel, does the panel go down too?</b></summary>
+
+No. **Stop** stops only the app containers; Caddy and `cloudflared` — the proxy
+and the tunnel — keep running, so the panel stays reachable and can bring the
+apps back. **Start** *resumes* the existing stopped containers (`docker compose
+start`) rather than rebuilding them, so a full stack comes back in seconds, not
+minutes. (`roost down`, by contrast, removes the whole stack including the
+tunnel — that's the terminal-only full stop.)
+</details>
+
+<details>
+<summary><b>Can I run roost on an always-on server instead of my laptop?</b></summary>
+
+Yes — nothing ties it to a laptop. roost is a Go binary driving Docker, so it
+runs anywhere Docker does: a small always-on VPS or cloud VM is the natural home
+if you want the apps up 24/7 (a laptop only serves while it's awake — see *the
+honest part*). To move: install roost + Docker on the box, copy
+`~/.roost/config.yml` and `~/.roost/credentials`, restore your database dumps
+into the fresh volumes, then `roost up`. The tunnel is **outbound**, so there are
+no ports or inbound firewall rules to open. Run `cloudflared` from **one machine
+at a time** — two connectors sharing the same tunnel token split traffic between
+them.
+</details>
+
+<details>
+<summary><b>How do I ship a code change to a running app?</b></summary>
+
+Push to the app's repo, then on the host run `roost deploy <app>`. It does a
+`git pull --ff-only` on that app's clone and rebuilds + restarts **only that
+container**, leaving the rest of the stack up. Fast-forward-only is deliberate:
+if the box's clone has diverged, the deploy fails loudly instead of silently
+merging. roost still never writes into your repo — the clone is yours, it only
+reads and pulls.
+</details>
+
+<details>
+<summary><b>Can I auto-deploy on a push to GitHub?</b></summary>
+
+Yes — `roost deploy` is built to be driven by CI over SSH. Add a GitHub Actions
+workflow that triggers on `push: branches: [main]`, SSHes into the box with a
+deploy key, and runs `roost deploy <app>`. Keep a dedicated key: its public half
+in the box's `~/.ssh/authorized_keys`, its private half as a repo secret. Because
+the pull is fast-forward-only, a force-push or diverged branch surfaces as a
+failed deploy rather than a silent bad merge.
+</details>
+
+<details>
+<summary><b>How do I keep it running after a reboot, with no one logged in?</b></summary>
+
+`roost enable` installs a boot unit — launchd on macOS, a systemd `--user` unit
+on Linux — that runs `roost up` at login. On a headless Linux box, also run
+`loginctl enable-linger <user>` so the user's units start at boot without an
+interactive login. Docker itself must start on boot too (it does by default on a
+server install); roost has no daemon — Docker's `restart: unless-stopped` policy
+is the supervisor.
+</details>
+
+---
+
 ## 🌱 Project
 
 - **[Examples](examples/)** — runnable configs from minimal to every-knob, plus a
   [demo with fake data](examples/demo/config.yml) and an
   [`include` walkthrough](examples/includes/).
-- **[Website](https://roost.pages.dev)** — one-page overview ([source](site/)).
+- **[Website](https://roost.app.rsynk.com)** — one-page overview ([source](site/)).
 - **[Roadmap](ROADMAP.md)** — what's next, and the non-goals that keep roost small.
 - **[Contributing](CONTRIBUTING.md)** — house rules (TDD, no real Docker/network in
   tests, two dependencies) and how to add a framework.

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,13 +13,25 @@ import (
 )
 
 // fakeController records calls and never touches Docker. If release is
-// non-nil, Up/Down block on it so a test can observe the "busy" window.
+// non-nil, Up/Down/StartApp/StopApp block on it so a test can observe the
+// "busy" window.
 type fakeController struct {
 	statuses       []runner.AppStatus
 	statusErr      error
 	up, down       int32
 	upErr, downErr error
 	release        chan struct{}
+
+	mu               sync.Mutex
+	started, stopped []string
+
+	addPath, addDomain string
+	addCalls           int
+	removeName         string
+	removeImage        bool
+	removeCalls        int
+	removed            []RemovedApp
+	emitLines          []string // lines AddApp/RemoveApp emit when called
 }
 
 func (f *fakeController) Status() ([]runner.AppStatus, error) { return f.statuses, f.statusErr }
@@ -37,6 +50,81 @@ func (f *fakeController) Down() error {
 		<-f.release
 	}
 	return f.downErr
+}
+
+func (f *fakeController) StartApp(name string) error {
+	f.mu.Lock()
+	f.started = append(f.started, name)
+	f.mu.Unlock()
+	if f.release != nil {
+		<-f.release
+	}
+	return f.upErr
+}
+
+func (f *fakeController) StopApp(name string) error {
+	f.mu.Lock()
+	f.stopped = append(f.stopped, name)
+	f.mu.Unlock()
+	if f.release != nil {
+		<-f.release
+	}
+	return f.downErr
+}
+
+func (f *fakeController) startedApps() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.started...)
+}
+
+func (f *fakeController) stoppedApps() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.stopped...)
+}
+
+func (f *fakeController) AddApp(path, domain string, emit func(string)) error {
+	f.mu.Lock()
+	f.addPath, f.addDomain, f.addCalls = path, domain, f.addCalls+1
+	lines := append([]string(nil), f.emitLines...)
+	f.mu.Unlock()
+	for _, l := range lines {
+		emit(l)
+	}
+	if f.release != nil {
+		<-f.release
+	}
+	return f.upErr
+}
+
+func (f *fakeController) RemoveApp(name string, deleteImage bool, emit func(string)) error {
+	f.mu.Lock()
+	f.removeName, f.removeImage, f.removeCalls = name, deleteImage, f.removeCalls+1
+	lines := append([]string(nil), f.emitLines...)
+	f.mu.Unlock()
+	for _, l := range lines {
+		emit(l)
+	}
+	if f.release != nil {
+		<-f.release
+	}
+	return f.downErr
+}
+
+func (f *fakeController) RemovedApps() ([]RemovedApp, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]RemovedApp(nil), f.removed...), nil
+}
+
+func (f *fakeController) snapshot() fakeController {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return fakeController{
+		addPath: f.addPath, addDomain: f.addDomain, addCalls: f.addCalls,
+		removeName: f.removeName, removeImage: f.removeImage, removeCalls: f.removeCalls,
+	}
 }
 
 func waitFor(t *testing.T, cond func() bool) {
@@ -125,6 +213,237 @@ func TestTokenGuard(t *testing.T) {
 		t.Fatalf("token code = %d, want 303", rr.Code)
 	}
 	waitFor(t, func() bool { return atomic.LoadInt32(&f.up) == 1 })
+}
+
+func TestAppUpInvokesController(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/app/up?app=blog", nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303", rr.Code)
+	}
+	waitFor(t, func() bool {
+		s := f.startedApps()
+		return len(s) == 1 && s[0] == "blog"
+	})
+	if len(f.stoppedApps()) != 0 {
+		t.Error("StopApp should not have been called")
+	}
+}
+
+func TestAppDownInvokesController(t *testing.T) {
+	f := &fakeController{}
+	serve(NewServer(f, ""), "POST", "/app/down?app=blog", nil)
+	waitFor(t, func() bool {
+		s := f.stoppedApps()
+		return len(s) == 1 && s[0] == "blog"
+	})
+}
+
+func TestAppActionRequiresApp(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/app/up", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing-app code = %d, want 400", rr.Code)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if len(f.startedApps()) != 0 {
+		t.Error("StartApp ran without an app name")
+	}
+}
+
+func TestAppActionHonorsTokenGuard(t *testing.T) {
+	f := &fakeController{}
+	srv := NewServer(f, "s3cret")
+	if rr := serve(srv, "POST", "/app/down?app=blog", nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("no-token code = %d, want 403", rr.Code)
+	}
+	if len(f.stoppedApps()) != 0 {
+		t.Fatal("StopApp ran without a valid token")
+	}
+}
+
+func TestStatusRendersPerAppControls(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "blog", State: "running"}}}
+	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
+	for _, want := range []string{`action="/app/up"`, `action="/app/down"`, `value="blog"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing per-app control %q", want)
+		}
+	}
+}
+
+func TestAddInvokesController(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/add?path=/apps/blog&domain=blog.example.com", nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303", rr.Code)
+	}
+	waitFor(t, func() bool { return f.snapshot().addCalls == 1 })
+	s := f.snapshot()
+	if s.addPath != "/apps/blog" || s.addDomain != "blog.example.com" {
+		t.Errorf("AddApp got (%q,%q), want (/apps/blog, blog.example.com)", s.addPath, s.addDomain)
+	}
+}
+
+func TestAddRequiresPath(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/add?domain=x", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing-path code = %d, want 400", rr.Code)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if f.snapshot().addCalls != 0 {
+		t.Error("AddApp ran without a path")
+	}
+}
+
+func TestRemoveInvokesControllerWithImageFlag(t *testing.T) {
+	f := &fakeController{}
+	serve(NewServer(f, ""), "POST", "/remove?app=blog&image=on", nil)
+	waitFor(t, func() bool { return f.snapshot().removeCalls == 1 })
+	if s := f.snapshot(); s.removeName != "blog" || !s.removeImage {
+		t.Errorf("RemoveApp got (%q, image=%v), want (blog, true)", s.removeName, s.removeImage)
+	}
+}
+
+func TestRemoveWithoutImageFlag(t *testing.T) {
+	f := &fakeController{}
+	serve(NewServer(f, ""), "POST", "/remove?app=blog", nil)
+	waitFor(t, func() bool { return f.snapshot().removeCalls == 1 })
+	if f.snapshot().removeImage {
+		t.Error("image flag should default off when the checkbox is unchecked")
+	}
+}
+
+func TestRemoveRequiresApp(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/remove", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing-app code = %d, want 400", rr.Code)
+	}
+}
+
+func TestAddRemoveHonorTokenGuard(t *testing.T) {
+	f := &fakeController{}
+	srv := NewServer(f, "s3cret")
+	if rr := serve(srv, "POST", "/add?path=/x", nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("/add no-token code = %d, want 403", rr.Code)
+	}
+	if rr := serve(srv, "POST", "/remove?app=blog", nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("/remove no-token code = %d, want 403", rr.Code)
+	}
+	if s := f.snapshot(); s.addCalls != 0 || s.removeCalls != 0 {
+		t.Fatal("add/remove ran without a valid token")
+	}
+}
+
+func TestRemovedAppsRendered(t *testing.T) {
+	f := &fakeController{removed: []RemovedApp{{Name: "linkaru", Path: "/apps/linkaru", Domain: "linkaru.example.com"}}}
+	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
+	// The removed app is listed with a one-click re-add that resubmits its path.
+	for _, want := range []string{"linkaru", `action="/add"`, `value="/apps/linkaru"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("removed view missing %q", want)
+		}
+	}
+}
+
+func TestAddFormAndPerRowRemoveRendered(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "blog", State: "running"}}}
+	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
+	for _, want := range []string{`action="/add"`, `name="path"`, `action="/remove"`, `name="image"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+}
+
+func TestProcessingStepsRendered(t *testing.T) {
+	f := &fakeController{release: make(chan struct{}), emitLines: []string{"preflight: running roost doctor", "building blog"}}
+	srv := NewServer(f, "")
+	serve(srv, "POST", "/add?path=/apps/blog", nil) // emits, then blocks on release
+	waitFor(t, func() bool {
+		return strings.Contains(serve(srv, "GET", "/", nil).Body.String(), "building blog")
+	})
+	body := serve(srv, "GET", "/", nil).Body.String()
+	if !strings.Contains(body, "preflight: running roost doctor") {
+		t.Error("processing pane missing the first emitted step")
+	}
+	close(f.release)
+}
+
+func TestHumanize(t *testing.T) {
+	cases := map[string]string{
+		"trackaru":    "Trackaru",
+		"sure-worker": "Sure Worker",
+		"linkart":     "Linkart",
+		"kamandar":    "Kamandar",
+		"my_cool_app": "My Cool App",
+		"":            "",
+	}
+	for in, want := range cases {
+		if got := humanize(in); got != want {
+			t.Errorf("humanize(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGroupAppsOrderAndFallback(t *testing.T) {
+	apps := []runner.AppStatus{
+		{Name: "trackaru", Category: "main"},
+		{Name: "sure", Category: "utility"},
+		{Name: "sure-worker", Category: "worker"},
+		{Name: "unlabeled", Category: ""}, // empty → Main apps
+	}
+	groups := groupApps(apps)
+	if len(groups) != 3 {
+		t.Fatalf("groups = %d, want 3 (empty groups omitted)", len(groups))
+	}
+	if groups[0].Title != "Main apps" || groups[1].Title != "Utilities" || groups[2].Title != "Workers" {
+		t.Fatalf("titles = %q/%q/%q", groups[0].Title, groups[1].Title, groups[2].Title)
+	}
+	if len(groups[0].Apps) != 2 {
+		t.Fatalf("Main apps = %d, want 2 (trackaru + unlabeled)", len(groups[0].Apps))
+	}
+}
+
+func TestGroupAppsOmitsEmpty(t *testing.T) {
+	groups := groupApps([]runner.AppStatus{{Name: "a", Category: "utility"}})
+	if len(groups) != 1 || groups[0].Title != "Utilities" {
+		t.Fatalf("groups = %+v, want only Utilities", groups)
+	}
+}
+
+func TestMemPct(t *testing.T) {
+	cases := map[string]int{
+		"180MiB / 512MiB": 35,
+		"512MiB / 512MiB": 100,
+		"1.2GiB / 2GiB":   60,
+		"9MiB / 512MiB":   2,
+		"":                0, // unknown → 0, not a crash
+		"garbage":         0,
+		"10MiB / 0MiB":    0, // zero cap → 0, no divide panic
+	}
+	for in, want := range cases {
+		if got := memPct(in); got != want {
+			t.Errorf("memPct(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
+
+func TestMemColor(t *testing.T) {
+	if memColor("500MiB / 512MiB") != "bad" { // ~98% → red
+		t.Error("near-full memory should be bad")
+	}
+	if memColor("400MiB / 512MiB") != "warn" { // ~78% → amber
+		t.Error("high memory should be warn")
+	}
+	if memColor("100MiB / 512MiB") != "ok" { // ~20% → green
+		t.Error("low memory should be ok")
+	}
+	if memColor("") != "ok" { // unknown → neutral/ok, never red
+		t.Error("unknown memory should not be red")
+	}
 }
 
 func TestBusyBlocksConcurrentAction(t *testing.T) {

@@ -14,6 +14,7 @@ directory and relative paths resolve against the config file's own directory.
 
 ```yaml
 domain: demo.example.com   # OPTIONAL fallback for bare-path apps
+control_host: control.example.com  # OPTIONAL; route this host to `roost web`
 include:                   # OPTIONAL glob(s) pulling apps from other files
   - apps/*.yml
 tunnel:
@@ -26,6 +27,12 @@ defaults:                  # optional per-app defaults
   profile: core
 apps: [...]                # see below
 ```
+
+- **`control_host:`** — when set, roost adds a Caddy route and tunnel ingress
+  that sends this hostname to the **`roost web`** control panel running on the
+  host (`host.docker.internal:4600`). Put **Cloudflare Access** in front of it;
+  an unprotected panel lets anyone who reaches the URL start/stop your stack (and
+  the Add form builds arbitrary code). Omit it and the panel is loopback-only.
 
 ## App entries — two forms, freely mixed
 
@@ -49,11 +56,17 @@ apps:
     redis: true               # default: detected (sidekiq/redis gem, REDIS_URL)
     memory: 768m              # default: defaults.memory, then 512m
     profile: extras           # start only with --profile extras
+    category: main            # `roost web` grouping only: main | utility
     env:                      # runtime environment (container)
       SOME_KEY: value
     build_env:                # build-time environment (Docker builder stage)
       SKIP_ENV_VALIDATION: "1"
 ```
+
+- **`category:`** — display grouping for the **`roost web`** panel only:
+  `main` or `utility` (empty is treated as `main`). Apps bucket under *Main
+  apps* / *Utilities*; `worker: true` entries always show under *Workers*. It
+  has **no effect** on how roost builds or runs the app.
 
 `env` is set at container runtime; `build_env` is set during the image build
 (rendered as `ENV` in the Dockerfile's builder stage). Use `build_env` for

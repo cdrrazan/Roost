@@ -43,10 +43,13 @@ type App struct {
 	// Worker marks a non-HTTP background app: no Caddy route, and roost
 	// runs no DB setup or seed for it. It still runs as a supervised
 	// container.
-	Worker  bool
-	Memory  string
-	Profile string
-	Env     map[string]string
+	Worker bool
+	// Category is a display-only grouping for the web panel ("main",
+	// "utility", or "worker"); it never affects build or run.
+	Category string
+	Memory   string
+	Profile  string
+	Env      map[string]string
 	// BuildEnv is environment injected at image-build time (see
 	// config.App.BuildEnv), rendered as ENV in the Dockerfile builder
 	// stage so it is present during the app's build step.
@@ -106,6 +109,12 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			StaticBuild:    strings.Contains(d.Signal, "vite"),
 			Redis:          d.Redis,
 			Worker:         r.Worker,
+			Category:       r.Category,
+		}
+		// Workers are always grouped as workers in the panel, whatever the
+		// config says.
+		if app.Worker {
+			app.Category = "worker"
 		}
 		if r.Command != "" {
 			// Command is the compose-level override (used when the app ships

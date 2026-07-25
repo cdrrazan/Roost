@@ -230,6 +230,24 @@ func (r *Runner) Down() error {
 	return nil
 }
 
+// Remove stops and removes one app's container, leaving the rest of the stack
+// running. With deleteImage it also deletes the app's built image
+// (roost-<app>) to reclaim disk — a best-effort step (a missing or shared
+// image must not fail the removal). It never touches the shared database
+// volumes: an app's data lives in the mysql/postgres volume, not per-app.
+func (r *Runner) Remove(app string, deleteImage bool) error {
+	if _, err := r.run(r.compose("rm", "-sf", app)...); err != nil {
+		return fmt.Errorf("remove %q: %w", app, err)
+	}
+	if deleteImage {
+		// Compose names build-service images <project>-<service>; the pinned
+		// project is "roost" (see ComposeArgs). Best-effort — an image still
+		// referenced elsewhere, or already gone, is not an error here.
+		_, _ = r.run("image", "rm", "-f", "roost-"+app)
+	}
+	return nil
+}
+
 // Restart restarts one app's container.
 func (r *Runner) Restart(app string) error {
 	if _, err := r.run(r.compose("restart", app)...); err != nil {
@@ -250,11 +268,12 @@ func (r *Runner) Logs(app string, follow bool) error {
 
 // AppStatus is one app's runtime state.
 type AppStatus struct {
-	Name   string
-	State  string // running, exited, restarting, not created, skipped...
-	Health string
-	Memory string // "used / cap" from docker stats, "" when unknown
-	URL    string
+	Name     string
+	State    string // running, exited, restarting, not created, skipped...
+	Health   string
+	Memory   string // "used / cap" from docker stats, "" when unknown
+	URL      string
+	Category string // display grouping for the panel: main, utility, worker
 }
 
 // psLine is the subset of `docker compose ps --format json` output we
@@ -320,9 +339,10 @@ func (r *Runner) Status(apps []generate.App) ([]AppStatus, error) {
 			url = "(worker)"
 		}
 		st := AppStatus{
-			Name:  app.Name,
-			State: "not created",
-			URL:   url,
+			Name:     app.Name,
+			State:    "not created",
+			URL:      url,
+			Category: app.Category,
 		}
 		if p, ok := states[app.Name]; ok {
 			st.State = p.State
