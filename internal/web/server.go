@@ -599,6 +599,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .field input:focus{outline:none;border-color:var(--brand)}
  .hint{font-size:12px;color:var(--faint);margin:10px 0 14px}
  .hide{display:none!important}
+ .flash{animation:flash 1.2s ease}
+ @keyframes flash{0%,60%{box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 45%,transparent)}100%{box-shadow:0 0 0 0 transparent}}
  /* responsive */
  @media(max-width:1080px){
   .body{grid-template-columns:1fr;overflow-y:auto}
@@ -632,10 +634,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <a href="#" class="navf" data-cat="Utilities"><span class="ico">◈</span> Utilities</a>
    <a href="#" class="navf" data-cat="Workers"><span class="ico">⚙</span> Workers</a>
    <div class="navlabel">Monitoring</div>
-   <a href="#attention"><span class="ico">⚠</span> Attention</a>
-   <a href="#processing"><span class="ico">◷</span> Activity</a>
+   <a href="#attention" data-scroll="attention"><span class="ico">⚠</span> Attention</a>
+   <a href="#processing" data-scroll="processing"><span class="ico">◷</span> Activity</a>
    <div class="navlabel">Manage</div>
-   <a href="#removed"><span class="ico">↺</span> Removed</a>
+   <a href="#removed" data-scroll="removed"><span class="ico">↺</span> Removed</a>
    <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico">↗</span> Repository</a>
   </nav>
   <div class="grow"></div>
@@ -836,6 +838,17 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    cat=a.dataset.cat;
    document.querySelectorAll(".navf").forEach(function(x){x.classList.toggle("active",x===a)});
    filter();
+   document.body.classList.remove("nav-open");
+  });
+ });
+ // Sidebar jump links: scroll the target into view (works inside the
+ // independently-scrolling columns) and flash it so the click always reads.
+ function flash(el){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); setTimeout(function(){el.classList.remove("flash");},1300); }
+ document.querySelectorAll("[data-scroll]").forEach(function(a){
+  a.addEventListener("click",function(e){
+   e.preventDefault();
+   var el=document.getElementById(a.dataset.scroll);
+   if(el){ el.scrollIntoView({behavior:"smooth",block:"nearest"}); flash(el); }
    document.body.classList.remove("nav-open");
   });
  });
