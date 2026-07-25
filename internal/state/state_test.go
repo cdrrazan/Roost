@@ -99,6 +99,37 @@ func TestSyncMysqlVolumeNoSeedsIsNotDrift(t *testing.T) {
 	}
 }
 
+func TestRemovedAppsTracking(t *testing.T) {
+	s := &State{}
+	s.MarkRemoved(RemovedApp{Name: "blog", Path: "/apps/blog", Domain: "blog.example.com"})
+	s.MarkRemoved(RemovedApp{Name: "shop", Path: "/apps/shop"})
+	// Re-removing an app replaces its record, never duplicates.
+	s.MarkRemoved(RemovedApp{Name: "blog", Path: "/apps/blog2"})
+	if len(s.Removed) != 2 {
+		t.Fatalf("removed = %+v, want 2 unique", s.Removed)
+	}
+	var blog *RemovedApp
+	for i := range s.Removed {
+		if s.Removed[i].Name == "blog" {
+			blog = &s.Removed[i]
+		}
+	}
+	if blog == nil || blog.Path != "/apps/blog2" {
+		t.Fatalf("blog record = %+v, want latest path /apps/blog2", blog)
+	}
+
+	// Clearing (on re-add) drops just that entry.
+	s.ClearRemoved("blog")
+	if len(s.Removed) != 1 || s.Removed[0].Name != "shop" {
+		t.Fatalf("after clear = %+v, want only shop", s.Removed)
+	}
+	// Clearing an unknown name is a no-op.
+	s.ClearRemoved("nope")
+	if len(s.Removed) != 1 {
+		t.Fatalf("clear unknown changed the list: %+v", s.Removed)
+	}
+}
+
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "state.json")
 	s := &State{AccountID: "acc1", TunnelID: "tun-1", TunnelName: "roost"}

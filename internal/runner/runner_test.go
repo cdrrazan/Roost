@@ -39,6 +39,34 @@ func allCalls(fake *shell.Fake) string {
 	return strings.Join(lines, "\n")
 }
 
+func TestRemoveStopsAndRemovesContainer(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Remove("blog", false); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	calls := allCalls(fake)
+	if !strings.Contains(calls, "rm -sf blog") {
+		t.Errorf("Remove should stop+remove the container:\n%s", calls)
+	}
+	// Without deleteImage, the image is left in place for a fast re-add.
+	if strings.Contains(calls, "image rm") {
+		t.Errorf("Remove(false) must not delete the image:\n%s", calls)
+	}
+}
+
+func TestRemoveWithImageDeletesImage(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Remove("blog", true); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	calls := allCalls(fake)
+	if !strings.Contains(calls, "image rm -f roost-blog") {
+		t.Errorf("Remove(true) should delete the built image roost-blog:\n%s", calls)
+	}
+}
+
 func TestUpPinsProjectNameEverywhere(t *testing.T) {
 	fake := &shell.Fake{}
 	r, _ := newTestRunner(fake)

@@ -9,8 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cdrrazan/roost/internal/config"
+	"github.com/cdrrazan/roost/internal/doctor"
 	"github.com/cdrrazan/roost/internal/generate"
 	"github.com/cdrrazan/roost/internal/runner"
+	"github.com/cdrrazan/roost/internal/shell"
+	"github.com/cdrrazan/roost/internal/state"
 	"github.com/cdrrazan/roost/internal/web"
 )
 
@@ -151,6 +155,208 @@ func (c *stackController) StopApp(name string) error {
 		return err
 	}
 	return r.Stop(name)
+}
+
+// AddApp adds an app to the running stack from the panel: a doctor preflight
+// gate, then config edit, artifact regen, and build + start of just the new
+// container(s). Every phase streams a line to emit so the processing pane shows
+// progress. It regenerates and builds only — it does not touch other apps.
+//
+// Security note: path is an arbitrary host path the panel user typed, so this
+// builds and runs whatever Dockerfile lives there. That is by design (the panel
+// is a host-side admin tool) and is why the panel must sit behind Cloudflare
+// Access and the on/off token — an unauthenticated caller here is code
+// execution on the box.
+func (c *stackController) AddApp(path, domain string, emit func(string)) error {
+	emit("preflight: running roost doctor")
+	findings := runDoctor(c.flags, shell.Exec{})
+	if doctor.HasFailures(findings) {
+		return fmt.Errorf("preflight failed — %s", firstFailureMessage(findings))
+	}
+	emit("preflight passed")
+
+	before, _, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return err
+	}
+	beforeNames := appNameSet(before)
+
+	cfgPath, err := config.FindConfig(c.flags.configPath)
+	if err != nil {
+		return err
+	}
+	emit("adding to config: " + path)
+	if err := config.AddApp(cfgPath, path, domain); err != nil {
+		return err
+	}
+
+	apps, controlHost, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return err
+	}
+	dir, err := buildDir()
+	if err != nil {
+		return err
+	}
+	emit("generating artifacts")
+	if _, err := generate.Generate(dir, apps, controlHost); err != nil {
+		return err
+	}
+
+	newNames := diffNewApps(beforeNames, apps)
+	if len(newNames) == 0 {
+		return fmt.Errorf("added %q to config but no new app resolved to a hostname — set a domain for it", path)
+	}
+	r := runner.New(dir)
+	for _, n := range newNames {
+		emit("building + starting " + n)
+		if err := r.Start(n); err != nil {
+			return err
+		}
+	}
+	c.clearRemoved(newNames)
+	emit("done — " + newNames[0] + " is live")
+	return nil
+}
+
+// RemoveApp tears one app out of the running stack: stop + remove its container
+// (optionally its image), drop it from the config, record it for one-click
+// re-add, and regenerate artifacts so compose no longer references it. Shared
+// database volumes are never touched — an app's data outlives its removal.
+func (c *stackController) RemoveApp(name string, deleteImage bool, emit func(string)) error {
+	apps, _, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return err
+	}
+	var target *generate.App
+	for i := range apps {
+		if apps[i].Name == name {
+			target = &apps[i]
+			break
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("unknown app %q", name)
+	}
+
+	r, err := newRunner()
+	if err != nil {
+		return err
+	}
+	emit("stopping + removing container: " + name)
+	if err := r.Remove(name, deleteImage); err != nil {
+		return err
+	}
+	if deleteImage {
+		emit("deleted image roost-" + name)
+	}
+
+	cfgPath, err := config.FindConfig(c.flags.configPath)
+	if err != nil {
+		return err
+	}
+	emit("removing from config")
+	if err := config.RemoveApp(cfgPath, name); err != nil {
+		return err
+	}
+
+	if st, sp, err := c.loadState(); err == nil {
+		st.MarkRemoved(state.RemovedApp{Name: name, Path: target.Path, Domain: target.FQDN})
+		if err := st.Save(sp); err != nil {
+			emit("warning: could not record for re-add: " + err.Error())
+		}
+	}
+
+	// Regenerate so the removed app leaves the compose file. Skipped when the
+	// config is now empty (nothing to generate) — best-effort either way.
+	if apps2, controlHost, lerr := loadPlanned(c.cmd, c.flags); lerr == nil && len(apps2) > 0 {
+		if dir, derr := buildDir(); derr == nil {
+			emit("regenerating artifacts")
+			_, _ = generate.Generate(dir, apps2, controlHost)
+		}
+	}
+	emit("done — moved to the Removed list")
+	return nil
+}
+
+// RemovedApps returns the apps the panel has removed, for one-click re-add.
+func (c *stackController) RemovedApps() ([]web.RemovedApp, error) {
+	st, _, err := c.loadState()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]web.RemovedApp, 0, len(st.Removed))
+	for _, r := range st.Removed {
+		out = append(out, web.RemovedApp{Name: r.Name, Path: r.Path, Domain: r.Domain})
+	}
+	return out, nil
+}
+
+// appNameSet indexes app names for membership tests.
+func appNameSet(apps []generate.App) map[string]bool {
+	m := make(map[string]bool, len(apps))
+	for _, a := range apps {
+		m[a.Name] = true
+	}
+	return m
+}
+
+// diffNewApps returns the names present in after but not before — the app(s) an
+// add introduced.
+func diffNewApps(before map[string]bool, after []generate.App) []string {
+	var out []string
+	for _, a := range after {
+		if !before[a.Name] {
+			out = append(out, a.Name)
+		}
+	}
+	return out
+}
+
+// firstFailureMessage renders the first doctor failure as an actionable line
+// (message + remedy) for the panel's processing pane.
+func firstFailureMessage(findings []doctor.Finding) string {
+	for _, f := range findings {
+		if f.Level == doctor.Fail {
+			if f.Remedy != "" {
+				return f.Message + " (fix: " + f.Remedy + ")"
+			}
+			return f.Message
+		}
+	}
+	return "see `roost doctor`"
+}
+
+// loadState opens roost's state.json under the real home directory.
+func (c *stackController) loadState() (*state.State, string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, "", err
+	}
+	p := state.Path(home)
+	st, err := state.Load(p)
+	return st, p, err
+}
+
+// clearRemoved drops re-added apps from the removed list, persisting only when
+// something changed. Best-effort: a state write failure must not fail an
+// otherwise-successful add.
+func (c *stackController) clearRemoved(names []string) {
+	st, sp, err := c.loadState()
+	if err != nil {
+		return
+	}
+	changed := false
+	for _, n := range names {
+		before := len(st.Removed)
+		st.ClearRemoved(n)
+		if len(st.Removed) != before {
+			changed = true
+		}
+	}
+	if changed {
+		_ = st.Save(sp)
+	}
 }
 
 // newWebCmd serves the control panel. It is a long-running process, meant to be

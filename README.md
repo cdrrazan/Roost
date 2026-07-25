@@ -345,7 +345,7 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 | `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
-| `roost web [--addr] [--token]` | serve a control panel (status + whole-stack and per-app Start/Stop) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
+| `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add/remove apps with a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
 | `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
@@ -526,6 +526,22 @@ never toggle an infra container (Caddy, cloudflared). It binds
 **Cloudflare Access** (set `control_host:` in `config.yml` to route a hostname to
 it), and set `--token` / `$ROOST_WEB_TOKEN` as defense-in-depth on the on/off
 actions. Anyone who reaches an unprotected panel can stop and start your stack.
+</details>
+
+<details>
+<summary><b>Can I add or remove apps from the panel?</b></summary>
+
+Yes. The panel has an **Add an app** form (host path + optional hostname) and a
+per-row **Remove** button with a *free disk* checkbox. **Add** runs `roost
+doctor` first and proceeds only if preflight passes, then edits the config,
+regenerates artifacts, and builds + starts just the new app — the **Processing**
+pane streams each step live. **Remove** stops and removes that app's container
+(and its image if you tick *free disk*), drops it from the config, and lists it
+under **Removed apps** for one-click re-add; the shared database volumes are
+never touched, so the app's data survives a remove. Because the Add form accepts
+**any host path**, the panel builds and runs whatever Dockerfile lives there —
+that's a host admin tool, so keep it behind **Cloudflare Access** and the on/off
+token. An unauthenticated Add is code execution on the box.
 </details>
 
 <details>

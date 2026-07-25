@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/cdrrazan/roost/internal/doctor"
 	"github.com/cdrrazan/roost/internal/generate"
 )
 
@@ -89,5 +91,35 @@ func TestResolveAppNameRejectsUnknown(t *testing.T) {
 	apps := []generate.App{{Name: "blog"}}
 	if err := resolveAppName(apps, "caddy"); err == nil {
 		t.Fatal("unknown app (infra service) must be rejected")
+	}
+}
+
+// diffNewApps finds the app(s) an add introduced, so AddApp knows which
+// container(s) to build + start without rebuilding the whole stack.
+func TestDiffNewApps(t *testing.T) {
+	before := appNameSet([]generate.App{{Name: "a"}, {Name: "b"}})
+	got := diffNewApps(before, []generate.App{{Name: "a"}, {Name: "b"}, {Name: "c"}})
+	if len(got) != 1 || got[0] != "c" {
+		t.Fatalf("new apps = %v, want [c]", got)
+	}
+}
+
+func TestDiffNewAppsNoneWhenUnchanged(t *testing.T) {
+	before := appNameSet([]generate.App{{Name: "a"}})
+	if got := diffNewApps(before, []generate.App{{Name: "a"}}); len(got) != 0 {
+		t.Fatalf("new apps = %v, want none", got)
+	}
+}
+
+// The add gate surfaces the first doctor failure — message and remedy — so the
+// panel's processing pane tells the user how to fix it, never a bare error.
+func TestFirstFailureMessageIncludesRemedy(t *testing.T) {
+	findings := []doctor.Finding{
+		{Level: doctor.OK, Message: "fine"},
+		{Level: doctor.Fail, Message: "docker not running", Remedy: "start Docker Desktop"},
+	}
+	got := firstFailureMessage(findings)
+	if !strings.Contains(got, "docker not running") || !strings.Contains(got, "start Docker Desktop") {
+		t.Fatalf("message = %q, want it to carry the failure and its remedy", got)
 	}
 }

@@ -33,6 +33,18 @@ type State struct {
 	// changes and the seeded set no longer matches an empty database — see
 	// SyncMysqlVolume.
 	MysqlVolumeID string `json:"mysql_volume_id,omitempty"`
+	// Removed is the set of apps the web panel removed from the config,
+	// retained (with their path + domain) so the panel can offer a one-click
+	// re-add. A successful re-add clears the entry — see ClearRemoved.
+	Removed []RemovedApp `json:"removed,omitempty"`
+}
+
+// RemovedApp is an app the panel removed, kept so it can be re-added without
+// the user retyping its path.
+type RemovedApp struct {
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	Domain string `json:"domain,omitempty"`
 }
 
 // Path returns the state file location under the given home dir.
@@ -98,6 +110,31 @@ func (s *State) MarkSeeded(app string) {
 		return
 	}
 	s.Seeded = append(s.Seeded, app)
+}
+
+// MarkRemoved records an app the panel removed, so it can be re-added later.
+// Re-removing a name replaces its record (latest path/domain win) rather than
+// duplicating it.
+func (s *State) MarkRemoved(app RemovedApp) {
+	for i, have := range s.Removed {
+		if have.Name == app.Name {
+			s.Removed[i] = app
+			return
+		}
+	}
+	s.Removed = append(s.Removed, app)
+}
+
+// ClearRemoved drops the named app from the removed set (called on a
+// successful re-add). An unknown name is a no-op.
+func (s *State) ClearRemoved(name string) {
+	kept := s.Removed[:0]
+	for _, have := range s.Removed {
+		if have.Name != name {
+			kept = append(kept, have)
+		}
+	}
+	s.Removed = kept
 }
 
 // SyncMysqlVolume reconciles the seeded set against the current MySQL data

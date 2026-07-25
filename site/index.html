@@ -439,6 +439,17 @@
       anyone who reaches it stop and start your stack.</p>
     </div>
     <div class="card">
+      <h3>Can I add or remove apps from the panel?</h3>
+      <p>Yes. An <b>Add an app</b> form takes a host path (+ optional hostname);
+      it runs <span class="k">roost doctor</span> first and, only if preflight
+      passes, edits the config, regenerates, and builds + starts just the new app
+      — the <b>Processing</b> pane streams each step. Per-row <b>Remove</b> (with
+      a <i>free disk</i> option to drop the image) stops the container, removes it
+      from the config, and lists it under <b>Removed apps</b> for one-click re-add.
+      Shared DB volumes are never touched, so data survives. The Add form builds
+      any path you give it — keep the panel behind <b>Cloudflare Access</b>.</p>
+    </div>
+    <div class="card">
       <h3>Does clicking "Stop apps" take the panel down too?</h3>
       <p>No. <b>Stop</b> stops only the app containers; Caddy and cloudflared — the
       proxy and tunnel — keep running, so the panel stays reachable and can bring
