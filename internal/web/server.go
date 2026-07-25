@@ -403,6 +403,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iMTEiIGZpbGw9InVybCgjcmcpIi8+PHBhdGggZD0iTTEwLjUgMTkuMiBMMjAgMTEgTDI5LjUgMTkuMiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEzLjQgMTguNCBWMjguNiBIMjYuNiBWMTguNCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE3LjQgMjguNiBWMjQgYTIuNiAyLjYgMCAwIDEgNS4yIDAgVjI4LjYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0icmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNmY2N2YwIi8+PHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiNhODU1ZjciLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNlYzQ4OTkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4K">
 <style>
  :root{
   --bg1:#fdf1f8; --bg2:#eef1ff; --bg3:#ecfdfb; --bg4:#fff2f1;
@@ -434,7 +435,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
  }}
  *{box-sizing:border-box}
- body{margin:0;height:100vh;overflow:hidden;color:var(--ink);font:14.5px/1.55 var(--font);-webkit-font-smoothing:antialiased;background:var(--bg)}
+ body{margin:0;height:100vh;overflow:hidden;color:var(--ink);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased;background:var(--bg)}
  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
  h1,h2,h3{margin:0}
  /* full-screen shell */
@@ -443,20 +444,23 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  /* sidebar — fixed column, scrolls on its own */
  .side{border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto}
  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px}
- .logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#6f67f0,#a855f7 55%,#ec4899);
-  display:grid;place-items:center;color:#fff;font-weight:800;box-shadow:var(--shadow)}
- .brand .bt{font-size:14.5px;font-weight:700;letter-spacing:-.2px}
- .brand .bs{font-size:11px;color:var(--faint)}
+ .logo{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);flex:none;overflow:hidden}
+ .logo svg{width:100%;height:100%;display:block}
+ .brand .bt{font-size:15.5px;font-weight:700;letter-spacing:-.2px}
+ .brand .bs{font-size:12px;color:var(--faint)}
  .nav{display:flex;flex-direction:column;gap:1px}
- .nav a{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:9px;color:var(--muted);font-weight:550;font-size:13px}
+ .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:var(--muted);font-weight:550;font-size:14px}
  .nav a:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
  .nav a.active{background:var(--indigo-bg);color:var(--indigo-ink)}
- .nav .ico{width:15px;text-align:center;opacity:.85;font-size:13px}
- .navlabel{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:14px 11px 5px;font-weight:700}
+ .nav .ico{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--faint)}
+ .nav .ico svg{width:18px;height:18px;stroke:currentColor}
+ .nav a:hover .ico,.nav a.active .ico{color:currentColor}
+ .navlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:15px 11px 5px;font-weight:700}
  .side .grow{flex:1;min-height:12px}
  .user{display:flex;align-items:center;gap:10px;padding:10px 8px;border-top:1px solid var(--line);margin-top:8px}
- .avatar{width:30px;height:30px;border-radius:50%;background:var(--indigo-bg);color:var(--indigo-ink);display:grid;place-items:center;font-size:11px;font-weight:700}
- .user .un{font-size:12.5px;font-weight:600} .user .ue{font-size:11px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;flex:none;background:var(--indigo-bg)}
+ .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+ .user .un{font-size:13.5px;font-weight:600} .user .ue{font-size:11.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  /* topbar */
  .topbar{display:flex;align-items:center;gap:10px;padding:13px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--panel);flex:none}
  .burger{display:none;font-size:19px;background:none;border:0;color:var(--ink);cursor:pointer}
@@ -624,26 +628,26 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 
  <aside class="side">
   <div class="brand">
-   <div class="logo">r</div>
+   <div class="logo"><svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="url(#rg)"/><path d="M10.5 19.2 L20 11 L29.5 19.2" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.4 18.4 V28.6 H26.6 V18.4" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.4 28.6 V24 a2.6 2.6 0 0 1 5.2 0 V28.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6f67f0"/><stop offset=".55" stop-color="#a855f7"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs></svg></div>
    <div><div class="bt">roost</div><div class="bs">Control panel</div></div>
   </div>
   <nav class="nav">
    <div class="navlabel">Resources</div>
-   <a href="#" class="navf active" data-cat=""><span class="ico">▦</span> All apps</a>
-   <a href="#" class="navf" data-cat="Main apps"><span class="ico">◆</span> Main apps</a>
-   <a href="#" class="navf" data-cat="Utilities"><span class="ico">◈</span> Utilities</a>
-   <a href="#" class="navf" data-cat="Workers"><span class="ico">⚙</span> Workers</a>
+   <a href="#" class="navf active" data-cat=""><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
+   <a href="#" class="navf" data-cat="Main apps"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg></span> Main apps</a>
+   <a href="#" class="navf" data-cat="Utilities"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.3"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.3"/></svg></span> Utilities</a>
+   <a href="#" class="navf" data-cat="Workers"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="M3.3 7 12 12l8.7-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg></span> Workers</a>
    <div class="navlabel">Monitoring</div>
-   <a href="#attention" data-scroll="attention"><span class="ico">⚠</span> Attention</a>
-   <a href="#processing" data-scroll="processing"><span class="ico">◷</span> Activity</a>
+   <a href="#attention" data-scroll="attention"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Attention</a>
+   <a href="#processing" data-scroll="processing"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Activity</a>
    <div class="navlabel">Manage</div>
-   <a href="#removed" data-scroll="removed"><span class="ico">↺</span> Removed</a>
-   <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico">↗</span> Repository</a>
+   <a href="#removed" data-scroll="removed"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg></span> Removed</a>
+   <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span> Repository</a>
   </nav>
   <div class="grow"></div>
   <div class="user">
-   <div class="avatar">RB</div>
-   <div style="min-width:0"><div class="un">Admin</div><div class="ue">roost control</div></div>
+   <div class="avatar"><img src="https://github.com/cdrrazan.png?size=80" alt="Rajan Bhattarai" referrerpolicy="no-referrer"></div>
+   <div style="min-width:0"><div class="un">Rajan Bhattarai</div><div class="ue">@cdrrazan</div></div>
   </div>
  </aside>
 
