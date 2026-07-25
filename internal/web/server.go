@@ -446,7 +446,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .shell{width:100vw;height:100vh;background:var(--bg);overflow:hidden;display:grid;grid-template-columns:246px minmax(0,1fr)}
  .content{display:flex;flex-direction:column;min-width:0;overflow:hidden}
  /* sidebar — fixed column, scrolls on its own */
- .side{border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto}
+ .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto}
  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px}
  .logo{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);flex:none;overflow:hidden}
  .logo svg{width:100%;height:100%;display:block}
