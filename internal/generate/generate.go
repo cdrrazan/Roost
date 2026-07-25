@@ -340,12 +340,17 @@ type composeData struct {
 	NeedsMySQL    bool
 	NeedsPostgres bool
 	NeedsRedis    bool
+	// ControlHost is non-empty when the `roost web` panel is exposed; it
+	// makes Caddy add a host-gateway extra_host so it can reach the panel
+	// running on the host.
+	ControlHost string
 }
 
 // RenderCompose renders compose.yml. buildDir is where generated
 // artifacts live, used for Dockerfile and init-script mount paths.
-func RenderCompose(buildDir string, apps []App) ([]byte, error) {
-	data := composeData{BuildDir: buildDir}
+// controlHost, when set, gives Caddy a route to the host-run web panel.
+func RenderCompose(buildDir string, apps []App, controlHost string) ([]byte, error) {
+	data := composeData{BuildDir: buildDir, ControlHost: controlHost}
 	// seed.env lives next to build/ under ~/.roost; its pairs are shared
 	// across every app so demo seeds land the same super-admin login.
 	seed := loadSeedEnv(filepath.Dir(buildDir))
@@ -369,10 +374,18 @@ func RenderCompose(buildDir string, apps []App) ([]byte, error) {
 	return render("compose.yml.tmpl", data)
 }
 
+// caddyData is the Caddyfile template input: the routed apps plus an
+// optional control-panel host.
+type caddyData struct {
+	Apps        []App
+	ControlHost string
+}
+
 // RenderCaddyfile renders host-based routing on plain :80 with
 // automatic HTTPS off (Cloudflare terminates TLS at the edge). Worker
-// apps have no HTTP server, so they get no route.
-func RenderCaddyfile(apps []App) ([]byte, error) {
+// apps have no HTTP server, so they get no route. controlHost, when set,
+// adds a route to the `roost web` panel running on the host.
+func RenderCaddyfile(apps []App, controlHost string) ([]byte, error) {
 	routed := make([]App, 0, len(apps))
 	for _, app := range apps {
 		if app.Worker {
@@ -380,7 +393,7 @@ func RenderCaddyfile(apps []App) ([]byte, error) {
 		}
 		routed = append(routed, app)
 	}
-	return render("Caddyfile.tmpl", routed)
+	return render("Caddyfile.tmpl", caddyData{Apps: routed, ControlHost: controlHost})
 }
 
 // RenderMySQLInit renders mysql-init.sql: one database per mysql app,
@@ -508,7 +521,7 @@ func render(name string, data any) ([]byte, error) {
 // written. Apps with their own Dockerfile get none generated; init
 // scripts are only written (and stale ones removed) for databases in
 // use.
-func Generate(buildDir string, apps []App) ([]string, error) {
+func Generate(buildDir string, apps []App, controlHost string) ([]string, error) {
 	dockerfilesDir := filepath.Join(buildDir, "dockerfiles")
 	// The dockerfiles dir is wholly roost-generated: clear it so
 	// removed apps don't leave stale Dockerfiles behind.
@@ -529,7 +542,7 @@ func Generate(buildDir string, apps []App) ([]string, error) {
 		return nil
 	}
 
-	compose, err := RenderCompose(buildDir, apps)
+	compose, err := RenderCompose(buildDir, apps, controlHost)
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +550,7 @@ func Generate(buildDir string, apps []App) ([]string, error) {
 		return nil, err
 	}
 
-	caddy, err := RenderCaddyfile(apps)
+	caddy, err := RenderCaddyfile(apps, controlHost)
 	if err != nil {
 		return nil, err
 	}

@@ -14,19 +14,22 @@ import (
 )
 
 // loadPlanned loads config, resolves hostnames, and plans generation,
-// printing skip notices as it goes.
-func loadPlanned(cmd *cobra.Command, flags *rootFlags) ([]generate.App, error) {
+// printing skip notices as it goes. It also returns the configured control
+// host (empty when unset) so callers that regenerate artifacts can route the
+// web panel.
+func loadPlanned(cmd *cobra.Command, flags *rootFlags) ([]generate.App, string, error) {
 	cfg, resolved, skipped, err := loadResolved(flags)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	for _, app := range skipped {
 		cmd.Printf("skipped: %s (%s)\n", app.Name, app.Reason)
 	}
 	if len(resolved) == 0 {
-		return nil, nil
+		return nil, cfg.ControlHost, nil
 	}
-	return generate.Plan(cfg, resolved)
+	apps, err := generate.Plan(cfg, resolved)
+	return apps, cfg.ControlHost, err
 }
 
 // newRunner builds the real-shell compose runner against the standard
@@ -52,7 +55,7 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 		Short: "Generate artifacts and start every app, routed and live",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			apps, err := loadPlanned(cmd, flags)
+			apps, controlHost, err := loadPlanned(cmd, flags)
 			if err != nil {
 				return err
 			}
@@ -64,7 +67,7 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := generate.Generate(dir, apps); err != nil {
+			if _, err := generate.Generate(dir, apps, controlHost); err != nil {
 				return err
 			}
 			r := runner.New(dir)
@@ -197,7 +200,7 @@ func newStatusCmd(flags *rootFlags) *cobra.Command {
 		Short: "Per-app state, health, memory, and public URL",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			apps, err := loadPlanned(cmd, flags)
+			apps, _, err := loadPlanned(cmd, flags)
 			if err != nil {
 				return err
 			}

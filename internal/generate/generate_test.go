@@ -61,7 +61,7 @@ func sampleApps() []App {
 }
 
 func TestRenderCompose(t *testing.T) {
-	out, err := RenderCompose("/home/u/.roost/build", sampleApps())
+	out, err := RenderCompose("/home/u/.roost/build", sampleApps(), "")
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestRenderComposeInjectsSeedEnv(t *testing.T) {
 		// Static apps carry no env at all; nothing to seed.
 		{Name: "site", FQDN: "site.example.com", Path: "/apps/site", Framework: "static", Port: 80, Memory: "512m"},
 	}
-	out, err := RenderCompose(buildDir, apps)
+	out, err := RenderCompose(buildDir, apps, "")
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestRenderComposeNoSeedFileIsClean(t *testing.T) {
 	// Missing ~/.roost/seed.env is not an error and injects nothing.
 	home := t.TempDir()
 	apps := []App{{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m"}}
-	out, err := RenderCompose(filepath.Join(home, "build"), apps)
+	out, err := RenderCompose(filepath.Join(home, "build"), apps, "")
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestRenderComposeNoMountForCompiledApps(t *testing.T) {
 		{Name: "svc", FQDN: "svc.example.com", Path: "/apps/svc", Framework: "node", Port: 3000, StartCommand: "npm run start", Memory: "512m"},
 		{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m"},
 	}
-	out, err := RenderCompose("/b", apps)
+	out, err := RenderCompose("/b", apps, "")
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -367,7 +367,7 @@ func TestRenderComposeOmitsUnusedDatabases(t *testing.T) {
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",
 		Framework: "static", Port: 80, Memory: "512m",
 	}}
-	out, err := RenderCompose("/b", apps)
+	out, err := RenderCompose("/b", apps, "")
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestRenderComposeOmitsUnusedDatabases(t *testing.T) {
 }
 
 func TestRenderCaddyfile(t *testing.T) {
-	out, err := RenderCaddyfile(sampleApps())
+	out, err := RenderCaddyfile(sampleApps(), "")
 	if err != nil {
 		t.Fatalf("RenderCaddyfile: %v", err)
 	}
@@ -543,7 +543,7 @@ func TestRenderDockerfile(t *testing.T) {
 
 func TestGenerateWritesArtifacts(t *testing.T) {
 	buildDir := filepath.Join(t.TempDir(), "build")
-	written, err := Generate(buildDir, sampleApps())
+	written, err := Generate(buildDir, sampleApps(), "")
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -579,7 +579,7 @@ func TestGenerateOmitsUnusedInitScripts(t *testing.T) {
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",
 		Framework: "static", Port: 80, Memory: "512m",
 	}}
-	if _, err := Generate(buildDir, apps); err != nil {
+	if _, err := Generate(buildDir, apps, ""); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(buildDir, "mysql-init.sql")); err == nil {
@@ -692,4 +692,39 @@ func TestPlan(t *testing.T) {
 			t.Errorf("error %q should name the app", err)
 		}
 	})
+}
+
+func TestControlHostRoute(t *testing.T) {
+	apps := sampleApps()
+
+	// With a control host set, the Caddyfile routes it to the host-run panel
+	// and compose gives Caddy a host-gateway extra_host to reach it.
+	caddy, err := RenderCaddyfile(apps, "roost.rsynk.com")
+	if err != nil {
+		t.Fatalf("RenderCaddyfile: %v", err)
+	}
+	cs := string(caddy)
+	if !strings.Contains(cs, "http://roost.rsynk.com") {
+		t.Error("Caddyfile missing control host route")
+	}
+	if !strings.Contains(cs, "reverse_proxy host.docker.internal:4600") {
+		t.Error("Caddyfile control route not pointed at the host panel")
+	}
+	compose, err := RenderCompose("/b", apps, "roost.rsynk.com")
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	if !strings.Contains(string(compose), "host.docker.internal:host-gateway") {
+		t.Error("compose missing host-gateway extra_host for control panel")
+	}
+
+	// With no control host, neither the route nor the extra_host appears.
+	caddy2, _ := RenderCaddyfile(apps, "")
+	if strings.Contains(string(caddy2), "host.docker.internal") {
+		t.Error("control route leaked when control host unset")
+	}
+	compose2, _ := RenderCompose("/b", apps, "")
+	if strings.Contains(string(compose2), "host-gateway") {
+		t.Error("extra_host leaked when control host unset")
+	}
 }

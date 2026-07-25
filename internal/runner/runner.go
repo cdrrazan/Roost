@@ -213,6 +213,15 @@ func (r *Runner) Stop(app string) error {
 	return nil
 }
 
+// Resume starts an already-created but stopped app container without
+// rebuilding — the fast counterpart to Stop.
+func (r *Runner) Resume(app string) error {
+	if _, err := r.run(r.compose("start", app)...); err != nil {
+		return fmt.Errorf("resume %q: %w", app, err)
+	}
+	return nil
+}
+
 // Down stops and removes the whole stack.
 func (r *Runner) Down() error {
 	if _, err := r.run(r.compose("down", "--remove-orphans")...); err != nil {

@@ -53,7 +53,7 @@ func newGenerateCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			written, err := generate.Generate(dir, apps)
+			written, err := generate.Generate(dir, apps, cfg.ControlHost)
 			if err != nil {
 				return err
 			}
