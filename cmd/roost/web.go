@@ -106,6 +106,53 @@ func (c *stackController) Down() error {
 	return stopApps(r, apps)
 }
 
+// resolveAppName reports nil only if name matches a configured app. It is the
+// gate on the per-app panel actions: without it a crafted POST could name an
+// infra service (caddy, cloudflared) and the panel would stop the tunnel to
+// itself.
+func resolveAppName(apps []generate.App, name string) error {
+	for _, a := range apps {
+		if a.Name == name {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown app %q", name)
+}
+
+// StartApp resumes one stopped app container (fast — no rebuild), after
+// checking the name resolves to a configured app.
+func (c *stackController) StartApp(name string) error {
+	apps, _, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return err
+	}
+	if err := resolveAppName(apps, name); err != nil {
+		return err
+	}
+	r, err := newRunner()
+	if err != nil {
+		return err
+	}
+	return r.Resume(name)
+}
+
+// StopApp stops one app container, leaving shared infrastructure running, after
+// checking the name resolves to a configured app.
+func (c *stackController) StopApp(name string) error {
+	apps, _, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return err
+	}
+	if err := resolveAppName(apps, name); err != nil {
+		return err
+	}
+	r, err := newRunner()
+	if err != nil {
+		return err
+	}
+	return r.Stop(name)
+}
+
 // newWebCmd serves the control panel. It is a long-running process, meant to be
 // supervised (systemd/launchd) *outside* the stack it controls and fronted by
 // Cloudflare Access. Default bind is loopback; expose it only through the

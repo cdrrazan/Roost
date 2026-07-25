@@ -427,9 +427,12 @@
     <div class="card">
       <h3>Can I control the whole stack from a browser?</h3>
       <p>Yes — <span class="k">roost web</span> serves a control panel: a live
-      status table plus <b>Start apps</b> / <b>Stop apps</b> buttons. It runs as a
+      status table with whole-stack <b>Start apps</b> / <b>Stop apps</b> buttons
+      and per-row <b>Start</b> / <b>Stop</b> for each app. It runs as a
       <b>host process outside</b> the stack, so stopping the apps can't take down
-      the thing that starts them back up. It binds <span class="k">127.0.0.1:4600</span>
+      the thing that starts them back up. Per-app actions are name-checked against
+      your config, so the panel can never toggle an infra container. It binds
+      <span class="k">127.0.0.1:4600</span>
       by default — expose it only behind <b>Cloudflare Access</b>
       (<span class="k">control_host:</span> routes a hostname to it), with
       <span class="k">--token</span> as defense-in-depth. An unprotected panel lets

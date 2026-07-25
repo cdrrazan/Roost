@@ -74,3 +74,20 @@ func TestStartAppsJoinsErrors(t *testing.T) {
 		t.Fatal("expected an error from the failing app")
 	}
 }
+
+// resolveAppName gates the per-app panel actions: only a name that resolves to
+// a configured app is accepted, so the panel can never stop/start an infra
+// container (caddy, cloudflared) by posting an arbitrary service name.
+func TestResolveAppNameAcceptsKnown(t *testing.T) {
+	apps := []generate.App{{Name: "blog"}, {Name: "shop"}}
+	if err := resolveAppName(apps, "shop"); err != nil {
+		t.Fatalf("known app rejected: %v", err)
+	}
+}
+
+func TestResolveAppNameRejectsUnknown(t *testing.T) {
+	apps := []generate.App{{Name: "blog"}}
+	if err := resolveAppName(apps, "caddy"); err == nil {
+		t.Fatal("unknown app (infra service) must be rejected")
+	}
+}

@@ -345,7 +345,7 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 | `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
-| `roost web [--addr] [--token]` | serve a control panel (status + Start/Stop apps) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
+| `roost web [--addr] [--token]` | serve a control panel (status + whole-stack and per-app Start/Stop) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
 | `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
@@ -516,10 +516,13 @@ doesn't take the backups with it.
 <details>
 <summary><b>Can I control the whole stack from a browser?</b></summary>
 
-Yes — `roost web` serves a small control panel: a live status table plus
-**Start apps** / **Stop apps** buttons. It runs as a **host process outside** the
+Yes — `roost web` serves a small control panel: a live status table with
+whole-stack **Start apps** / **Stop apps** buttons *and* per-row **Start** /
+**Stop** for each individual app. It runs as a **host process outside** the
 compose stack, so stopping the apps can't take down the thing that starts them
-back up. It binds `127.0.0.1:4600` by default; expose it only behind
+back up. Per-app actions are name-checked against your config, so the panel can
+never toggle an infra container (Caddy, cloudflared). It binds
+`127.0.0.1:4600` by default; expose it only behind
 **Cloudflare Access** (set `control_host:` in `config.yml` to route a hostname to
 it), and set `--token` / `$ROOST_WEB_TOKEN` as defense-in-depth on the on/off
 actions. Anyone who reaches an unprotected panel can stop and start your stack.

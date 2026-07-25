@@ -18,12 +18,17 @@ import (
 	"github.com/cdrrazan/roost/internal/runner"
 )
 
-// Controller is the stack behind the panel. It is deliberately tiny: v1 is
-// whole-stack on/off plus status.
+// Controller is the stack behind the panel: whole-stack on/off, per-app
+// on/off, and status.
 type Controller interface {
 	Status() ([]runner.AppStatus, error)
 	Up() error
 	Down() error
+	// StartApp resumes one app's container; StopApp stops it. The
+	// implementation must reject any name that is not a configured app so the
+	// panel cannot toggle infra containers (caddy, cloudflared).
+	StartApp(app string) error
+	StopApp(app string) error
 }
 
 // Server renders the panel and serialises on/off actions. A single in-flight
@@ -50,6 +55,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleStatus)
 	mux.HandleFunc("POST /up", s.guard(s.handleAction("starting", s.ctrl.Up)))
 	mux.HandleFunc("POST /down", s.guard(s.handleAction("stopping", s.ctrl.Down)))
+	mux.HandleFunc("POST /app/up", s.guard(s.handleAppAction("starting", s.ctrl.StartApp)))
+	mux.HandleFunc("POST /app/down", s.guard(s.handleAppAction("stopping", s.ctrl.StopApp)))
 	return mux
 }
 
@@ -73,34 +80,54 @@ func (s *Server) guard(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// handleAction starts fn in the background (docker compose can take minutes)
-// under the busy guard, then redirects back to the status page. A second
-// action while one is in flight is a no-op redirect.
+// handleAction runs a whole-stack action.
 func (s *Server) handleAction(verb string, fn func() error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.mu.Lock()
-		if s.busy != "" {
-			s.mu.Unlock()
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+		s.runAction(w, r, verb, fn)
+	}
+}
+
+// handleAppAction runs a per-app action. The target app arrives in the "app"
+// form field; a missing name is a 400 (the panel always sends it). The busy
+// label names the app so the status page shows which one is in flight.
+func (s *Server) handleAppAction(verb string, fn func(string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		app := r.FormValue("app")
+		if app == "" {
+			http.Error(w, "missing app", http.StatusBadRequest)
 			return
 		}
-		s.busy = verb
-		s.mu.Unlock()
-
-		go func() {
-			err := fn()
-			s.mu.Lock()
-			if err != nil {
-				s.last = fmt.Sprintf("%s failed: %v", verb, err)
-			} else {
-				s.last = verb + " complete"
-			}
-			s.busy = ""
-			s.mu.Unlock()
-		}()
-
-		http.Redirect(w, r, "/", http.StatusSeeOther)
+		s.runAction(w, r, verb+" "+app, func() error { return fn(app) })
 	}
+}
+
+// runAction starts fn in the background (docker compose can take minutes) under
+// the busy guard, then redirects back to the status page. A second action while
+// one is in flight is a no-op redirect — the single busy flag serialises every
+// action (whole-stack and per-app) so two docker compose runs never overlap.
+func (s *Server) runAction(w http.ResponseWriter, r *http.Request, verb string, fn func() error) {
+	s.mu.Lock()
+	if s.busy != "" {
+		s.mu.Unlock()
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	s.busy = verb
+	s.mu.Unlock()
+
+	go func() {
+		err := fn()
+		s.mu.Lock()
+		if err != nil {
+			s.last = fmt.Sprintf("%s failed: %v", verb, err)
+		} else {
+			s.last = verb + " complete"
+		}
+		s.busy = ""
+		s.mu.Unlock()
+	}()
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 type statusView struct {
@@ -139,6 +166,7 @@ var statusTmpl = template.Must(template.New("status").Parse(`<!doctype html>
  .running{color:#0a7d33;font-weight:600}.down{color:#b00020;font-weight:600}
  form{display:inline} button{font:inherit;padding:.5rem 1.1rem;border:0;border-radius:6px;cursor:pointer;color:#fff}
  .on{background:#0a7d33}.off{background:#b00020} button[disabled]{opacity:.5;cursor:not-allowed}
+ td.act form{margin-right:.3rem} td.act button{padding:.3rem .7rem;font-size:.85rem}
  .msg{background:#f3f4f6;padding:.6rem .8rem;border-radius:6px} a{color:#2563eb}
  @media(prefers-color-scheme:dark){body{background:#111;color:#eee}th,td{border-color:#333}.msg{background:#1c1c1c}}
 </style></head><body>
@@ -151,12 +179,16 @@ var statusTmpl = template.Must(template.New("status").Parse(`<!doctype html>
 </p>
 <p style="font-size:.85rem;color:#666">Stop leaves the proxy &amp; tunnel running, so this panel stays reachable.</p>
 {{if .Error}}<p class="down">status error: {{.Error}}</p>{{else}}
-<table><thead><tr><th>App</th><th>State</th><th>Health</th><th>Memory</th><th>URL</th></tr></thead><tbody>
+<table><thead><tr><th>App</th><th>State</th><th>Health</th><th>Memory</th><th>URL</th><th>Actions</th></tr></thead><tbody>
 {{range .Apps}}<tr>
  <td>{{.Name}}</td>
  <td class="{{if eq .State "running"}}running{{else}}down{{end}}">{{.State}}</td>
  <td>{{.Health}}</td><td>{{.Memory}}</td>
  <td>{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{end}}</td>
+ <td class="act">
+  <form method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="on" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
+  <form method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="off" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>
+ </td>
 </tr>{{end}}
 </tbody></table>{{end}}
 </body></html>`))

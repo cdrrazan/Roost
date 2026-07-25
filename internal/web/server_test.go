@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,13 +13,17 @@ import (
 )
 
 // fakeController records calls and never touches Docker. If release is
-// non-nil, Up/Down block on it so a test can observe the "busy" window.
+// non-nil, Up/Down/StartApp/StopApp block on it so a test can observe the
+// "busy" window.
 type fakeController struct {
 	statuses       []runner.AppStatus
 	statusErr      error
 	up, down       int32
 	upErr, downErr error
 	release        chan struct{}
+
+	mu               sync.Mutex
+	started, stopped []string
 }
 
 func (f *fakeController) Status() ([]runner.AppStatus, error) { return f.statuses, f.statusErr }
@@ -37,6 +42,38 @@ func (f *fakeController) Down() error {
 		<-f.release
 	}
 	return f.downErr
+}
+
+func (f *fakeController) StartApp(name string) error {
+	f.mu.Lock()
+	f.started = append(f.started, name)
+	f.mu.Unlock()
+	if f.release != nil {
+		<-f.release
+	}
+	return f.upErr
+}
+
+func (f *fakeController) StopApp(name string) error {
+	f.mu.Lock()
+	f.stopped = append(f.stopped, name)
+	f.mu.Unlock()
+	if f.release != nil {
+		<-f.release
+	}
+	return f.downErr
+}
+
+func (f *fakeController) startedApps() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.started...)
+}
+
+func (f *fakeController) stoppedApps() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.stopped...)
 }
 
 func waitFor(t *testing.T, cond func() bool) {
@@ -125,6 +162,63 @@ func TestTokenGuard(t *testing.T) {
 		t.Fatalf("token code = %d, want 303", rr.Code)
 	}
 	waitFor(t, func() bool { return atomic.LoadInt32(&f.up) == 1 })
+}
+
+func TestAppUpInvokesController(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/app/up?app=blog", nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303", rr.Code)
+	}
+	waitFor(t, func() bool {
+		s := f.startedApps()
+		return len(s) == 1 && s[0] == "blog"
+	})
+	if len(f.stoppedApps()) != 0 {
+		t.Error("StopApp should not have been called")
+	}
+}
+
+func TestAppDownInvokesController(t *testing.T) {
+	f := &fakeController{}
+	serve(NewServer(f, ""), "POST", "/app/down?app=blog", nil)
+	waitFor(t, func() bool {
+		s := f.stoppedApps()
+		return len(s) == 1 && s[0] == "blog"
+	})
+}
+
+func TestAppActionRequiresApp(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/app/up", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing-app code = %d, want 400", rr.Code)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if len(f.startedApps()) != 0 {
+		t.Error("StartApp ran without an app name")
+	}
+}
+
+func TestAppActionHonorsTokenGuard(t *testing.T) {
+	f := &fakeController{}
+	srv := NewServer(f, "s3cret")
+	if rr := serve(srv, "POST", "/app/down?app=blog", nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("no-token code = %d, want 403", rr.Code)
+	}
+	if len(f.stoppedApps()) != 0 {
+		t.Fatal("StopApp ran without a valid token")
+	}
+}
+
+func TestStatusRendersPerAppControls(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "blog", State: "running"}}}
+	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
+	for _, want := range []string{`action="/app/up"`, `action="/app/down"`, `value="blog"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing per-app control %q", want)
+		}
+	}
 }
 
 func TestBusyBlocksConcurrentAction(t *testing.T) {
