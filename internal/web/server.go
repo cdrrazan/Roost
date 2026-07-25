@@ -542,9 +542,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .grouphdr{display:flex;align-items:center;gap:9px;padding:14px 18px 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
  .grouphdr .gc{margin-left:auto;font-size:11px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:2px 9px;text-transform:none;letter-spacing:0}
  .group.hide{display:none}
- .glist.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:12px;padding:4px 16px 14px}
+ .glist.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;padding:6px 18px 18px}
  .srv{display:flex;flex-direction:column;gap:11px;padding:13px 18px;border-top:1px solid var(--line2)}
- .glist.grid .srv{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--panel2)}
+ .glist.grid .srv{border:1px solid var(--line);border-radius:14px;padding:18px;gap:14px;background:var(--panel2)}
  .glist.grid .grouphdr{padding-left:4px}
  .glist.grid .srv-top{flex-wrap:wrap;align-items:center}
  .glist.grid .srv-idb{flex:1 1 55%}
