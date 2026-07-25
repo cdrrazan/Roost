@@ -407,7 +407,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iMTEiIGZpbGw9InVybCgjcmcpIi8+PHBhdGggZD0iTTEwLjUgMTkuMiBMMjAgMTEgTDI5LjUgMTkuMiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEzLjQgMTguNCBWMjguNiBIMjYuNiBWMTguNCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE3LjQgMjguNiBWMjQgYTIuNiAyLjYgMCAwIDEgNS4yIDAgVjI4LjYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0icmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjNmY2N2YwIi8+PHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiNhODU1ZjciLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiNlYzQ4OTkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4K">
 <style>
  :root{
-  --bg1:#fdf1f8; --bg2:#eef1ff; --bg3:#ecfdfb; --bg4:#fff2f1;
+  --bg:#eef0f4; --bg1:#fdf1f8; --bg2:#eef1ff; --bg3:#ecfdfb; --bg4:#fff2f1;
+  color-scheme:light;
   --panel:#ffffff; --panel2:#f8f9fc; --line:#ecedf3; --line2:#f2f3f7; --track:#edeff5;
   --ink:#12141c; --muted:#5f6675; --faint:#98a0b0;
   --brand:#5b54e6; --brand-ink:#fff;
@@ -423,7 +424,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
  }
  :root[data-theme="dark"]{
-  --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
+  --bg:#0a0d13; --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
+  color-scheme:dark;
   --panel:#12161f; --panel2:#161c27; --line:#222a38; --line2:#1b2230; --track:#212836;
   --ink:#e7ecf5; --muted:#9aa4b6; --faint:#68738a;
   --brand:#7c75f5;
@@ -436,6 +438,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
  }
  *{box-sizing:border-box}
+ html{background:var(--bg)}
  body{margin:0;height:100vh;overflow:hidden;color:var(--ink);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased;background:var(--bg)}
  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
  h1,h2,h3{margin:0}
