@@ -15,6 +15,10 @@ directory and relative paths resolve against the config file's own directory.
 ```yaml
 domain: demo.example.com   # OPTIONAL fallback for bare-path apps
 control_host: control.example.com  # OPTIONAL; route this host to `roost web`
+server:                    # OPTIONAL; display-only metadata for the panel
+  ip: 203.0.113.10         #   shown on the Server card + used in the ssh command
+  ssh_user: ubuntu         #   -> ssh ubuntu@203.0.113.10
+  label: Oracle Cloud · E5.Flex
 include:                   # OPTIONAL glob(s) pulling apps from other files
   - apps/*.yml
 tunnel:
@@ -33,6 +37,11 @@ apps: [...]                # see below
   host (`host.docker.internal:4600`). Put **Cloudflare Access** in front of it;
   an unprotected panel lets anyone who reaches the URL start/stop your stack (and
   the Add form builds arbitrary code). Omit it and the panel is loopback-only.
+- **`server:`** — display-only host metadata for the panel's Server card
+  (`ip`, `ssh_user`, `label`). The card also auto-shows disk usage, hostname, OS,
+  CPU/RAM, and uptime; this block just supplies the public IP (not auto-detectable)
+  and the SSH login command. No effect on how roost runs — and the card only shows
+  behind your Access-gated `control_host`.
 
 ## App entries — two forms, freely mixed
 

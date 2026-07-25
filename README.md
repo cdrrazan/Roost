@@ -358,6 +358,10 @@ it does:
   **Processing** log. Remove drops it (optionally deleting the image to free
   disk) and lists it under **Removed** for one-click re-add. Shared database
   volumes are never touched.
+- **At a glance** — donut gauges for fleet + memory and a per-app memory bar
+  chart up top; a right rail with an Overview, a **Server** card (disk, host, OS,
+  CPU/RAM, uptime, and the IP + a copyable SSH login from the `server:` block),
+  recent activity, and the removed-apps list.
 - **Comfort** — search, status filter, **list / grid** views, light / **dark**
   mode, and the whole thing is mobile-responsive.
 
