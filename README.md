@@ -661,6 +661,9 @@ is the supervisor.
   [demo with fake data](examples/demo/config.yml) and an
   [`include` walkthrough](examples/includes/).
 - **[Website](https://roost.app.rsynk.com)** — one-page overview ([source](site/)).
+- **[Ops scripts](scripts/)** — running a fleet on an always-on box: an encrypted
+  backup (DB dumps + `age`-encrypted secrets → R2) and a one-shot bootstrap that
+  rebuilds a fresh VM. The tunnel is IP-independent, so a new box needs no DNS change.
 - **[Roadmap](ROADMAP.md)** — what's next, and the non-goals that keep roost small.
 - **[Contributing](CONTRIBUTING.md)** — house rules (TDD, no real Docker/network in
   tests, two dependencies) and how to add a framework.
