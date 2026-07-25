@@ -399,6 +399,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
+<script>(function(){try{var t=localStorage.getItem("roost-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;}catch(e){}})();</script>
 {{if .Busy}}<meta http-equiv="refresh" content="3">{{end}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -421,7 +422,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   --font:"Google Sans","Product Sans","Google Sans Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
  }
- @media(prefers-color-scheme:dark){:root{
+ :root[data-theme="dark"]{
   --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
   --panel:#12161f; --panel2:#161c27; --line:#222a38; --line2:#1b2230; --track:#212836;
   --ink:#e7ecf5; --muted:#9aa4b6; --faint:#68738a;
@@ -433,7 +434,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   --indigo-bg:#191d38; --indigo-ink:#a9a3ff;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -18px rgba(0,0,0,.7);
   --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
- }}
+ }
  *{box-sizing:border-box}
  body{margin:0;height:100vh;overflow:hidden;color:var(--ink);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased;background:var(--bg)}
  a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
@@ -472,6 +473,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .toggle{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px}
  .toggle button{font:inherit;font-size:12.5px;font-weight:600;border:0;background:none;color:var(--muted);padding:5px 10px;border-radius:7px;cursor:pointer}
  .toggle button.active{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
+ .iconbtn{width:37px;height:37px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
+ .iconbtn:hover{color:var(--ink);background:var(--panel2)}
+ .iconbtn svg{width:18px;height:18px;stroke:currentColor}
+ .iconbtn .sun{display:none} :root[data-theme="dark"] .iconbtn .moon{display:none} :root[data-theme="dark"] .iconbtn .sun{display:inline-flex}
+ .user .logout{margin-left:auto;flex:none;width:32px;height:32px;border-radius:9px;color:var(--faint);display:inline-flex;align-items:center;justify-content:center}
+ .user .logout:hover{background:var(--panel2);color:var(--danger);text-decoration:none}
+ .user .logout svg{width:17px;height:17px;stroke:currentColor}
  /* buttons */
  .btn{font:inherit;font-weight:600;font-size:13px;border:1px solid var(--line);border-radius:10px;padding:8px 13px;cursor:pointer;
   color:var(--ink);background:var(--panel);transition:.12s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
@@ -505,7 +513,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .att-s{font-size:11.5px;color:var(--muted);margin-top:3px}
  .att-b{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 7px;border-radius:999px}
  .att.red .att-b{background:#fff;color:var(--red-ink)} .att.amber .att-b{background:#fff;color:var(--amber-ink)}
- @media(prefers-color-scheme:dark){.att.red .att-b,.att.amber .att-b{background:rgba(255,255,255,.08)}}
+ :root[data-theme="dark"] .att.red .att-b,:root[data-theme="dark"] .att.amber .att-b{background:rgba(255,255,255,.08)}
  .allclear{display:flex;align-items:center;gap:10px;padding:16px 18px;color:var(--teal-ink);font-weight:600;font-size:13.5px}
  .allclear .ico{width:26px;height:26px;border-radius:8px;background:var(--teal-bg);display:grid;place-items:center}
  /* metric cards */
@@ -649,7 +657,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   <div class="grow"></div>
   <div class="user">
    <div class="avatar"><img src="https://github.com/cdrrazan.png?size=80" alt="Rajan Bhattarai" referrerpolicy="no-referrer"></div>
-   <div style="min-width:0"><div class="un">Rajan Bhattarai</div><div class="ue">@cdrrazan</div></div>
+   <div style="min-width:0;flex:1"><div class="un">Rajan Bhattarai</div><div class="ue">@cdrrazan</div></div>
+   <a class="logout" href="/cdn-cgi/access/logout" title="Sign out (Cloudflare Access)" aria-label="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
   </div>
  </aside>
 
@@ -662,6 +671,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <option value="running">Running</option>
     <option value="stopped">Stopped</option>
    </select>
+   <button class="iconbtn" id="themebtn" title="Toggle light / dark" aria-label="Toggle theme"><span class="moon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></span><span class="sun"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span></button>
    <div class="toggle"><button data-view="list">▤ List</button><button data-view="grid">▦ Grid</button></div>
    <form class="inline" method="post" action="/up">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-ok" {{if .Busy}}disabled{{end}}>Start all</button></form>
    <form class="inline" method="post" action="/down">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn" {{if .Busy}}disabled{{end}}>Stop all</button></form>
@@ -867,6 +877,12 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  if(o&&dlg)o.addEventListener("click",function(){dlg.showModal();});
  if(c&&dlg)c.addEventListener("click",function(){dlg.close();});
  if(dlg)dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});
+ var tb=document.getElementById("themebtn");
+ if(tb)tb.addEventListener("click",function(){
+  var d=document.documentElement.dataset.theme==="dark"?"light":"dark";
+  document.documentElement.dataset.theme=d;
+  try{localStorage.setItem("roost-theme",d);}catch(e){}
+ });
  var burger=document.getElementById("burger");
  if(burger)burger.addEventListener("click",function(){document.body.classList.toggle("nav-open");});
  document.querySelectorAll(".side .nav a:not(.navf)").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});
