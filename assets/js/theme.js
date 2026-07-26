@@ -3,7 +3,8 @@
 (function () {
   try {
     var r = document.documentElement;
-    var t = localStorage.getItem("fleet-theme") ||
+    var q = new URLSearchParams(location.search).get("theme"); // ?theme=dark|light preview override
+    var t = q || localStorage.getItem("fleet-theme") ||
       (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
     r.dataset.theme = t;
     if (localStorage.getItem("fleet-side") === "off") r.dataset.side = "off";
