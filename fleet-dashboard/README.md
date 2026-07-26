@@ -7,6 +7,24 @@ Live metrics · real reachability · incidents · command palette · light & dar
 
 `no framework` · `no build step` · `~30 KB CSS` · `light + dark` · `fully responsive`
 
+### [▶ Live demo](https://cdrrazan.github.io/Roost/) · [Components](https://cdrrazan.github.io/Roost/components.html) · [Status page](https://cdrrazan.github.io/Roost/status.html)
+
+</div>
+
+---
+
+## 📸 Preview
+
+![Fleet dashboard — light](docs/screenshots/dashboard-light.png)
+
+<div align="center">
+
+| Dark | Components |
+|---|---|
+| ![Dark](docs/screenshots/dashboard-dark.png) | ![Components](docs/screenshots/components.png) |
+| **Public status** | **Settings** |
+| ![Status](docs/screenshots/status.png) | ![Settings](docs/screenshots/settings.png) |
+
 </div>
 
 ---
