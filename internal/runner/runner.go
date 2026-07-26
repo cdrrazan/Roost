@@ -274,6 +274,7 @@ type AppStatus struct {
 	Memory   string // "used / cap" from docker stats, "" when unknown
 	URL      string
 	Category string // display grouping for the panel: main, utility, worker
+	Repo     string // browsable code-host URL for the app's git origin, "" if none
 }
 
 // psLine is the subset of `docker compose ps --format json` output we

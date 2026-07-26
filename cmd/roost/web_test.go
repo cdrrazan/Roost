@@ -2,6 +2,8 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -113,6 +115,41 @@ func TestDiffNewAppsNoneWhenUnchanged(t *testing.T) {
 
 // The add gate surfaces the first doctor failure — message and remedy — so the
 // panel's processing pane tells the user how to fix it, never a bare error.
+// repoURL reads an app's .git/config and normalizes the origin remote to a
+// browsable https URL, whatever protocol the clone used. No git remote → "".
+func TestRepoURL(t *testing.T) {
+	cases := []struct {
+		name   string
+		remote string // origin url in .git/config; "" means no .git at all
+		want   string
+	}{
+		{"scp-ssh", "git@github.com:cdrrazan/roost.git", "https://github.com/cdrrazan/roost"},
+		{"ssh-url", "ssh://git@github.com/cdrrazan/roost.git", "https://github.com/cdrrazan/roost"},
+		{"https", "https://github.com/cdrrazan/roost.git", "https://github.com/cdrrazan/roost"},
+		{"https-no-suffix", "https://github.com/cdrrazan/roost", "https://github.com/cdrrazan/roost"},
+		{"gitlab-ssh", "git@gitlab.com:group/thing.git", "https://gitlab.com/group/thing"},
+		{"no-repo", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.remote != "" {
+				gitdir := filepath.Join(dir, ".git")
+				if err := os.MkdirAll(gitdir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				cfg := "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = " + tc.remote + "\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+				if err := os.WriteFile(filepath.Join(gitdir, "config"), []byte(cfg), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := repoURL(dir); got != tc.want {
+				t.Errorf("repoURL = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFirstFailureMessageIncludesRemedy(t *testing.T) {
 	findings := []doctor.Finding{
 		{Level: doctor.OK, Message: "fine"},

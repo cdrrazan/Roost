@@ -169,6 +169,22 @@ func TestStatusRendersApps(t *testing.T) {
 	}
 }
 
+func TestStatusRendersRepoLink(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "keeparu", State: "running", URL: "https://keeparu.byaru.com", Repo: "https://github.com/cdrrazan/keeparu"},
+		{Name: "sure", State: "exited"}, // no repo → no link
+	}}
+	rr := serve(NewServer(f, ""), "GET", "/", nil)
+	body := rr.Body.String()
+	if !strings.Contains(body, `href="https://github.com/cdrrazan/keeparu"`) {
+		t.Error("body missing repo link for keeparu")
+	}
+	// The repo link must open the code host in a new tab, not navigate the panel.
+	if !strings.Contains(body, `href="https://github.com/cdrrazan/keeparu" target="_blank"`) {
+		t.Error("repo link should open in a new tab")
+	}
+}
+
 func TestStatusErrorShown(t *testing.T) {
 	f := &fakeController{statusErr: errString("compose ps failed")}
 	rr := serve(NewServer(f, ""), "GET", "/", nil)

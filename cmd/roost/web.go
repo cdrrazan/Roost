@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -39,7 +40,80 @@ func (c *stackController) Status() ([]runner.AppStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.Status(apps)
+	statuses, err := r.Status(apps)
+	if err != nil {
+		return nil, err
+	}
+	// Enrich each app with a browsable link to its git origin. Display-only,
+	// derived from the checked-out repo — no config to fill in for every app.
+	paths := make(map[string]string, len(apps))
+	for _, a := range apps {
+		paths[a.Name] = a.Path
+	}
+	for i := range statuses {
+		statuses[i].Repo = repoURL(paths[statuses[i].Name])
+	}
+	return statuses, nil
+}
+
+// repoURL reads path/.git/config and returns the origin remote normalized to a
+// browsable https URL (any host, any clone protocol). Returns "" when the path
+// isn't a git repo, has no origin, or the remote can't be parsed — the panel
+// simply omits the link then.
+func repoURL(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(path, ".git", "config"))
+	if err != nil {
+		return ""
+	}
+	var inOrigin bool
+	var raw string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			inOrigin = line == `[remote "origin"]`
+			continue
+		}
+		if inOrigin && strings.HasPrefix(line, "url") {
+			if _, v, ok := strings.Cut(line, "="); ok {
+				raw = strings.TrimSpace(v)
+				break
+			}
+		}
+	}
+	return normalizeRemote(raw)
+}
+
+// normalizeRemote turns any git remote URL into a browsable https URL, dropping
+// a trailing .git. Handles scp-style (git@host:owner/repo.git), ssh:// and
+// https:// forms. Returns "" for anything it can't confidently rewrite.
+func normalizeRemote(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	raw = strings.TrimSuffix(raw, ".git")
+	switch {
+	case strings.HasPrefix(raw, "https://"):
+		return raw
+	case strings.HasPrefix(raw, "ssh://"):
+		rest := strings.TrimPrefix(raw, "ssh://")
+		if i := strings.Index(rest, "@"); i >= 0 {
+			rest = rest[i+1:] // drop git@
+		}
+		return "https://" + rest
+	case strings.HasPrefix(raw, "git@"):
+		// git@host:owner/repo -> https://host/owner/repo
+		rest := strings.TrimPrefix(raw, "git@")
+		host, pathPart, ok := strings.Cut(rest, ":")
+		if !ok {
+			return ""
+		}
+		return "https://" + host + "/" + pathPart
+	default:
+		return ""
+	}
 }
 
 // appResumer is the runner subset Up needs: resume one stopped app container.
