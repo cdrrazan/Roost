@@ -368,7 +368,7 @@ func (s *Server) checkIncidents() {
 			s.roostDown = true
 			s.openIncident("", "control", err.Error(), now)
 			if primed {
-				out = append(out, note{"🔴 roost: control plane unreachable",
+				out = append(out, note{"Roost · control plane unreachable",
 					"roost web can't reach Docker:\n" + err.Error() + "\n\n" + now.Format(time.RFC1123) + link})
 			}
 		}
@@ -377,7 +377,7 @@ func (s *Server) checkIncidents() {
 			s.roostDown = false
 			s.resolveIncident("", now)
 			if primed {
-				out = append(out, note{"✅ roost: control plane recovered",
+				out = append(out, note{"Roost · control plane recovered",
 					"Docker is reachable again.\n\n" + now.Format(time.RFC1123) + link})
 			}
 		}
@@ -391,7 +391,7 @@ func (s *Server) checkIncidents() {
 			if healthy {
 				if seen && !prev {
 					dur := s.resolveIncident(a.Name, now)
-					out = append(out, note{"✅ roost: " + humanize(a.Name) + " recovered",
+					out = append(out, note{"Roost · " + humanize(a.Name) + " recovered",
 						humanize(a.Name) + " is back up" + downFor(dur) + ".\n\n" + a.URL + "\n" + now.Format(time.RFC1123) + link})
 				}
 				continue
@@ -400,7 +400,7 @@ func (s *Server) checkIncidents() {
 			if !seen || prev {
 				s.openIncident(a.Name, kindFor(a), detailFor(a), now)
 				if primed {
-					out = append(out, note{"🔴 roost: " + humanize(a.Name) + " is " + shortState(a),
+					out = append(out, note{"Roost · " + humanize(a.Name) + " is " + shortState(a),
 						humanize(a.Name) + " is " + detailFor(a) + ".\n\n" + a.URL + "\n" + now.Format(time.RFC1123) + link})
 				}
 			}
@@ -608,7 +608,7 @@ func (s *Server) handleTestAlert(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("email alerts not configured — set a notify: block and $ROOST_SMTP_PASSWORD")
 		}
 		emit("sending test email…")
-		return s.notifier.Notify("✅ roost test alert",
+		return s.notifier.Notify("Roost · Test alert",
 			"This is a test alert from your roost control panel.\n"+
 				"If you're reading this, incident email notifications are working.\n\n"+
 				time.Now().Format(time.RFC1123))
@@ -1030,6 +1030,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .nav a:hover .ico,.nav a.active .ico{color:currentColor}
  .navlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:15px 11px 5px;font-weight:700}
  .side .grow{flex:1;min-height:12px}
+ .sideinc{padding:11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
+ .sideinc .si-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+ .sideinc .si-list{list-style:none;margin:0 0 2px;padding:0;display:flex;flex-direction:column;gap:6px}
+ .sideinc .si-list li{font-size:11.5px;color:var(--muted);padding-left:13px;position:relative;line-height:1.4}
+ .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
+ .sideinc .si-list li.bad::before{background:var(--danger)}
+ .sideinc .si-list li b{color:var(--ink);font-weight:600}
  .sidesys{padding:10px 11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
  .sidesys .navlabel{padding:0 0 7px}
  .sidesys .ss-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding:3px 0}
@@ -1350,6 +1357,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span> Repository</a>
   </nav>
   <div class="grow"></div>
+  <div class="sideinc" id="incidents">
+   <div class="si-h"><span class="navlabel" style="padding:0">Incidents</span>{{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
+   {{if .Incidents}}<ul class="si-list">{{range .Incidents}}<li class="{{if .Open}}bad{{else}}ok{{end}}"><b>{{.Label}}</b> · {{.Ago}}</li>{{end}}</ul>{{end}}
+   <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:8px" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
+  </div>
   {{if .System.Images}}
   <div class="sidesys">
    <div class="navlabel">System · docker</div>
@@ -1537,15 +1549,6 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     </div>
    </div>
    {{end}}
-
-   <div class="card" id="incidents">
-    <div class="card-h"><h2>Incidents</h2>
-     <form class="inline" method="post" action="/test-alert" style="margin-left:auto">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
-     {{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
-    <div class="procbody">
-     {{if .Incidents}}<ul class="timeline">{{range .Incidents}}<li class="{{if .Open}}bad{{else}}ok{{end}}"><span class="tt">{{.Since}}</span><span class="tx"><b>{{.Label}}</b> — {{.Ago}}{{if .Detail}} <span class="idet">({{.Detail}})</span>{{end}}</span></li>{{end}}</ul>{{else}}<div class="idle"><span class="dot"></span>No incidents recorded</div>{{end}}
-    </div>
-   </div>
 
    <div class="card" id="processing">
     <div class="card-h"><h2>Activity <span class="csub">latest actions</span></h2></div>
