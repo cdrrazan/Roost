@@ -560,9 +560,14 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .dleg{display:flex;flex-direction:column;gap:9px;font-size:12.5px;color:var(--muted);min-width:0;flex:1}
  .dleg .li{display:flex;align-items:center;gap:8px} .dleg .li b{color:var(--ink);font-weight:700;margin-left:auto}
  .dleg .sw{width:9px;height:9px;border-radius:3px;flex:none}
- .spark{display:flex;align-items:flex-end;gap:3px;height:82px}
- .spark .sb{flex:1;min-width:2px;height:100%;background:var(--track);border-radius:3px;display:flex;align-items:flex-end;overflow:hidden}
+ .spark{position:relative;display:flex;align-items:flex-end;gap:3px;height:82px}
+ .spark .sb{flex:1;min-width:2px;height:100%;background:var(--track);border-radius:3px;display:flex;align-items:flex-end;overflow:hidden;cursor:pointer;transition:filter .1s}
+ .spark .sb:hover{filter:brightness(1.12)}
+ .spark .sb.hot{outline:2px solid var(--indigo-ink);outline-offset:1px}
  .spark .sb i{display:block;width:100%;min-height:2px;border-radius:3px}
+ .spark-tip{position:absolute;z-index:20;pointer-events:none;transform:translate(-50%,-100%);background:var(--ink);color:var(--panel);font-size:11px;line-height:1.35;padding:6px 9px;border-radius:8px;box-shadow:var(--shadow);white-space:nowrap}
+ .spark-tip b{display:block;font-size:12px;font-weight:600}
+ .spark-tip::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--ink)}
  .sparkcap{display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint);margin-top:9px}
  .bar{height:7px;background:var(--track);border-radius:999px;overflow:hidden}
  .fill{display:block;height:100%;border-radius:999px}
@@ -771,7 +776,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <div class="gcard indigo">
      <div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg></span> Memory by app</div>
      <div class="spark">
-      {{range .Apps}}<div class="sb" title="{{humanize .Name}} — {{if .Memory}}{{mempct .Memory}}% ({{.Memory}}){{else}}n/a{{end}}"><i class="fill {{memcolor .Memory}}" style="height:{{mempct .Memory}}%"></i></div>{{end}}
+      {{range .Apps}}<div class="sb" data-app="{{humanize .Name}}" data-mem="{{if .Memory}}{{mempct .Memory}}% · {{.Memory}}{{else}}n/a{{end}}"><i class="fill {{memcolor .Memory}}" style="height:{{mempct .Memory}}%"></i></div>{{end}}
+      <div class="spark-tip" id="sparkTip" hidden></div>
      </div>
      <div class="sparkcap"><span>{{.Total}} apps</span><span>% of cap</span></div>
     </div>
@@ -964,6 +970,25 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   document.documentElement.dataset.theme=d;
   try{localStorage.setItem("roost-theme",d);}catch(e){}
  });
+ // Memory-by-app hover tooltip: name + RAM for the bar under the cursor.
+ var spark=document.querySelector(".spark"),tip=document.getElementById("sparkTip");
+ if(spark&&tip){
+  spark.addEventListener("mousemove",function(ev){
+   var sb=ev.target.closest(".sb");
+   if(!sb){tip.hidden=true;return;}
+   var prev=spark.querySelector(".sb.hot"); if(prev&&prev!==sb)prev.classList.remove("hot");
+   sb.classList.add("hot");
+   tip.innerHTML="<b>"+sb.dataset.app+"</b>"+sb.dataset.mem;
+   var sr=spark.getBoundingClientRect(),br=sb.getBoundingClientRect();
+   tip.style.left=(br.left-sr.left+br.width/2)+"px";
+   tip.style.top=(br.top-sr.top-8)+"px";
+   tip.hidden=false;
+  });
+  spark.addEventListener("mouseleave",function(){
+   tip.hidden=true;
+   var h=spark.querySelector(".sb.hot"); if(h)h.classList.remove("hot");
+  });
+ }
  var burger=document.getElementById("burger");
  if(burger)burger.addEventListener("click",function(){document.body.classList.toggle("nav-open");});
  document.querySelectorAll(".side .nav a:not(.navf)").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});

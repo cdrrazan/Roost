@@ -169,6 +169,21 @@ func TestStatusRendersApps(t *testing.T) {
 	}
 }
 
+func TestMemoryByAppBarsCarryHoverData(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "keeparu", State: "running", Memory: "160MiB / 512MiB"},
+	}}
+	rr := serve(NewServer(f, ""), "GET", "/", nil)
+	body := rr.Body.String()
+	// Each spark bar must expose the app name + memory so the hover tooltip
+	// can name which app owns which bar.
+	for _, want := range []string{`data-app="Keeparu"`, `data-mem=`, `160MiB / 512MiB`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("memory-by-app bar missing %q", want)
+		}
+	}
+}
+
 func TestStatusRendersRepoLink(t *testing.T) {
 	f := &fakeController{statuses: []runner.AppStatus{
 		{Name: "keeparu", State: "running", URL: "https://keeparu.byaru.com", Repo: "https://github.com/cdrrazan/keeparu"},
