@@ -362,8 +362,15 @@ it does:
   chart up top; a right rail with an Overview, a **Server** card (disk, host, OS,
   CPU/RAM, uptime, and the IP + a copyable SSH login from the `server:` block),
   recent activity, and the removed-apps list.
-- **Comfort** — search, status filter, **list / grid** views, light / **dark**
-  mode, and the whole thing is mobile-responsive.
+- **Health & incidents** — real HTTP **reachability chips** (`live · 200` vs a
+  `502` that a green "container up" would hide), an **incident** banner + timeline
+  on down/recovered transitions, and optional **email alerts** (SMTP; the password
+  comes from `$ROOST_SMTP_PASSWORD`, never config). Click any app for a **detail
+  drawer** — image, restarts, env **key names**, and a recent-log tail.
+- **Comfort** — a **Material Design 3** interface (tonal surfaces, ripples,
+  elevated cards) in light / **dark**; search, **filter chips** with a friendly
+  empty state, **list / grid** views, a **⌘K command palette**, and fully
+  mobile-responsive.
 
 **Exposing it.** Set the top-level `control_host:` in `config.yml` and roost
 routes that hostname through the tunnel to the panel; then put **Cloudflare
