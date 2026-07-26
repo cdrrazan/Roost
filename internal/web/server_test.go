@@ -169,6 +169,16 @@ func TestStatusRendersApps(t *testing.T) {
 	}
 }
 
+func TestSidebarCollapseTogglesRender(t *testing.T) {
+	rr := serve(NewServer(&fakeController{}, ""), "GET", "/", nil)
+	body := rr.Body.String()
+	for _, want := range []string{`id="sidetgl"`, `id="railtgl"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("collapse toggle %q missing from topbar", want)
+		}
+	}
+}
+
 func TestMemoryByAppBarsCarryHoverData(t *testing.T) {
 	f := &fakeController{statuses: []runner.AppStatus{
 		{Name: "keeparu", State: "running", Memory: "160MiB / 512MiB"},

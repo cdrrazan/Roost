@@ -421,7 +421,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
-<script>(function(){try{var t=localStorage.getItem("roost-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;}catch(e){}})();</script>
+<script>(function(){try{var r=document.documentElement,t=localStorage.getItem("roost-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");r.dataset.theme=t;if(localStorage.getItem("roost-side")==="off")r.dataset.side="off";if(localStorage.getItem("roost-rail")==="off")r.dataset.rail="off";}catch(e){}})();</script>
 {{if .Busy}}<meta http-equiv="refresh" content="3">{{end}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -500,6 +500,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .toggle button.active{background:var(--panel);color:var(--ink);box-shadow:var(--shadow)}
  .iconbtn{width:37px;height:37px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
  .iconbtn:hover{color:var(--ink);background:var(--panel2)}
+ .iconbtn.on{background:var(--indigo-bg);color:var(--indigo-ink);border-color:transparent}
  .iconbtn svg{width:18px;height:18px;stroke:currentColor}
  .iconbtn .sun{display:none} :root[data-theme="dark"] .iconbtn .moon{display:none} :root[data-theme="dark"] .iconbtn .sun{display:inline-flex}
  .user .logout{margin-left:auto;flex:none;width:32px;height:32px;border-radius:9px;color:var(--faint);display:inline-flex;align-items:center;justify-content:center}
@@ -521,6 +522,20 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px;overflow:hidden}
  main{overflow-y:auto;padding:20px;min-width:0}
  .rail{overflow-y:auto;height:100%;padding:20px;border-left:1px solid var(--line);background:var(--bg)}
+ /* collapsible sidebars — desktop only (below the breakpoints the columns
+    already stack / overlay, so collapsing is meaningless there) */
+ .shell{transition:grid-template-columns .18s ease}
+ .body{transition:grid-template-columns .18s ease}
+ @media(min-width:861px){
+  :root[data-side="off"] .shell{grid-template-columns:0 minmax(0,1fr)}
+  :root[data-side="off"] .side{padding-left:0;padding-right:0;border-right:0;overflow:hidden}
+  :root[data-side="off"] .side>*{opacity:0}
+ }
+ @media(min-width:1081px){
+  :root[data-rail="off"] .body{grid-template-columns:minmax(0,1fr) 0}
+  :root[data-rail="off"] .rail{padding-left:0;padding-right:0;border-left:0;overflow:hidden}
+  :root[data-rail="off"] .rail>*{opacity:0}
+ }
  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:18px}
  .card:last-child{margin-bottom:0}
  .card-h{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line2)}
@@ -669,8 +684,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   main{overflow:visible}
   .rail{overflow:visible;height:auto;border-left:0;border-top:1px solid var(--line)}
   .graphs{grid-template-columns:1fr}
+  .railtgl{display:none}
  }
  @media(max-width:860px){
+  .sidetgl{display:none}
   .shell{grid-template-columns:1fr}
   .side{position:fixed;left:0;top:0;bottom:0;z-index:30;width:240px;background:var(--panel);transform:translateX(-100%);transition:transform .2s;box-shadow:var(--shadow-lg)}
   body.nav-open .side{transform:none}
@@ -713,6 +730,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  <div class="content" id="top">
   <header class="topbar">
    <button class="burger" id="burger" aria-label="Menu">☰</button>
+   <button class="iconbtn sidetgl" id="sidetgl" title="Collapse sidebar" aria-label="Collapse sidebar"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg></button>
    <div class="search"><span class="si">⌕</span><input id="q" type="text" placeholder="Search apps…" autocomplete="off"></div>
    <select class="filter" id="statusfilter">
     <option value="all">All statuses</option>
@@ -724,6 +742,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <form class="inline" method="post" action="/up">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-ok" {{if .Busy}}disabled{{end}}>Start all</button></form>
    <form class="inline" method="post" action="/down">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn" {{if .Busy}}disabled{{end}}>Stop all</button></form>
    <button class="btn btn-primary" id="openadd" {{if .Busy}}disabled{{end}}>＋ New app</button>
+   <button class="iconbtn railtgl" id="railtgl" title="Collapse info panel" aria-label="Collapse info panel"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="15" y1="4" x2="15" y2="20"/></svg></button>
   </header>
 
   <div class="body">
@@ -989,6 +1008,21 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    var h=spark.querySelector(".sb.hot"); if(h)h.classList.remove("hot");
   });
  }
+ // Collapse / expand the left sidebar and right info panel so main can stretch.
+ function collapser(btnId,dataKey,storeKey){
+  var b=document.getElementById(btnId),r=document.documentElement;
+  if(!b)return;
+  var sync=function(){b.classList.toggle("on",r.dataset[dataKey]==="off");};
+  sync();
+  b.addEventListener("click",function(){
+   var off=r.dataset[dataKey]==="off";
+   if(off){delete r.dataset[dataKey];}else{r.dataset[dataKey]="off";}
+   try{localStorage.setItem(storeKey,off?"on":"off");}catch(e){}
+   sync();
+  });
+ }
+ collapser("sidetgl","side","roost-side");
+ collapser("railtgl","rail","roost-rail");
  var burger=document.getElementById("burger");
  if(burger)burger.addEventListener("click",function(){document.body.classList.toggle("nav-open");});
  document.querySelectorAll(".side .nav a:not(.navf)").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});
