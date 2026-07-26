@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status · Fleet</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<script src="assets/js/theme.js"></script>
+<style>
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+ .wrap{max-width:640px;margin:0 auto;padding:56px 20px}
+ .hd{display:flex;align-items:center;gap:14px;margin-bottom:26px}
+ .logo{width:40px;height:40px;border-radius:11px;flex:none;overflow:hidden}
+ .logo svg{width:100%;height:100%;display:block}
+ h1{font-size:20px;margin:0} .sub{color:var(--muted);font-size:13px;margin-top:2px}
+ .banner{display:flex;align-items:center;gap:11px;padding:16px 18px;border-radius:14px;font-weight:600;margin-bottom:22px;background:var(--panel);border:1px solid var(--line)}
+ .banner .d{width:11px;height:11px;border-radius:50%} .banner.ok .d{background:var(--ok)} .banner.bad .d{background:var(--danger)}
+ .incs{margin:-8px 0 22px;display:flex;flex-direction:column;gap:6px}
+ .inc{font-size:13px;color:var(--danger);padding:9px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
+ .list{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+ .row{display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--line)}
+ .row:first-child{border-top:0}
+ .row .nm{font-weight:600} .row .u{color:var(--muted);font-size:12px;margin-left:2px}
+ .row .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+ .row .st .d{width:8px;height:8px;border-radius:50%}
+ .st.up{color:var(--ok)} .st.up .d{background:var(--ok)}
+ .st.down{color:var(--danger)} .st.down .d{background:var(--danger)}
+ .ft{text-align:center;color:var(--muted);font-size:12px;margin-top:22px}
+ .ft a{color:var(--muted)} .ft a:hover{color:var(--ink)} .ft .back{color:var(--ink);font-weight:600}
+ a{color:inherit;text-decoration:none} a.nm:hover{text-decoration:underline}
+</style>
+</head>
+<body><div class="wrap" id="app"></div>
+<script src="assets/js/mock.js"></script>
+<script>
+(function () {
+  var F = window.FLEET, host = document.getElementById("app");
+  function esc(s){return String(s).replace(/[&<>]/g,function(m){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[m];});}
+  function hum(n){return n.split(/[-_ ]/).map(function(w){return w?w[0].toUpperCase()+w.slice(1):w;}).join(" ");}
+  var apps = F.apps.filter(function(a){return !a.worker;});
+  var up = apps.filter(function(a){return a.state==="running";}).length;
+  var allOK = apps.every(function(a){return a.state==="running" && (!a.http || a.http==="200");});
+  var open = F.incidents.filter(function(i){return i.open;});
+  var logo = document.querySelector('link[rel=icon]') ? "" : "";
+  host.innerHTML =
+    '<div class="hd"><div class="logo"><img src="assets/img/favicon.svg" width="40" height="40" alt=""></div><div><h1>Service status</h1><div class="sub">'+up+"/"+apps.length+' services operational</div></div></div>' +
+    '<div class="banner '+(allOK?"ok":"bad")+'"><span class="d"></span>'+(allOK?"All systems operational":"Some services are degraded")+"</div>" +
+    (open.length? '<div class="incs">'+open.map(function(i){return '<div class="inc">'+esc(i.label)+" — "+esc(i.ago)+"</div>";}).join("")+"</div>":"") +
+    '<div class="list">'+apps.map(function(a){
+      var ok = a.state==="running" && (!a.http || a.http==="200");
+      var st = a.state!=="running" ? '<span class="st down"><span class="d"></span>Down</span>'
+             : (ok ? '<span class="st up"><span class="d"></span>Operational</span>'
+                   : '<span class="st down"><span class="d"></span>Degraded ('+esc(a.http)+")</span>");
+      return '<div class="row">'+(a.url?'<a class="nm" href="'+esc(a.url)+'" target="_blank" rel="noopener">'+esc(hum(a.name))+"</a>":'<span class="nm">'+esc(hum(a.name))+"</span>")+(a.up?' <span class="u">· '+esc(a.up)+"</span>":"")+st+"</div>";
+    }).join("")+"</div>" +
+    '<div class="ft"><div><a class="back" href="index.html">← Control panel</a></div><div style="margin-top:8px">Updated just now · powered by <b>Fleet</b></div></div>';
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in · Fleet</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/fleet.css">
+<script src="assets/js/theme.js"></script>
+<style>
+ body{height:100vh;overflow:auto;display:grid;place-items:center;padding:24px}
+ .auth{width:min(400px,94vw)}
+ .auth .brand{display:flex;align-items:center;gap:11px;justify-content:center;margin-bottom:22px}
+ .auth .logo{width:44px;height:44px;border-radius:12px;overflow:hidden} .auth .logo img{width:100%;height:100%}
+ .auth .bt{font-size:20px;font-weight:700;letter-spacing:-.3px}
+ .authcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px}
+ .authcard h1{font-size:18px;margin:0 0 4px} .authcard .lead{color:var(--muted);font-size:13px;margin:0 0 20px}
+ .authcard .field{margin-bottom:14px}
+ .row-between{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;margin:-4px 0 16px}
+ .row-between a{color:var(--brand);font-weight:600}
+ .divider{display:flex;align-items:center;gap:10px;color:var(--faint);font-size:11.5px;margin:18px 0}
+ .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+ .oauth{display:flex;gap:10px} .oauth .btn{flex:1;justify-content:center}
+ .foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:18px}
+ .foot a{color:var(--brand);font-weight:600}
+</style>
+</head>
+<body>
+<div class="auth">
+ <div class="brand"><div class="logo"><img src="assets/img/favicon.svg" alt=""></div><span class="bt">Fleet</span></div>
+ <div class="authcard">
+  <h1>Welcome back</h1>
+  <p class="lead">Sign in to your control panel.</p>
+  <form onsubmit="event.preventDefault();location.href='index.html';">
+   <div class="field"><label>Email</label><input type="email" placeholder="you@example.com" required autofocus></div>
+   <div class="field"><label>Password</label><input type="password" placeholder="••••••••" required></div>
+   <div class="row-between"><label style="display:flex;gap:6px;align-items:center;color:var(--muted);font-weight:500"><input type="checkbox"> Remember me</label><a href="#">Forgot password?</a></div>
+   <button class="btn btn-primary" style="width:100%;justify-content:center">Sign in</button>
+  </form>
+  <div class="divider">or continue with</div>
+  <div class="oauth">
+   <a class="btn" href="index.html">Google</a>
+   <a class="btn" href="index.html">GitHub</a>
+  </div>
+ </div>
+ <div class="foot">No account? <a href="#">Request access</a></div>
+</div>
+</body>
+</html>

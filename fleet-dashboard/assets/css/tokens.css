@@ -1,0 +1,39 @@
+/* ============================================================================
+   Fleet Dashboard — Design Tokens
+   ----------------------------------------------------------------------------
+   THIS IS THE ONLY FILE YOU NEED TO EDIT TO REBRAND.
+   Change --brand to your accent color; everything else (buttons, links,
+   active nav, focus rings, charts) follows automatically. Light + dark are
+   both defined; the viewer's theme toggle sets data-theme on <html>.
+   ============================================================================ */
+:root{
+ --bg:#eef0f4; --bg1:#fdf1f8; --bg2:#eef1ff; --bg3:#ecfdfb; --bg4:#fff2f1;
+ color-scheme:light;
+ --panel:#ffffff; --panel2:#f8f9fc; --line:#ecedf3; --line2:#f2f3f7; --track:#edeff5;
+ --ink:#12141c; --muted:#5f6675; --faint:#98a0b0;
+ --brand:#5b54e6; --brand-ink:#fff;
+ --ok:#12a150; --amber:#e08a1e; --danger:#e5484d;
+ --red-bg:#fff1f2; --red-ink:#d64550; --red-line:#fbdde0;
+ --amber-bg:#fff7ed; --amber-ink:#c2790f; --amber-line:#f8e6ce;
+ --teal-bg:#ecfdf5; --teal-ink:#0e7a54;
+ --indigo-bg:#eef0ff; --indigo-ink:#4f46e5;
+ --shadow:0 1px 2px rgba(16,19,34,.04),0 12px 30px -18px rgba(16,19,34,.14);
+ --shadow-lg:0 40px 80px -40px rgba(24,20,60,.30);
+ --radius:16px;
+ --font:"Google Sans","Product Sans","Google Sans Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
+ --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+:root[data-theme="dark"]{
+ --bg:#0a0d13; --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
+ color-scheme:dark;
+ --panel:#12161f; --panel2:#161c27; --line:#222a38; --line2:#1b2230; --track:#212836;
+ --ink:#e7ecf5; --muted:#9aa4b6; --faint:#68738a;
+ --brand:#7c75f5;
+ --ok:#37d383; --amber:#e6a84a; --danger:#f0616a;
+ --red-bg:#2a1618; --red-ink:#f0868c; --red-line:#3a1e22;
+ --amber-bg:#271c10; --amber-ink:#e6b877; --amber-line:#372711;
+ --teal-bg:#0f2a1c; --teal-ink:#5bdc90;
+ --indigo-bg:#191d38; --indigo-ink:#a9a3ff;
+ --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -18px rgba(0,0,0,.7);
+ --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
+}

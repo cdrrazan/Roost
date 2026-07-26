@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Components · Fleet</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/fleet.css">
+<script src="assets/js/theme.js"></script>
+</head>
+<body>
+<div class="shell">
+ <aside class="side">
+  <div class="brand"><div class="logo"><img src="assets/img/favicon.svg" width="36" height="36" alt=""></div><div><div class="bt">Fleet</div><div class="bs">Control panel</div></div></div>
+  <nav class="nav">
+   <div class="navlabel">Resources</div>
+   <a href="index.html"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
+   <div class="navlabel">Monitoring</div>
+   <a href="status.html"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></span> Status page ↗</a>
+   <a href="components.html" class="active"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></span> Components</a>
+   <div class="navlabel">Manage</div>
+   <a href="settings.html"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M1 12h4M19 12h4"/></svg></span> Settings</a>
+  </nav>
+  <div class="grow"></div>
+  <div class="user">
+   <div class="avatar"><svg viewBox="0 0 40 40"><rect width="40" height="40" fill="#5b54e6"/><text x="20" y="26" font-size="16" fill="#fff" text-anchor="middle" font-family="sans-serif" font-weight="600">A</text></svg></div>
+   <div style="min-width:0;flex:1"><div class="un">Alex Rivera</div><div class="ue">@alex</div></div>
+  </div>
+ </aside>
+
+ <div class="content">
+  <header class="simple-top">
+   <button class="burger" id="burger" aria-label="Menu">☰</button>
+   <button class="iconbtn sidetgl" id="sidetgl" title="Collapse sidebar"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg></button>
+   <h2>Components</h2>
+   <button class="iconbtn" id="themebtn" title="Toggle theme" style="margin-left:auto"><span class="moon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></span><span class="sun"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></span></button>
+  </header>
+
+  <main style="overflow-y:auto">
+   <div class="page">
+    <h1 class="page-h">Component library</h1>
+    <p class="page-sub">Every building block in the template — themed by <code>tokens.css</code>, light &amp; dark ready.</p>
+
+    <div class="guide-sec"><h3>Colors</h3><div class="swatches">
+     <span class="swatch"><span class="chip" style="background:var(--brand)"></span><span class="nm">brand</span></span>
+     <span class="swatch"><span class="chip" style="background:var(--ok)"></span><span class="nm">ok</span></span>
+     <span class="swatch"><span class="chip" style="background:var(--amber)"></span><span class="nm">amber</span></span>
+     <span class="swatch"><span class="chip" style="background:var(--danger)"></span><span class="nm">danger</span></span>
+     <span class="swatch"><span class="chip" style="background:var(--panel)"></span><span class="nm">panel</span></span>
+     <span class="swatch"><span class="chip" style="background:var(--panel2)"></span><span class="nm">panel2</span></span>
+    </div></div>
+
+    <div class="guide-sec"><h3>Buttons</h3><div class="guide-row">
+     <button class="btn btn-primary">Primary</button>
+     <button class="btn btn-ok">Success</button>
+     <button class="btn">Default</button>
+     <button class="btn btn-danger">Danger</button>
+     <button class="btn btn-sm">Small</button>
+     <button class="btn" disabled>Disabled</button>
+     <button class="iconbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></button>
+    </div></div>
+
+    <div class="guide-sec"><h3>Tags &amp; pills</h3><div class="guide-row">
+     <span class="tag fw">Rails</span><span class="tag db">Postgres</span><span class="tag redis">Redis</span><span class="tag rt">node-20</span><span class="tag worker">worker</span>
+     <span class="pill run">running</span><span class="pill stop">exited</span>
+     <span class="rchip up">live · 200</span><span class="rchip down">502</span>
+     <span class="count ok">all clear</span><span class="count bad">2 open</span>
+    </div></div>
+
+    <div class="guide-sec"><h3>Alerts</h3>
+     <div class="alerts">
+      <div class="alert warn"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Search memory at 92%</div>
+      <div class="alert bad"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Legacy Api is up but returns 502</div>
+     </div>
+     <div class="incbanner" style="margin-top:10px"><span class="ib-dot"></span><b>2 active incidents</b><span class="ib-list">Legacy Api — down 8m · Crm — down 23m</span></div>
+    </div>
+
+    <div class="guide-sec"><h3>Charts</h3><div class="graphs">
+     <div class="gcard teal"><div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/></svg></span> Fleet status</div>
+      <div class="donutrow"><div class="donut" style="--v:80;--c:var(--ok)"><div class="dc"><div><b>8</b><span>of 10 up</span></div></div></div>
+       <div class="dleg"><div class="li"><span class="sw" style="background:var(--ok)"></span> Running <b>8</b></div><div class="li"><span class="sw" style="background:var(--track)"></span> Stopped <b>2</b></div></div></div></div>
+     <div class="gcard amber"><div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/></svg></span> Memory usage</div>
+      <div class="donutrow"><div class="donut" style="--v:63;--c:var(--amber)"><div class="dc"><div><b>63%</b><span>used</span></div></div></div>
+       <div class="dleg"><div class="li"><span class="sw" style="background:var(--amber)"></span> Used <b>2.4GiB</b></div><div class="li"><span class="sw" style="background:var(--track)"></span> Cap <b>3.8GiB</b></div></div></div></div>
+     <div class="gcard indigo"><div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg></span> Memory by app</div>
+      <div class="spark"><div class="sb"><i class="fill ok" style="height:54%"></i></div><div class="sb"><i class="fill ok" style="height:40%"></i></div><div class="sb"><i class="fill warn" style="height:72%"></i></div><div class="sb"><i class="fill ok" style="height:33%"></i></div><div class="sb"><i class="fill bad" style="height:96%"></i></div><div class="sb"><i class="fill ok" style="height:41%"></i></div><div class="sb"><i class="fill ok" style="height:28%"></i></div></div>
+      <div class="sparkcap"><span>7 apps</span><span>% of cap</span></div></div>
+    </div></div>
+
+    <div class="guide-sec"><h3>Form controls</h3><div class="guide-row" style="align-items:flex-end">
+     <div class="field" style="margin:0"><label>Text input</label><input type="text" placeholder="myapp.example.com"></div>
+     <label class="switch"><input type="checkbox" checked><span class="track"></span></label>
+     <div class="seggroup"><button class="active">List</button><button>Grid</button></div>
+     <select class="filter"><option>All statuses</option><option>Running</option></select>
+    </div></div>
+
+    <div class="guide-sec"><h3>App card</h3>
+     <div class="srv" style="max-width:520px">
+      <div class="srv-top">
+       <span class="srv-ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg></span>
+       <div class="srv-idb">
+        <div class="srv-nm"><span class="dot run"></span><span class="srv-name">Billing</span><span class="pill run">running</span><span class="rchip up">live · 200</span></div>
+        <div class="srv-sub"><a href="#">https://billing.example.com</a> · healthy</div>
+        <div class="tags"><span class="tag fw">Rails</span><span class="tag db">MySQL</span><span class="tag redis">Redis</span></div>
+       </div>
+       <div class="srv-acts"><div class="seg"><button class="segbtn go" disabled>Start</button><button class="segbtn st">Stop</button></div></div>
+      </div>
+      <div class="srv-bar"><div class="mlabel">Memory <b>60%</b></div><div class="bar"><span class="fill ok" style="width:60%"></span></div></div>
+      <div class="srv-metrics"><span class="me"><i>CPU</i>1.90%</span><span class="me"><i>MEM</i>305MiB / 512MiB</span><span class="me up"><i>UP</i>Up 6 days</span></div>
+     </div>
+    </div>
+
+   </div>
+  </main>
+ </div>
+</div>
+<script src="assets/js/chrome.js"></script>
+</body>
+</html>
