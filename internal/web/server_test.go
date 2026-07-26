@@ -32,6 +32,8 @@ type fakeController struct {
 	removeCalls        int
 	removed            []RemovedApp
 	server             ServerInfo
+	system             SystemInfo
+	edge               EdgeInfo
 	emitLines          []string // lines AddApp/RemoveApp emit when called
 }
 
@@ -120,6 +122,8 @@ func (f *fakeController) RemovedApps() ([]RemovedApp, error) {
 }
 
 func (f *fakeController) ServerInfo() ServerInfo { return f.server }
+func (f *fakeController) SystemInfo() SystemInfo { return f.system }
+func (f *fakeController) EdgeInfo() EdgeInfo     { return f.edge }
 
 func (f *fakeController) snapshot() fakeController {
 	f.mu.Lock()
@@ -181,6 +185,38 @@ func TestAppCardShowsBadgesAndMetrics(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("card missing %q", want)
 		}
+	}
+}
+
+func TestDashboardCardsAndAlerts(t *testing.T) {
+	f := &fakeController{
+		statuses: []runner.AppStatus{
+			{Name: "up-app", State: "running", URL: "https://a.example.com", HTTP: "200", Reachable: true},
+			{Name: "down-app", State: "exited", URL: "https://b.example.com"},
+			{Name: "broken", State: "running", URL: "https://c.example.com", HTTP: "502", Reachable: false},
+		},
+		system: SystemInfo{Images: 12, ImagesSize: "3.1GB", Containers: 14, Volumes: 5, VolumesSize: "1.2GB", Reclaimable: "800MB (25%)"},
+		edge:   EdgeInfo{TunnelName: "roost", TunnelID: "abcdef012345", Account: "acc123", Hosts: []string{"byaru.com"}, Protected: true},
+	}
+	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
+	for _, want := range []string{
+		`class="alerts"`, "Down App is exited", "Broken is up but returns 502", // alerts (names humanized)
+		"System", "3.1GB", "800MB (25%)", // system card
+		"Edge", "roost", "protected", // edge card
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard missing %q", want)
+		}
+	}
+}
+
+func TestSparklineAppearsAfterSamples(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "x", State: "running", URL: "https://x", CPU: "2.5%"}}}
+	s := NewServer(f, "")
+	serve(s, "GET", "/", nil)                       // sample 1
+	body := serve(s, "GET", "/", nil).Body.String() // sample 2 → sparkline has ≥2 points
+	if !strings.Contains(body, "cpuspark") {
+		t.Error("expected a cpu sparkline after two samples")
 	}
 }
 

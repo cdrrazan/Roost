@@ -197,6 +197,42 @@ type Controller interface {
 	// host/OS/uptime, and the configured IP + SSH login). Best-effort:
 	// unknown fields are left empty.
 	ServerInfo() ServerInfo
+
+	// SystemInfo returns docker-level disk usage (images/containers/volumes
+	// and reclaimable space) for the System card. Best-effort; a zero value
+	// hides the card.
+	SystemInfo() SystemInfo
+
+	// EdgeInfo returns Cloudflare tunnel/DNS facts (from roost's state) for
+	// the Edge card. Best-effort; a zero value hides the card.
+	EdgeInfo() EdgeInfo
+}
+
+// SystemInfo is docker's disk accounting, shown on the System card.
+type SystemInfo struct {
+	Images      int
+	ImagesSize  string
+	Containers  int
+	Volumes     int
+	VolumesSize string
+	BuildCache  string
+	Reclaimable string
+}
+
+// EdgeInfo describes roost's Cloudflare edge: the tunnel and the routes it
+// carries. All fields best-effort from ~/.roost/state.json + config.
+type EdgeInfo struct {
+	TunnelName string
+	TunnelID   string   // short form
+	Account    string   // short form
+	Hosts      []string // DNS records / routing suffixes roost created
+	Protected  bool     // Cloudflare Access is configured in front
+}
+
+// Alert is one dashboard warning surfaced in the banner.
+type Alert struct {
+	Level string // "warn" or "bad"
+	Text  string
 }
 
 // RemovedApp is a previously-removed app the panel offers to re-add.
@@ -232,7 +268,16 @@ type Server struct {
 	busy  string   // "" when idle, else a human label for the in-flight action
 	last  string   // result of the most recent action
 	steps []string // progress lines for the current/last action (processing pane)
+
+	// trend is an in-memory per-app CPU% history (most recent last, capped),
+	// accumulated across status polls to draw sparklines. No persistence — it
+	// lives only for the panel process's lifetime.
+	trendMu sync.Mutex
+	trend   map[string][]float64
 }
+
+// trendCap is how many CPU samples per app the sparkline retains.
+const trendCap = 40
 
 // NewServer returns a panel over ctrl. An empty token disables the action
 // guard (rely on edge auth); a non-empty token is required on /up and /down.
@@ -379,6 +424,10 @@ type statusView struct {
 	Steps        []string     // processing-pane progress lines
 	Removed      []RemovedApp // apps removed via the panel, offered for re-add
 	Server       ServerInfo   // host metadata for the Server card
+	System       SystemInfo   // docker disk usage for the System card
+	Edge         EdgeInfo     // Cloudflare tunnel/DNS facts for the Edge card
+	Alerts       []Alert      // warnings surfaced in the top banner
+	Sparks       map[string]template.HTML
 	Error        string
 	Token        string // embedded in the form when non-empty
 }
@@ -430,16 +479,115 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 			view.MemUsed, view.MemCap = humanBytes(used), humanBytes(capacity)
 			view.MemPct = int(used/capacity*100 + 0.5)
 		}
+		view.Alerts = buildAlerts(apps)
+		view.Sparks = s.recordAndRenderTrends(apps)
 	}
 	if removed, err := s.ctrl.RemovedApps(); err == nil {
 		view.Removed = removed
 	}
 	view.Server = s.ctrl.ServerInfo()
+	view.System = s.ctrl.SystemInfo()
+	view.Edge = s.ctrl.EdgeInfo()
+	if view.Server.DiskPct >= 90 {
+		view.Alerts = append(view.Alerts, Alert{Level: "bad", Text: fmt.Sprintf("Disk %d%% full on %s", view.Server.DiskPct, view.Server.Host)})
+	} else if view.Server.DiskPct >= 80 {
+		view.Alerts = append(view.Alerts, Alert{Level: "warn", Text: fmt.Sprintf("Disk %d%% full", view.Server.DiskPct)})
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := statusTmpl.Execute(w, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// buildAlerts turns the fleet state into banner warnings: stopped apps and
+// apps that are running but fail their HTTP probe (the silent-502 case).
+func buildAlerts(apps []runner.AppStatus) []Alert {
+	var alerts []Alert
+	for _, a := range apps {
+		if a.Worker {
+			continue
+		}
+		switch {
+		case a.State != "running":
+			alerts = append(alerts, Alert{Level: "warn", Text: humanize(a.Name) + " is " + a.State})
+		case a.HTTP != "" && !a.Reachable:
+			alerts = append(alerts, Alert{Level: "bad", Text: humanize(a.Name) + " is up but returns " + a.HTTP})
+		case memPct(a.Memory) >= 90:
+			alerts = append(alerts, Alert{Level: "warn", Text: humanize(a.Name) + " memory at " + strconv.Itoa(memPct(a.Memory)) + "%"})
+		}
+	}
+	return alerts
+}
+
+// recordAndRenderTrends appends each app's current CPU sample to the ring and
+// returns a per-app inline sparkline SVG keyed by app name.
+func (s *Server) recordAndRenderTrends(apps []runner.AppStatus) map[string]template.HTML {
+	s.trendMu.Lock()
+	defer s.trendMu.Unlock()
+	if s.trend == nil {
+		s.trend = map[string][]float64{}
+	}
+	out := map[string]template.HTML{}
+	live := map[string]bool{}
+	for _, a := range apps {
+		live[a.Name] = true
+		v := parseCPU(a.CPU)
+		h := append(s.trend[a.Name], v)
+		if len(h) > trendCap {
+			h = h[len(h)-trendCap:]
+		}
+		s.trend[a.Name] = h
+		if a.State == "running" {
+			out[a.Name] = sparkSVG(h)
+		}
+	}
+	// Drop history for apps that no longer exist.
+	for name := range s.trend {
+		if !live[name] {
+			delete(s.trend, name)
+		}
+	}
+	return out
+}
+
+// parseCPU turns docker's "2.75%" into 2.75; returns 0 on anything unparseable.
+func parseCPU(s string) float64 {
+	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "%"))
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return f
+}
+
+// sparkSVG renders a CPU history as a tiny inline sparkline. Needs ≥2 points;
+// scales to the max sample so low-but-varying usage is still visible.
+func sparkSVG(h []float64) template.HTML {
+	if len(h) < 2 {
+		return ""
+	}
+	const w, ht = 96.0, 22.0
+	max := 1.0
+	for _, v := range h {
+		if v > max {
+			max = v
+		}
+	}
+	var b strings.Builder
+	step := w / float64(len(h)-1)
+	for i, v := range h {
+		x := float64(i) * step
+		y := ht - (v/max)*(ht-2) - 1
+		if i == 0 {
+			fmt.Fprintf(&b, "M%.1f %.1f", x, y)
+		} else {
+			fmt.Fprintf(&b, " L%.1f %.1f", x, y)
+		}
+	}
+	return template.HTML(fmt.Sprintf(
+		`<svg class="cpuspark" viewBox="0 0 %.0f %.0f" preserveAspectRatio="none"><path d="%s"/></svg>`,
+		w, ht, b.String()))
 }
 
 var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
@@ -663,6 +811,15 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .srv-metrics .me{display:inline-flex;align-items:center;gap:6px}
  .srv-metrics .me i{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--faint)}
  .srv-metrics .me.up{margin-left:auto;color:var(--muted)}
+ .cpuspark{width:60px;height:16px;overflow:visible}
+ .cpuspark path{fill:none;stroke:var(--indigo-ink);stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+ .alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+ .alert{display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:12px;font-size:13px;font-weight:550;border:1px solid transparent}
+ .alert svg{width:16px;height:16px;flex:none}
+ .alert.warn{background:var(--amber-bg);color:var(--amber-ink);border-color:color-mix(in srgb,var(--amber-ink) 22%,transparent)}
+ .alert.bad{background:var(--red-bg);color:var(--danger);border-color:color-mix(in srgb,var(--danger) 25%,transparent)}
+ .edgehosts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+ .edgehosts code{font-size:10.5px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;color:var(--muted)}
  .srv-bar{width:100%}
  .mlabel{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
  .mlabel b{color:var(--ink);font-weight:700}
@@ -796,6 +953,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <div class="card"><div class="result err" style="margin:16px">status error: {{.Error}}</div></div>
    {{else}}
 
+   {{if .Alerts}}<div class="alerts">{{range .Alerts}}<div class="alert {{.Level}}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>{{.Text}}</div>{{end}}</div>{{end}}
+
    <section class="card" id="attention">
     <div class="card-h">
      <h2>⚠ Needs attention <span class="csub">{{if .Attention}}apps not currently running{{else}}everything is running{{end}}</span></h2>
@@ -880,7 +1039,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
          </div>
         </div>
         {{if .Memory}}<div class="srv-bar"><div class="mlabel">Memory <b>{{mempct .Memory}}%</b></div><div class="bar"><span class="fill {{memcolor .Memory}}" style="width:{{mempct .Memory}}%"></span></div></div>{{end}}
-        {{if eq .State "running"}}<div class="srv-metrics">{{if .CPU}}<span class="me"><i>CPU</i>{{.CPU}}</span>{{end}}{{if .Memory}}<span class="me"><i>MEM</i>{{.Memory}}</span>{{end}}{{if .Net}}<span class="me"><i>NET</i>{{.Net}}</span>{{end}}{{if .Up}}<span class="me up"><i>UP</i>{{.Up}}</span>{{end}}</div>{{end}}
+        {{if eq .State "running"}}<div class="srv-metrics">{{if .CPU}}<span class="me"><i>CPU</i>{{.CPU}}{{with index $.Sparks .Name}} {{.}}{{end}}</span>{{end}}{{if .Memory}}<span class="me"><i>MEM</i>{{.Memory}}</span>{{end}}{{if .Net}}<span class="me"><i>NET</i>{{.Net}}</span>{{end}}{{if .Up}}<span class="me up"><i>UP</i>{{.Up}}</span>{{end}}</div>{{end}}
        </div>
       {{end}}
       </div>
@@ -921,6 +1080,33 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
      {{if not .Server.IP}}<p class="empty" style="padding:2px 0 0">Set a <code>server:</code> block in config.yml to show IP + SSH login.</p>{{end}}
     </div>
    </div>
+
+   {{if .Edge.TunnelName}}
+   <div class="card" id="edge">
+    <div class="card-h"><h2>Edge</h2><span class="csub">Cloudflare tunnel</span></div>
+    <div class="ov">
+     <div class="ov-row"><span class="k">Tunnel</span><span class="v">{{.Edge.TunnelName}} <span class="rchip up" style="margin-left:6px">outbound</span></span></div>
+     {{if .Edge.TunnelID}}<div class="ov-row"><span class="k">Tunnel ID</span><span class="v mono">{{.Edge.TunnelID}}</span></div>{{end}}
+     {{if .Edge.Account}}<div class="ov-row"><span class="k">Account</span><span class="v mono">{{.Edge.Account}}</span></div>{{end}}
+     <div class="ov-row"><span class="k">Access</span><span class="v">{{if .Edge.Protected}}<span class="tag fw">protected</span>{{else}}<span class="tag worker">public</span>{{end}}</span></div>
+     {{if .Edge.Hosts}}<div class="ov-row"><span class="k">Routes</span><span class="v">{{len .Edge.Hosts}} DNS</span></div>
+     <div class="edgehosts">{{range .Edge.Hosts}}<code>{{.}}</code>{{end}}</div>{{end}}
+    </div>
+   </div>
+   {{end}}
+
+   {{if .System.Images}}
+   <div class="card" id="system">
+    <div class="card-h"><h2>System</h2><span class="csub">docker disk usage</span></div>
+    <div class="ov">
+     <div class="ov-row"><span class="k">Images</span><span class="v">{{.System.Images}}{{if .System.ImagesSize}} · {{.System.ImagesSize}}{{end}}</span></div>
+     <div class="ov-row"><span class="k">Containers</span><span class="v">{{.System.Containers}}</span></div>
+     <div class="ov-row"><span class="k">Volumes</span><span class="v">{{.System.Volumes}}{{if .System.VolumesSize}} · {{.System.VolumesSize}}{{end}}</span></div>
+     {{if .System.BuildCache}}<div class="ov-row"><span class="k">Build cache</span><span class="v">{{.System.BuildCache}}</span></div>{{end}}
+     {{if .System.Reclaimable}}<div class="ov-row"><span class="k">Reclaimable</span><span class="v">{{.System.Reclaimable}}</span></div>{{end}}
+    </div>
+   </div>
+   {{end}}
 
    <div class="card" id="processing">
     <div class="card-h"><h2>Activity <span class="csub">latest actions</span></h2></div>

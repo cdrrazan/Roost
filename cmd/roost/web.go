@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -457,6 +459,87 @@ func (c *stackController) ServerInfo() web.ServerInfo {
 		}
 	}
 	return si
+}
+
+// SystemInfo reports docker's disk accounting via `docker system df`.
+// Best-effort: any failure yields a zero value, which hides the card.
+func (c *stackController) SystemInfo() web.SystemInfo {
+	out, err := shell.Exec{}.Run("docker", "system", "df", "--format", "json")
+	if err != nil {
+		return web.SystemInfo{}
+	}
+	var si web.SystemInfo
+	for _, line := range strings.Split(out.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var d struct {
+			Type        string `json:"Type"`
+			TotalCount  string `json:"TotalCount"`
+			Size        string `json:"Size"`
+			Reclaimable string `json:"Reclaimable"`
+		}
+		if err := json.Unmarshal([]byte(line), &d); err != nil {
+			continue
+		}
+		n := atoiSafe(d.TotalCount)
+		switch d.Type {
+		case "Images":
+			si.Images, si.ImagesSize, si.Reclaimable = n, d.Size, d.Reclaimable
+		case "Containers":
+			si.Containers = n
+		case "Local Volumes":
+			si.Volumes, si.VolumesSize = n, d.Size
+		case "Build Cache":
+			si.BuildCache = d.Size
+		}
+	}
+	return si
+}
+
+// EdgeInfo reports roost's Cloudflare tunnel + DNS facts from state.json and
+// config. Best-effort: a zero value hides the Edge card.
+func (c *stackController) EdgeInfo() web.EdgeInfo {
+	st, _, err := c.loadState()
+	if err != nil || st.TunnelName == "" {
+		return web.EdgeInfo{}
+	}
+	e := web.EdgeInfo{
+		TunnelName: st.TunnelName,
+		TunnelID:   shortID(st.TunnelID),
+		Account:    shortID(st.AccountID),
+	}
+	seen := map[string]bool{}
+	for _, r := range st.Records {
+		if r.Name != "" && !seen[r.Name] {
+			seen[r.Name] = true
+			e.Hosts = append(e.Hosts, r.Name)
+		}
+	}
+	if cfgPath, err := config.FindConfig(c.flags.configPath); err == nil {
+		if cfg, err := config.Load(cfgPath); err == nil {
+			e.Protected = cfg.Tunnel.Access != nil && len(cfg.Tunnel.Access.Emails) > 0
+		}
+	}
+	return e
+}
+
+// shortID truncates a long CF id/hash for display (first 12 chars).
+func shortID(s string) string {
+	if len(s) > 12 {
+		return s[:12] + "…"
+	}
+	return s
+}
+
+// atoiSafe parses a count string, returning 0 on error.
+func atoiSafe(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // diskUsage returns used/total (human) and the used percentage for the
