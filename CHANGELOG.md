@@ -2,6 +2,21 @@
 
 All notable changes to Fleet are documented here. Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.1.0] — 2026-07-26
+
+### Changed
+- **Premium polish pass.** Layered card depth with hover-lift, gradient primary
+  buttons with brand glow, active-nav accent bar, branded `:focus-visible` rings,
+  thin custom scrollbars, spring button press, refined chip/tag micro-interactions,
+  and a staggered card entrance (guarded against the live-refresh tick, and fully
+  disabled under `prefers-reduced-motion`).
+- Added skeleton-shimmer, motion, ring, gradient, and hover-shadow design tokens
+  to `tokens.css` (light + dark).
+
+### Fixed
+- Component-library color swatches were invisible (inline `<span>` chips ignored
+  `height`/`width`); now render as blocks.
+
 ## [1.0.0] — 2026-07-26
 
 ### Added
