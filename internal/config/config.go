@@ -37,9 +37,25 @@ type Config struct {
 	// (the box's public IP + SSH login). It has no effect on how roost runs.
 	Server Server `yaml:"server"`
 
+	// Notify is optional email-notification config for the web panel's
+	// incident monitor. The SMTP password is never here — it comes from
+	// $ROOST_SMTP_PASSWORD.
+	Notify Notify `yaml:"notify"`
+
 	// Dir is the directory containing the config file; relative app
 	// paths are resolved against it.
 	Dir string `yaml:"-"`
+}
+
+// Notify configures incident email alerts from the web panel. Empty Email or
+// SMTPHost disables notifications. The password is read from
+// $ROOST_SMTP_PASSWORD, never from this file.
+type Notify struct {
+	Email    Includes `yaml:"email"`     // recipient(s); scalar or list
+	SMTPHost string   `yaml:"smtp_host"` // e.g. smtp.gmail.com
+	SMTPPort int      `yaml:"smtp_port"` // e.g. 587
+	SMTPUser string   `yaml:"smtp_user"` // SMTP login (often the from address)
+	From     string   `yaml:"from"`      // sender; defaults to smtp_user
 }
 
 // Server is optional host metadata surfaced in the web panel (display only).

@@ -132,6 +132,31 @@ apps:
 	}
 }
 
+func TestLoadNotifyBlock(t *testing.T) {
+	dir := t.TempDir()
+	mkApps(t, dir, "app1")
+	// email as a scalar must parse into the list (convenience).
+	yaml := `domain: demo.example.com
+notify:
+  email: me@example.com
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  smtp_user: bot@example.com
+apps:
+  - ` + filepath.Join(dir, "app1") + `
+`
+	cfg, err := Load(writeConfig(t, t.TempDir(), yaml))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Notify.Email) != 1 || cfg.Notify.Email[0] != "me@example.com" {
+		t.Errorf("Notify.Email = %v, want [me@example.com]", cfg.Notify.Email)
+	}
+	if cfg.Notify.SMTPHost != "smtp.gmail.com" || cfg.Notify.SMTPPort != 587 || cfg.Notify.SMTPUser != "bot@example.com" {
+		t.Errorf("Notify smtp = %+v", cfg.Notify)
+	}
+}
+
 func TestLoadPathResolution(t *testing.T) {
 	t.Run("tilde expands to home", func(t *testing.T) {
 		home := t.TempDir()

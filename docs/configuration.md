@@ -54,6 +54,39 @@ apps: [...]                # see below
   and the SSH login command. No effect on how roost runs — and the card only shows
   behind your Access-gated `control_host`.
 
+## Incident email alerts — `notify:`
+
+The `roost web` panel runs a background monitor (every 30s, even with no browser
+open) that watches every app's container state **and** an end-to-end HTTP probe.
+When an app goes **down** or **degraded** (up but returning 502/unreachable), or
+the Docker control plane becomes unreachable, roost records an incident and — if
+`notify:` is set — emails you. It emails again when the service **recovers**,
+with how long it was down.
+
+```yaml
+notify:
+  email: me@example.com        # recipient; a scalar or a list
+  smtp_host: smtp.gmail.com
+  smtp_port: 587               # optional, default 587
+  smtp_user: me@example.com    # SMTP login
+  from: roost@example.com      # optional, defaults to smtp_user
+```
+
+- **The SMTP password is never in this file.** roost reads it from
+  `$ROOST_SMTP_PASSWORD` (set it in the panel's environment — e.g. the
+  systemd unit's `Environment=`). Empty config or empty password → alerts are
+  simply off; the monitor still records incidents for the panel to display.
+- **Gmail:** use an [App Password](https://myaccount.google.com/apppasswords)
+  (not your account password), with `smtp_host: smtp.gmail.com`, `smtp_port: 587`.
+- Alerts fire on **transitions** only (down→email, recovered→email), so a
+  persistently-down app doesn't spam you. States already broken when the panel
+  starts are shown but not emailed (no startup burst).
+- Incidents also surface in the panel: a red **active-incidents banner**, an
+  **Incidents** card with open/resolved history + durations, and an
+  open-incident list on the public `/status` page.
+
+Uses only the standard library (`net/smtp`) — no new dependency.
+
 ## App entries — two forms, freely mixed
 
 **Bare string** — a path; the hostname comes from the global `domain`:

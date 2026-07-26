@@ -20,6 +20,7 @@ import (
 	"github.com/cdrrazan/roost/internal/config"
 	"github.com/cdrrazan/roost/internal/doctor"
 	"github.com/cdrrazan/roost/internal/generate"
+	"github.com/cdrrazan/roost/internal/notify"
 	"github.com/cdrrazan/roost/internal/runner"
 	"github.com/cdrrazan/roost/internal/shell"
 	"github.com/cdrrazan/roost/internal/state"
@@ -760,9 +761,15 @@ func newWebCmd(flags *rootFlags) *cobra.Command {
 				token = os.Getenv("ROOST_WEB_TOKEN")
 			}
 			ctrl := &stackController{cmd: cmd, flags: flags}
+			panel := web.NewServer(ctrl, token)
+			if m, to := buildMailer(flags); m.Enabled() {
+				panel.SetNotifier(m)
+				cmd.Printf("incident email alerts enabled → %s\n", to)
+			}
+			panel.StartMonitor(30 * time.Second)
 			srv := &http.Server{
 				Addr:              addr,
-				Handler:           web.NewServer(ctrl, token).Handler(),
+				Handler:           panel.Handler(),
 				ReadHeaderTimeout: 10 * time.Second,
 			}
 			cmd.Printf("roost web listening on %s\n", addr)
@@ -772,4 +779,29 @@ func newWebCmd(flags *rootFlags) *cobra.Command {
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:4600", "address to listen on")
 	cmd.Flags().StringVar(&token, "token", "", "shared secret required for on/off actions (or $ROOST_WEB_TOKEN)")
 	return cmd
+}
+
+// buildMailer assembles the incident notifier from the config's notify: block
+// plus $ROOST_SMTP_PASSWORD (never in config). Returns a disabled mailer (and
+// empty recipient string) when notifications aren't configured.
+func buildMailer(flags *rootFlags) (notify.Mailer, string) {
+	cfgPath, err := config.FindConfig(flags.configPath)
+	if err != nil {
+		return notify.Mailer{}, ""
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return notify.Mailer{}, ""
+	}
+	n := cfg.Notify
+	port := n.SMTPPort
+	if port == 0 {
+		port = 587
+	}
+	m := notify.Mailer{
+		Host: n.SMTPHost, Port: port,
+		User: n.SMTPUser, Pass: os.Getenv("ROOST_SMTP_PASSWORD"),
+		From: n.From, To: n.Email,
+	}
+	return m, strings.Join(n.Email, ", ")
 }

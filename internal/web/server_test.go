@@ -268,6 +268,73 @@ func TestAppCardShowsReachabilityChip(t *testing.T) {
 	}
 }
 
+type fakeNotifier struct {
+	mu   sync.Mutex
+	subs []string
+}
+
+func (f *fakeNotifier) Notify(subject, _ string) error {
+	f.mu.Lock()
+	f.subs = append(f.subs, subject)
+	f.mu.Unlock()
+	return nil
+}
+func (f *fakeNotifier) subjects() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.subs...)
+}
+
+func TestIncidentDetectionAndNotify(t *testing.T) {
+	f := &fakeController{}
+	n := &fakeNotifier{}
+	s := NewServer(f, "")
+	s.SetNotifier(n)
+
+	// Baseline: healthy → establishes state, sends nothing.
+	f.statuses = []runner.AppStatus{{Name: "a", State: "running", URL: "https://a", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+	if len(n.subjects()) != 0 {
+		t.Fatalf("baseline should not notify, got %v", n.subjects())
+	}
+	// App goes down → one "down" email + an open incident.
+	f.statuses = []runner.AppStatus{{Name: "a", State: "exited", URL: "https://a"}}
+	s.checkIncidents()
+	// App recovers → one "recovered" email + incident resolved.
+	f.statuses = []runner.AppStatus{{Name: "a", State: "running", URL: "https://a", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+
+	subs := n.subjects()
+	if len(subs) != 2 {
+		t.Fatalf("want 2 notifications (down, recovered), got %v", subs)
+	}
+	if !strings.Contains(strings.ToLower(subs[0]), "down") {
+		t.Errorf("first notification = %q, want a down alert", subs[0])
+	}
+	if !strings.Contains(strings.ToLower(subs[1]), "recover") {
+		t.Errorf("second notification = %q, want a recovery alert", subs[1])
+	}
+	// The panel renders the incident history.
+	body := serve(s, "GET", "/", nil).Body.String()
+	if !strings.Contains(body, "incidents") {
+		t.Error("expected the incident timeline to render")
+	}
+}
+
+func TestDockerDownIsAnIncident(t *testing.T) {
+	f := &fakeController{}
+	n := &fakeNotifier{}
+	s := NewServer(f, "")
+	s.SetNotifier(n)
+	f.statuses = []runner.AppStatus{{Name: "a", State: "running", HTTP: "200", Reachable: true}}
+	s.checkIncidents() // prime healthy
+	f.statusErr = errString("docker daemon not running")
+	s.checkIncidents() // control-plane incident
+	if subs := n.subjects(); len(subs) != 1 || !strings.Contains(strings.ToLower(subs[0]), "control plane") {
+		t.Errorf("want a control-plane alert, got %v", subs)
+	}
+}
+
 func TestCommandPaletteRenders(t *testing.T) {
 	body := serve(NewServer(&fakeController{}, ""), "GET", "/", nil).Body.String()
 	for _, want := range []string{`id="palette"`, `id="palbtn"`, `id="pal-list"`} {

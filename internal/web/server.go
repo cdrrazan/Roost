@@ -300,6 +300,195 @@ type Server struct {
 	// events is a rolling in-memory audit log of panel actions (most recent
 	// first, capped), rendered as the activity timeline. Guarded by mu.
 	events []event
+
+	// Incident monitor state (guarded by mu). health is the last-known
+	// per-app healthy flag; roostDown tracks a control-plane outage; primed
+	// suppresses the email burst for states already broken at startup.
+	notifier  Notifier
+	health    map[string]bool
+	roostDown bool
+	primed    bool
+	incidents []Incident
+}
+
+// Notifier delivers an incident alert (e.g. by email). A nil notifier disables
+// delivery; incidents are still recorded and displayed.
+type Notifier interface {
+	Notify(subject, body string) error
+}
+
+// Incident is a detected outage: an app down/degraded, or the whole control
+// plane unreachable. Resolved is zero while still open.
+type Incident struct {
+	App      string // "" = whole roost (control plane)
+	Kind     string // "down", "degraded", "control"
+	Detail   string
+	Since    time.Time
+	Resolved time.Time
+}
+
+// incidentsCap bounds the retained incident history.
+const incidentsCap = 40
+
+// SetNotifier attaches an incident notifier (called before Serve).
+func (s *Server) SetNotifier(n Notifier) { s.notifier = n }
+
+// StartMonitor runs incident detection on an interval in a background
+// goroutine, so outages are caught (and emailed) even with no browser open.
+func (s *Server) StartMonitor(interval time.Duration) {
+	go func() {
+		s.checkIncidents() // prime immediately
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for range t.C {
+			s.checkIncidents()
+		}
+	}()
+}
+
+// checkIncidents runs one detection pass: it reads status, diffs each app's
+// health against the last pass, records opened/resolved incidents, and returns
+// after firing notifications for any transitions. Notifications are sent
+// outside the lock so a slow SMTP server can't stall status rendering.
+func (s *Server) checkIncidents() {
+	apps, err := s.ctrl.Status()
+	now := time.Now()
+	type note struct{ subject, body string }
+	var out []note
+
+	s.mu.Lock()
+	if s.health == nil {
+		s.health = map[string]bool{}
+	}
+	primed := s.primed
+	link := "\n\nPanel: open your roost control panel."
+
+	if err != nil {
+		if !s.roostDown {
+			s.roostDown = true
+			s.openIncident("", "control", err.Error(), now)
+			if primed {
+				out = append(out, note{"🔴 roost: control plane unreachable",
+					"roost web can't reach Docker:\n" + err.Error() + "\n\n" + now.Format(time.RFC1123) + link})
+			}
+		}
+	} else {
+		if s.roostDown {
+			s.roostDown = false
+			s.resolveIncident("", now)
+			if primed {
+				out = append(out, note{"✅ roost: control plane recovered",
+					"Docker is reachable again.\n\n" + now.Format(time.RFC1123) + link})
+			}
+		}
+		for _, a := range apps {
+			if a.Worker {
+				continue
+			}
+			healthy := a.State == "running" && (a.HTTP == "" || a.Reachable)
+			prev, seen := s.health[a.Name]
+			s.health[a.Name] = healthy
+			if healthy {
+				if seen && !prev {
+					dur := s.resolveIncident(a.Name, now)
+					out = append(out, note{"✅ roost: " + humanize(a.Name) + " recovered",
+						humanize(a.Name) + " is back up" + downFor(dur) + ".\n\n" + a.URL + "\n" + now.Format(time.RFC1123) + link})
+				}
+				continue
+			}
+			// unhealthy
+			if !seen || prev {
+				s.openIncident(a.Name, kindFor(a), detailFor(a), now)
+				if primed {
+					out = append(out, note{"🔴 roost: " + humanize(a.Name) + " is " + shortState(a),
+						humanize(a.Name) + " is " + detailFor(a) + ".\n\n" + a.URL + "\n" + now.Format(time.RFC1123) + link})
+				}
+			}
+		}
+	}
+	s.primed = true
+	s.mu.Unlock()
+
+	if s.notifier != nil {
+		for _, m := range out {
+			_ = s.notifier.Notify(m.subject, m.body)
+		}
+	}
+}
+
+// openIncident records a new open incident for app+kind, unless one is already
+// open for that app (dedup). Newest first, capped.
+func (s *Server) openIncident(app, kind, detail string, at time.Time) {
+	for i := range s.incidents {
+		if s.incidents[i].App == app && s.incidents[i].Resolved.IsZero() {
+			return
+		}
+	}
+	s.incidents = append([]Incident{{App: app, Kind: kind, Detail: detail, Since: at}}, s.incidents...)
+	if len(s.incidents) > incidentsCap {
+		s.incidents = s.incidents[:incidentsCap]
+	}
+}
+
+// resolveIncident closes the open incident for app and returns how long it was
+// open (0 if none was open).
+func (s *Server) resolveIncident(app string, at time.Time) time.Duration {
+	for i := range s.incidents {
+		if s.incidents[i].App == app && s.incidents[i].Resolved.IsZero() {
+			s.incidents[i].Resolved = at
+			return at.Sub(s.incidents[i].Since)
+		}
+	}
+	return 0
+}
+
+func kindFor(a runner.AppStatus) string {
+	if a.State == "running" {
+		return "degraded"
+	}
+	return "down"
+}
+
+func shortState(a runner.AppStatus) string {
+	if a.State == "running" {
+		return "degraded"
+	}
+	return "down"
+}
+
+func detailFor(a runner.AppStatus) string {
+	if a.State == "running" && !a.Reachable {
+		return "up but returning HTTP " + a.HTTP
+	}
+	return a.State
+}
+
+// compactDur renders a duration as "45s" / "6m" / "2.1h".
+func compactDur(d time.Duration) string {
+	d = d.Round(time.Second)
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%.1fh", d.Hours())
+	}
+}
+
+func downFor(d time.Duration) string {
+	if d <= 0 {
+		return ""
+	}
+	d = d.Round(time.Second)
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf(" after %ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf(" after %dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf(" after %.1fh", d.Hours())
+	}
 }
 
 // event is one entry in the activity timeline.
@@ -351,6 +540,7 @@ type publicView struct {
 	Total     int
 	Up        int
 	AllOK     bool
+	Incidents []string // open incidents, "Label — down 6m"
 	Generated string
 }
 
@@ -391,6 +581,18 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, _ *http.Request) {
 	} else {
 		view.AllOK = false
 	}
+	now := time.Now()
+	s.mu.Lock()
+	for _, in := range s.incidents {
+		if in.Resolved.IsZero() {
+			label := "Control plane"
+			if in.App != "" {
+				label = humanize(in.App)
+			}
+			view.Incidents = append(view.Incidents, label+" — down "+compactDur(now.Sub(in.Since)))
+		}
+	}
+	s.mu.Unlock()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := publicTmpl.Execute(w, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -526,29 +728,31 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, verb string, 
 }
 
 type statusView struct {
-	Apps         []runner.AppStatus
-	Groups       []appGroup         // apps bucketed into Main / Utilities / Workers
-	Attention    []runner.AppStatus // apps not running — surfaced up top
-	Total        int
-	RunningCount int
-	RunningPct   int
-	StoppedCount int
-	MemUsed      string // human total used across apps
-	MemCap       string // human total cap across apps
-	MemPct       int    // total used/cap percentage
-	DockerOK     bool   // false when Status() failed (Docker unreachable)
-	Busy         string
-	Last         string
-	Steps        []string     // processing-pane progress lines
-	Removed      []RemovedApp // apps removed via the panel, offered for re-add
-	Server       ServerInfo   // host metadata for the Server card
-	System       SystemInfo   // docker disk usage for the System card
-	Edge         EdgeInfo     // Cloudflare tunnel/DNS facts for the Edge card
-	Alerts       []Alert      // warnings surfaced in the top banner
-	Sparks       map[string]template.HTML
-	Events       []eventView // activity timeline (newest first)
-	Error        string
-	Token        string // embedded in the form when non-empty
+	Apps          []runner.AppStatus
+	Groups        []appGroup         // apps bucketed into Main / Utilities / Workers
+	Attention     []runner.AppStatus // apps not running — surfaced up top
+	Total         int
+	RunningCount  int
+	RunningPct    int
+	StoppedCount  int
+	MemUsed       string // human total used across apps
+	MemCap        string // human total cap across apps
+	MemPct        int    // total used/cap percentage
+	DockerOK      bool   // false when Status() failed (Docker unreachable)
+	Busy          string
+	Last          string
+	Steps         []string     // processing-pane progress lines
+	Removed       []RemovedApp // apps removed via the panel, offered for re-add
+	Server        ServerInfo   // host metadata for the Server card
+	System        SystemInfo   // docker disk usage for the System card
+	Edge          EdgeInfo     // Cloudflare tunnel/DNS facts for the Edge card
+	Alerts        []Alert      // warnings surfaced in the top banner
+	Sparks        map[string]template.HTML
+	Events        []eventView    // activity timeline (newest first)
+	Incidents     []incidentView // detected outages (open first)
+	OpenIncidents int
+	Error         string
+	Token         string // embedded in the form when non-empty
 }
 
 // eventView is one rendered timeline entry.
@@ -556,6 +760,15 @@ type eventView struct {
 	Time string
 	Text string
 	OK   bool
+}
+
+// incidentView is one rendered incident row.
+type incidentView struct {
+	Label  string // "Keeparu" or "Control plane"
+	Detail string
+	Since  string // clock time it opened
+	Ago    string // "down 6m" / "resolved after 3m"
+	Open   bool
 }
 
 // humanBytes formats a byte count in docker-style IEC units.
@@ -578,6 +791,21 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 		Steps: append([]string(nil), s.steps...)}
 	for _, e := range s.events {
 		view.Events = append(view.Events, eventView{Time: e.At.Format("15:04:05"), Text: e.Text, OK: e.OK})
+	}
+	now := time.Now()
+	for _, in := range s.incidents {
+		label := "Control plane"
+		if in.App != "" {
+			label = humanize(in.App)
+		}
+		iv := incidentView{Label: label, Detail: in.Detail, Since: in.Since.Format("Jan 2 15:04"), Open: in.Resolved.IsZero()}
+		if iv.Open {
+			iv.Ago = "down " + compactDur(now.Sub(in.Since))
+			view.OpenIncidents++
+		} else {
+			iv.Ago = "resolved after " + compactDur(in.Resolved.Sub(in.Since))
+		}
+		view.Incidents = append(view.Incidents, iv)
 	}
 	s.mu.Unlock()
 
@@ -943,6 +1171,12 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .srv-metrics .me.up{margin-left:auto;color:var(--muted)}
  .cpuspark{width:60px;height:16px;overflow:visible}
  .cpuspark path{fill:none;stroke:var(--indigo-ink);stroke-width:1.5;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+ .incbanner{display:flex;align-items:center;gap:10px;padding:13px 16px;border-radius:12px;margin-bottom:14px;background:var(--red-bg);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);font-size:13.5px}
+ .incbanner .ib-dot{width:9px;height:9px;border-radius:50%;background:var(--danger);flex:none;box-shadow:0 0 0 0 var(--danger);animation:pulse 1.8s infinite}
+ .incbanner .ib-list{color:var(--ink);opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .count.bad{background:var(--red-bg);color:var(--danger);border-color:transparent}
+ .count.ok{background:var(--teal-bg);color:var(--teal-ink);border-color:transparent}
+ .idet{color:var(--faint)}
  .alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
  .alert{display:flex;align-items:center;gap:9px;padding:10px 14px;border-radius:12px;font-size:13px;font-weight:550;border:1px solid transparent}
  .alert svg{width:16px;height:16px;flex:none}
@@ -1128,6 +1362,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <div class="card"><div class="result err" style="margin:16px">status error: {{.Error}}</div></div>
    {{else}}
 
+   {{if .OpenIncidents}}<div class="incbanner"><span class="ib-dot"></span><b>{{.OpenIncidents}} active incident{{if gt .OpenIncidents 1}}s{{end}}</b><span class="ib-list">{{range .Incidents}}{{if .Open}}{{.Label}} — {{.Ago}} · {{end}}{{end}}</span></div>{{end}}
+
    {{if .Alerts}}<div class="alerts">{{range .Alerts}}<div class="alert {{.Level}}"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>{{.Text}}</div>{{end}}</div>{{end}}
 
    <section class="card" id="attention">
@@ -1285,6 +1521,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     </div>
    </div>
    {{end}}
+
+   <div class="card" id="incidents">
+    <div class="card-h"><h2>Incidents</h2>{{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
+    <div class="procbody">
+     {{if .Incidents}}<ul class="timeline">{{range .Incidents}}<li class="{{if .Open}}bad{{else}}ok{{end}}"><span class="tt">{{.Since}}</span><span class="tx"><b>{{.Label}}</b> — {{.Ago}}{{if .Detail}} <span class="idet">({{.Detail}})</span>{{end}}</span></li>{{end}}</ul>{{else}}<div class="idle"><span class="dot"></span>No incidents recorded</div>{{end}}
+    </div>
+   </div>
 
    <div class="card" id="processing">
     <div class="card-h"><h2>Activity <span class="csub">latest actions</span></h2></div>
@@ -1592,6 +1835,8 @@ var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
  h1{font-size:20px;margin:0} .sub{color:var(--muted);font-size:13px;margin-top:2px}
  .banner{display:flex;align-items:center;gap:11px;padding:16px 18px;border-radius:14px;font-weight:600;margin-bottom:22px;background:var(--panel);border:1px solid var(--line)}
  .banner .d{width:11px;height:11px;border-radius:50%} .banner.ok .d{background:var(--ok)} .banner.bad .d{background:var(--bad)}
+ .incs{margin:-8px 0 22px;display:flex;flex-direction:column;gap:6px}
+ .inc{font-size:13px;color:var(--bad);padding:9px 14px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
  .list{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
  .row{display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--line)}
  .row:first-child{border-top:0}
@@ -1611,6 +1856,7 @@ var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
   <div><h1>Service status</h1><div class="sub">{{.Up}}/{{.Total}} services operational</div></div>
  </div>
  <div class="banner {{if .AllOK}}ok{{else}}bad{{end}}"><span class="d"></span>{{if .AllOK}}All systems operational{{else}}Some services are degraded{{end}}</div>
+ {{if .Incidents}}<div class="incs">{{range .Incidents}}<div class="inc">{{.}}</div>{{end}}</div>{{end}}
  <div class="list">
   {{range .Apps}}<div class="row">
    {{if .URL}}<a class="nm" href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{else}}<span class="nm">{{.Name}}</span>{{end}}
