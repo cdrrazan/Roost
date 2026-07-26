@@ -1382,7 +1382,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .btn:hover{transform:none;box-shadow:none}
  .btn-primary{background:var(--md-primary);color:var(--md-on-primary);border-color:transparent}
  .btn-primary:hover{box-shadow:var(--elev-1)}
- .btn-ok{background:var(--md-tertiary-container);color:var(--md-on-tertiary-container);border-color:transparent}
+ .btn-ok{background:var(--ok);color:#fff;border-color:transparent}
+ .btn-ok:hover{background:var(--ok);color:#fff;box-shadow:var(--elev-1)}
+ :root[data-theme="dark"] .btn-ok{color:#08160e}
+ .empty-state{display:flex;flex-direction:column;align-items:center;gap:9px;padding:44px 18px;text-align:center}
+ .empty-state svg{width:34px;height:34px;color:var(--md-outline)}
+ .empty-state b{font-size:14px;font-weight:600;color:var(--md-on-surface)}
+ .empty-state span{display:block;font-size:12.5px;color:var(--md-on-surface-variant);margin-top:2px}
  .btn-danger{background:transparent;color:var(--md-error);border-color:transparent}
  .iconbtn{border-radius:var(--radius-full);border:none;background:transparent;color:var(--md-on-surface-variant);width:40px;height:40px}
  .iconbtn:hover{background:transparent;border:none}
@@ -1552,6 +1558,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <section class="card">
     <div class="card-h"><h2>Applications <span class="csub">manage and monitor your fleet</span></h2><span id="livedot" class="livedot" title="Live — auto-refreshing every 5s">live</span><span class="count">{{.RunningCount}}/{{.Total}} up</span></div>
     <div class="applist">
+     <div class="empty-state hide" id="filterEmpty"></div>
     {{range .Groups}}
      <div class="group" data-cat="{{.Title}}">
       <div class="grouphdr" id="{{slug .Title}}">{{.Title}}<span class="gc">{{len .Apps}}</span></div>
@@ -1715,15 +1722,24 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  function filter(){
   var on=sf?sf.querySelector(".chip-btn.on"):null;
   var term=(q?q.value:"").toLowerCase(), st=on?on.dataset.val:"all";
+  var anyVisible=false;
   document.querySelectorAll(".group").forEach(function(g){
    var catOk=!cat||g.dataset.cat===cat, any=false;
    g.querySelectorAll(".srv").forEach(function(r){
     var show=catOk && r.dataset.name.toLowerCase().indexOf(term)>-1 && (st==="all"||r.dataset.state===st);
     r.classList.toggle("hide",!show);
-    if(show)any=true;
+    if(show){any=true;anyVisible=true;}
    });
    g.classList.toggle("hide",!(catOk&&any));
   });
+  var fe=document.getElementById("filterEmpty");
+  if(fe){
+   fe.classList.toggle("hide",anyVisible);
+   if(!anyVisible){
+    var msg=term?'No apps match “'+term+'”':st==="running"?"No running apps":st==="stopped"?"No stopped apps":"No apps to show";
+    fe.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg><div><b>'+msg+'</b><span>Try a different filter or search.</span></div>';
+   }
+  }
  }
  if(q)q.addEventListener("input",filter);
  if(sf)sf.addEventListener("click",function(e){var c=e.target.closest(".chip-btn");if(!c)return;sf.querySelectorAll(".chip-btn").forEach(function(x){x.classList.toggle("on",x===c)});filter();});
