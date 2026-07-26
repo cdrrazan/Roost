@@ -528,6 +528,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /app/down", s.guard(s.handleAppAction("stopping", s.ctrl.StopApp)))
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
+	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
 	mux.HandleFunc("GET /api/app", s.handleAppDetail)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	return mux
@@ -597,6 +598,21 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, _ *http.Request) {
 	if err := publicTmpl.Execute(w, view); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// handleTestAlert sends a test notification so the user can confirm email
+// delivery without waiting for a real outage.
+func (s *Server) handleTestAlert(w http.ResponseWriter, r *http.Request) {
+	s.runAction(w, r, "sending test alert", func(emit func(string)) error {
+		if s.notifier == nil {
+			return fmt.Errorf("email alerts not configured — set a notify: block and $ROOST_SMTP_PASSWORD")
+		}
+		emit("sending test email…")
+		return s.notifier.Notify("✅ roost test alert",
+			"This is a test alert from your roost control panel.\n"+
+				"If you're reading this, incident email notifications are working.\n\n"+
+				time.Now().Format(time.RFC1123))
+	})
 }
 
 // handleAppDetail serves one app's drawer payload as JSON. Read-only, so it
@@ -1523,7 +1539,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    {{end}}
 
    <div class="card" id="incidents">
-    <div class="card-h"><h2>Incidents</h2>{{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
+    <div class="card-h"><h2>Incidents</h2>
+     <form class="inline" method="post" action="/test-alert" style="margin-left:auto">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
+     {{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
     <div class="procbody">
      {{if .Incidents}}<ul class="timeline">{{range .Incidents}}<li class="{{if .Open}}bad{{else}}ok{{end}}"><span class="tt">{{.Since}}</span><span class="tx"><b>{{.Label}}</b> — {{.Ago}}{{if .Detail}} <span class="idet">({{.Detail}})</span>{{end}}</span></li>{{end}}</ul>{{else}}<div class="idle"><span class="dot"></span>No incidents recorded</div>{{end}}
     </div>

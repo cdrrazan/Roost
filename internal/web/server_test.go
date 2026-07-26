@@ -321,6 +321,24 @@ func TestIncidentDetectionAndNotify(t *testing.T) {
 	}
 }
 
+func TestTestAlertButton(t *testing.T) {
+	// With a notifier: POST /test-alert delivers a message.
+	n := &fakeNotifier{}
+	s := NewServer(&fakeController{}, "")
+	s.SetNotifier(n)
+	serve(s, "POST", "/test-alert", nil)
+	waitFor(t, func() bool { return len(n.subjects()) == 1 })
+	if subs := n.subjects(); !strings.Contains(strings.ToLower(subs[0]), "test") {
+		t.Errorf("test alert subject = %q", subs[0])
+	}
+	// Without a notifier: it reports "not configured", never panics.
+	s2 := NewServer(&fakeController{}, "")
+	serve(s2, "POST", "/test-alert", nil)
+	waitFor(t, func() bool {
+		return strings.Contains(serve(s2, "GET", "/", nil).Body.String(), "not configured")
+	})
+}
+
 func TestDockerDownIsAnIncident(t *testing.T) {
 	f := &fakeController{}
 	n := &fakeNotifier{}
