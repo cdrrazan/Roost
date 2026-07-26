@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Settings · Fleet</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/fleet.css">
+<script src="assets/js/theme.js"></script>
+</head>
+<body>
+<div class="shell">
+ <aside class="side">
+  <div class="brand"><div class="logo"><img src="assets/img/favicon.svg" width="36" height="36" alt=""></div><div><div class="bt">Fleet</div><div class="bs">Control panel</div></div></div>
+  <nav class="nav">
+   <div class="navlabel">Resources</div>
+   <a href="index.html"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
+   <div class="navlabel">Monitoring</div>
+   <a href="status.html"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></span> Status page ↗</a>
+   <a href="components.html"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/></svg></span> Components</a>
+   <div class="navlabel">Manage</div>
+   <a href="settings.html" class="active"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings</a>
+  </nav>
+  <div class="grow"></div>
+  <div class="user">
+   <div class="avatar"><svg viewBox="0 0 40 40"><rect width="40" height="40" fill="#5b54e6"/><text x="20" y="26" font-size="16" fill="#fff" text-anchor="middle" font-family="sans-serif" font-weight="600">A</text></svg></div>
+   <div style="min-width:0;flex:1"><div class="un">Alex Rivera</div><div class="ue">@alex</div></div>
+   <a class="logout" href="login.html" title="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
+  </div>
+ </aside>
+
+ <div class="content">
+  <header class="simple-top">
+   <button class="burger" id="burger" aria-label="Menu">☰</button>
+   <button class="iconbtn sidetgl" id="sidetgl" title="Collapse sidebar"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg></button>
+   <h2>Settings</h2>
+   <button class="iconbtn" id="themebtn" title="Toggle theme" style="margin-left:auto"><span class="moon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></span><span class="sun"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></span></button>
+  </header>
+
+  <main style="overflow-y:auto">
+   <div class="page">
+    <h1 class="page-h">Settings</h1>
+    <p class="page-sub">Manage your control panel, appearance, and alerting.</p>
+
+    <section class="card" style="padding:6px 20px;margin-bottom:18px">
+     <div class="setrow"><div class="lbl"><b>Theme</b><span>Light, dark, or follow system.</span></div>
+      <div class="seggroup"><button class="active">Light</button><button>Dark</button><button>System</button></div></div>
+     <div class="setrow"><div class="lbl"><b>Accent color</b><span>Drives buttons, links, and highlights.</span></div>
+      <div class="guide-row"><span class="swatch"><span class="chip" style="background:#5b54e6"></span></span><span class="swatch"><span class="chip" style="background:#0e7a54"></span></span><span class="swatch"><span class="chip" style="background:#d64550"></span></span></div></div>
+     <div class="setrow"><div class="lbl"><b>Default view</b><span>How the app list renders on load.</span></div>
+      <div class="seggroup"><button class="active">List</button><button>Grid</button></div></div>
+    </section>
+
+    <section class="card" style="padding:6px 20px;margin-bottom:18px">
+     <div class="setrow"><div class="lbl"><b>Email alerts</b><span>Notify me when an app goes down or recovers.</span></div>
+      <label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+     <div class="setrow"><div class="lbl"><b>Recipient</b><span>Where incident emails are sent.</span></div>
+      <input type="email" value="alex@example.com" style="max-width:260px"></div>
+     <div class="setrow"><div class="lbl"><b>Memory alert threshold</b><span>Warn when an app exceeds this % of its cap.</span></div>
+      <input type="number" value="90" style="max-width:90px"> </div>
+     <div class="setrow"><div class="lbl"><b>Disk alert threshold</b><span>Warn when the host disk exceeds this %.</span></div>
+      <input type="number" value="80" style="max-width:90px"></div>
+    </section>
+
+    <section class="card" style="padding:6px 20px;margin-bottom:18px">
+     <div class="setrow"><div class="lbl"><b>Auto-refresh</b><span>Live-update metrics without reloading.</span></div>
+      <label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+     <div class="setrow"><div class="lbl"><b>Public status page</b><span>Expose a read-only /status board.</span></div>
+      <label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+    </section>
+
+    <section class="card" style="padding:16px 20px;border-color:var(--red-line)">
+     <div class="setrow" style="padding-top:0"><div class="lbl"><b style="color:var(--danger)">Danger zone</b><span>Stop the entire fleet. This affects every app.</span></div>
+      <button class="btn btn-danger">Stop all apps</button></div>
+    </section>
+
+    <div style="margin-top:20px;display:flex;gap:10px"><button class="btn btn-primary">Save changes</button><button class="btn">Cancel</button></div>
+   </div>
+  </main>
+ </div>
+</div>
+<script src="assets/js/chrome.js"></script>
+</body>
+</html>
