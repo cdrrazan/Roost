@@ -43,24 +43,40 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Gate on secrets
+        id: gate
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          if [ -n "$KEY" ] && [ -n "$HOST" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Deploy secrets not set (DEPLOY_SSH_KEY / DEPLOY_HOST) — skipping deploy. Configure them to enable auto-deploy."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@v4
+      - if: steps.gate.outputs.ok == 'true'
+        uses: actions/setup-go@v5
         with:
           go-version: "1.24.x"
 
       - name: Configure SSH
+        if: steps.gate.outputs.ok == 'true'
         env:
           KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           HOST: ${{ secrets.DEPLOY_HOST }}
           PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
-          test -n "$KEY" && test -n "$HOST" || { echo "::error::DEPLOY_SSH_KEY / DEPLOY_HOST secrets are not set"; exit 1; }
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
           ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Detect box architecture
         id: arch
+        if: steps.gate.outputs.ok == 'true'
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           BOXUSER: ${{ secrets.DEPLOY_USER }}
@@ -75,9 +91,11 @@ jobs:
           echo "box arch: $m"
 
       - name: Build static binary (linux/${{ steps.arch.outputs.goarch }})
+        if: steps.gate.outputs.ok == 'true'
         run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ steps.arch.outputs.goarch }} go build -trimpath -ldflags="-s -w" -o roost ./cmd/roost
 
       - name: Ship, install, restart roost-web
+        if: steps.gate.outputs.ok == 'true'
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           BOXUSER: ${{ secrets.DEPLOY_USER }}
