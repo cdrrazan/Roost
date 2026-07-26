@@ -1030,6 +1030,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .nav a:hover .ico,.nav a.active .ico{color:currentColor}
  .navlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:15px 11px 5px;font-weight:700}
  .side .grow{flex:1;min-height:12px}
+ .sidesys{padding:10px 11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
+ .sidesys .navlabel{padding:0 0 7px}
+ .sidesys .ss-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding:3px 0}
+ .sidesys .ss-row b{color:var(--ink);font-weight:600;text-align:right}
  .user{display:flex;align-items:center;gap:10px;padding:10px 8px;border-top:1px solid var(--line);margin-top:8px}
  .avatar{width:34px;height:34px;border-radius:50%;overflow:hidden;flex:none;background:var(--indigo-bg)}
  .avatar img{width:100%;height:100%;object-fit:cover;display:block}
@@ -1346,6 +1350,15 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span> Repository</a>
   </nav>
   <div class="grow"></div>
+  {{if .System.Images}}
+  <div class="sidesys">
+   <div class="navlabel">System · docker</div>
+   <div class="ss-row"><span>Images</span><b>{{.System.Images}}{{if .System.ImagesSize}} · {{.System.ImagesSize}}{{end}}</b></div>
+   <div class="ss-row"><span>Containers</span><b>{{.System.Containers}}</b></div>
+   <div class="ss-row"><span>Volumes</span><b>{{.System.Volumes}}{{if .System.VolumesSize}} · {{.System.VolumesSize}}{{end}}</b></div>
+   {{if .System.Reclaimable}}<div class="ss-row"><span>Reclaimable</span><b>{{.System.Reclaimable}}</b></div>{{end}}
+  </div>
+  {{end}}
   <div class="user">
    <div class="avatar"><img src="https://github.com/cdrrazan.png?size=80" alt="Rajan Bhattarai" referrerpolicy="no-referrer"></div>
    <div style="min-width:0;flex:1"><div class="un">Rajan Bhattarai</div><div class="ue">@cdrrazan</div></div>
@@ -1521,19 +1534,6 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
      <div class="ov-row"><span class="k">Access</span><span class="v">{{if .Edge.Protected}}<span class="tag fw">protected</span>{{else}}<span class="tag worker">public</span>{{end}}</span></div>
      {{if .Edge.Hosts}}<div class="ov-row"><span class="k">Routes</span><span class="v">{{len .Edge.Hosts}} DNS</span></div>
      <div class="edgehosts">{{range .Edge.Hosts}}<code>{{.}}</code>{{end}}</div>{{end}}
-    </div>
-   </div>
-   {{end}}
-
-   {{if .System.Images}}
-   <div class="card" id="system">
-    <div class="card-h"><h2>System</h2><span class="csub">docker disk usage</span></div>
-    <div class="ov">
-     <div class="ov-row"><span class="k">Images</span><span class="v">{{.System.Images}}{{if .System.ImagesSize}} · {{.System.ImagesSize}}{{end}}</span></div>
-     <div class="ov-row"><span class="k">Containers</span><span class="v">{{.System.Containers}}</span></div>
-     <div class="ov-row"><span class="k">Volumes</span><span class="v">{{.System.Volumes}}{{if .System.VolumesSize}} · {{.System.VolumesSize}}{{end}}</span></div>
-     {{if .System.BuildCache}}<div class="ov-row"><span class="k">Build cache</span><span class="v">{{.System.BuildCache}}</span></div>{{end}}
-     {{if .System.Reclaimable}}<div class="ov-row"><span class="k">Reclaimable</span><span class="v">{{.System.Reclaimable}}</span></div>{{end}}
     </div>
    </div>
    {{end}}
