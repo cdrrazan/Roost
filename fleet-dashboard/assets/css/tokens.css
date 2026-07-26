@@ -19,9 +19,16 @@
  --indigo-bg:#eef0ff; --indigo-ink:#4f46e5;
  --shadow:0 1px 2px rgba(16,19,34,.04),0 12px 30px -18px rgba(16,19,34,.14);
  --shadow-lg:0 40px 80px -40px rgba(24,20,60,.30);
+ --shadow-hover:0 2px 4px rgba(16,19,34,.05),0 24px 48px -22px rgba(24,20,60,.28);
  --radius:16px;
  --font:"Google Sans","Product Sans","Google Sans Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+ /* motion + depth (premium layer) */
+ --ease:cubic-bezier(.4,0,.2,1); --spring:cubic-bezier(.34,1.4,.5,1);
+ --ring:0 0 0 3px color-mix(in srgb,var(--brand) 32%,transparent);
+ --grad-brand:linear-gradient(135deg,color-mix(in srgb,var(--brand) 82%,#fff),var(--brand));
+ --hi:inset 0 1px 0 rgba(255,255,255,.6);
+ --glass:color-mix(in srgb,var(--panel) 78%,transparent);
 }
 :root[data-theme="dark"]{
  --bg:#0a0d13; --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
@@ -36,4 +43,9 @@
  --indigo-bg:#191d38; --indigo-ink:#a9a3ff;
  --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -18px rgba(0,0,0,.7);
  --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
+ --shadow-hover:0 2px 6px rgba(0,0,0,.35),0 26px 52px -22px rgba(0,0,0,.85);
+ --ring:0 0 0 3px color-mix(in srgb,var(--brand) 40%,transparent);
+ --grad-brand:linear-gradient(135deg,color-mix(in srgb,var(--brand) 78%,#fff),var(--brand));
+ --hi:inset 0 1px 0 rgba(255,255,255,.06);
+ --glass:color-mix(in srgb,var(--panel) 72%,transparent);
 }

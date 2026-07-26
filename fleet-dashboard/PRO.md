@@ -2,7 +2,7 @@
 
 The template in this repo is **free and MIT-licensed** — the complete, working
 dashboard. **Fleet Pro** is an optional one-time purchase for teams that want
-the design source, more looks, framework ports, and support.
+more looks, framework ports, integration recipes, and support.
 
 ## What's in the box (free, MIT)
 
@@ -17,7 +17,6 @@ the design source, more looks, framework ports, and support.
 |---|:---:|:---:|
 | All 6 HTML pages + assets | ✅ | ✅ |
 | Light / dark + theming tokens | ✅ | ✅ |
-| **Figma source** (components + pages) | — | ✅ |
 | **6 extra premium themes** (Ocean, Slate, Forest, Sunset, Mono, High-contrast) | — | ✅ |
 | **React port** (Vite + TypeScript) | — | ✅ |
 | **Vue port** (Vite + TypeScript) | — | ✅ |
