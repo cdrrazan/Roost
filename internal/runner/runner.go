@@ -275,6 +275,22 @@ type AppStatus struct {
 	URL      string
 	Category string // display grouping for the panel: main, utility, worker
 	Repo     string // browsable code-host URL for the app's git origin, "" if none
+	// Static per-app metadata (from detection/config) shown as badges.
+	Framework string
+	Database  string // "", "mysql", "postgres"
+	Redis     bool
+	Runtime   string // language runtime version, "" if unknown
+	Worker    bool
+	// Live runtime metrics from docker stats / ps.
+	CPU string // "2.75%" from docker stats, "" when unknown
+	Net string // "1.2MB / 800kB" network I/O, "" when unknown
+	Up  string // human uptime string from compose ps ("Up 3 hours"), "" when down
+	// Reachability from an actual HTTP probe of the public URL (set by the
+	// web controller, not the runner). HTTP is the status code or an error
+	// word ("timeout"); Reachable is true when the app answered without a
+	// gateway error. Both empty/false when not probed (down, worker).
+	HTTP      string
+	Reachable bool
 }
 
 // psLine is the subset of `docker compose ps --format json` output we
@@ -284,6 +300,7 @@ type psLine struct {
 	State   string `json:"State"`
 	Health  string `json:"Health"`
 	Name    string `json:"Name"`
+	Status  string `json:"Status"` // "Up 3 hours (healthy)" — used for uptime
 }
 
 // statsLine is the subset of `docker stats --format json` output we
@@ -291,6 +308,8 @@ type psLine struct {
 type statsLine struct {
 	Name     string `json:"Name"`
 	MemUsage string `json:"MemUsage"`
+	CPUPerc  string `json:"CPUPerc"`
+	NetIO    string `json:"NetIO"`
 }
 
 // Status reports state, health, and memory per app. Apps absent from
@@ -313,7 +332,7 @@ func (r *Runner) Status(apps []generate.App) ([]AppStatus, error) {
 		states[p.Service] = p
 	}
 
-	memory := map[string]string{}
+	stats := map[string]statsLine{}
 	if statsOut, err := r.run("stats", "--no-stream", "--format", "json"); err == nil {
 		for _, line := range strings.Split(statsOut.Stdout, "\n") {
 			line = strings.TrimSpace(line)
@@ -329,7 +348,7 @@ func (r *Runner) Status(apps []generate.App) ([]AppStatus, error) {
 			if i := strings.LastIndex(svc, "-"); i > 0 {
 				svc = svc[:i]
 			}
-			memory[svc] = s.MemUsage
+			stats[svc] = s
 		}
 	}
 
@@ -340,17 +359,25 @@ func (r *Runner) Status(apps []generate.App) ([]AppStatus, error) {
 			url = "(worker)"
 		}
 		st := AppStatus{
-			Name:     app.Name,
-			State:    "not created",
-			URL:      url,
-			Category: app.Category,
+			Name:      app.Name,
+			State:     "not created",
+			URL:       url,
+			Category:  app.Category,
+			Framework: app.Framework,
+			Database:  app.Database,
+			Redis:     app.Redis,
+			Runtime:   app.RuntimeVersion,
+			Worker:    app.Worker,
 		}
 		if p, ok := states[app.Name]; ok {
 			st.State = p.State
 			st.Health = p.Health
+			st.Up = p.Status
 		}
-		if mem, ok := memory[app.Name]; ok {
-			st.Memory = mem
+		if s, ok := stats[app.Name]; ok {
+			st.Memory = s.MemUsage
+			st.CPU = s.CPUPerc
+			st.Net = s.NetIO
 		}
 		statuses = append(statuses, st)
 	}

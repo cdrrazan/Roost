@@ -107,6 +107,33 @@ func slug(s string) string {
 	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(s), " ", "-"))
 }
 
+// tech maps a framework/database/runtime key to its display name for badges.
+func tech(s string) string {
+	switch strings.ToLower(s) {
+	case "rails":
+		return "Rails"
+	case "django":
+		return "Django"
+	case "next":
+		return "Next.js"
+	case "node":
+		return "Node"
+	case "sinatra":
+		return "Sinatra"
+	case "static":
+		return "Static"
+	case "mysql":
+		return "MySQL"
+	case "postgres":
+		return "Postgres"
+	default:
+		if s == "" {
+			return ""
+		}
+		return strings.ToUpper(s[:1]) + s[1:]
+	}
+}
+
 // appGroup is one titled section of the app list.
 type appGroup struct {
 	Title string
@@ -416,13 +443,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 }
 
 var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
-	"humanize": humanize, "slug": slug, "mempct": memPct, "memcolor": memColor,
+	"humanize": humanize, "slug": slug, "mempct": memPct, "memcolor": memColor, "tech": tech,
 }).Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
 <script>(function(){try{var r=document.documentElement,t=localStorage.getItem("roost-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");r.dataset.theme=t;if(localStorage.getItem("roost-side")==="off")r.dataset.side="off";if(localStorage.getItem("roost-rail")==="off")r.dataset.rail="off";}catch(e){}})();</script>
-{{if .Busy}}<meta http-equiv="refresh" content="3">{{end}}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
@@ -618,6 +644,25 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .srv-sub .repo{display:inline-flex;align-items:center;gap:3px;color:var(--muted);text-decoration:none;font-weight:500}
  .srv-sub .repo:hover{color:var(--ink)}
  .srv-sub .repo svg{flex:none}
+ .livedot{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--teal-ink);display:inline-flex;align-items:center;gap:5px;margin-left:auto}
+ .livedot::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 2s infinite}
+ .livedot.beat::before{animation:none;background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 30%,transparent)}
+ @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}70%{box-shadow:0 0 0 6px transparent}100%{box-shadow:0 0 0 0 transparent}}
+ .rchip{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;letter-spacing:.02em}
+ .rchip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 22%,transparent)}
+ .rchip.up{background:var(--teal-bg);color:var(--teal-ink)}
+ .rchip.down{background:var(--red-bg);color:var(--danger)}
+ .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+ .tag{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;letter-spacing:.01em;line-height:1.5;border:1px solid transparent}
+ .tag.fw{background:var(--indigo-bg);color:var(--indigo-ink)}
+ .tag.db{background:var(--teal-bg);color:var(--teal-ink)}
+ .tag.redis{background:var(--red-bg);color:var(--danger)}
+ .tag.rt{background:var(--panel2);color:var(--muted);border-color:var(--line)}
+ .tag.worker{background:var(--amber-bg);color:var(--amber-ink)}
+ .srv-metrics{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums}
+ .srv-metrics .me{display:inline-flex;align-items:center;gap:6px}
+ .srv-metrics .me i{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--faint)}
+ .srv-metrics .me.up{margin-left:auto;color:var(--muted)}
  .srv-bar{width:100%}
  .mlabel{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:5px}
  .mlabel b{color:var(--ink);font-weight:700}
@@ -803,7 +848,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    </div>
 
    <section class="card">
-    <div class="card-h"><h2>Applications <span class="csub">manage and monitor your fleet</span></h2><span class="count">{{.RunningCount}}/{{.Total}} up</span></div>
+    <div class="card-h"><h2>Applications <span class="csub">manage and monitor your fleet</span></h2><span id="livedot" class="livedot" title="Live — auto-refreshing every 5s">live</span><span class="count">{{.RunningCount}}/{{.Total}} up</span></div>
     <div class="applist">
     {{range .Groups}}
      <div class="group" data-cat="{{.Title}}">
@@ -814,8 +859,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
         <div class="srv-top">
          <span class="srv-ico">{{if .URL}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>{{end}}</span>
          <div class="srv-idb">
-          <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}</div>
+          <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}{{if and (eq .State "running") .HTTP}}<span class="rchip {{if .Reachable}}up{{else}}down{{end}}" title="Live HTTP probe: {{.HTTP}}">{{if .Reachable}}live · {{.HTTP}}{{else}}{{.HTTP}}{{end}}</span>{{end}}</div>
           <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}{{if .Repo}} · <a class="repo" href="{{.Repo}}" target="_blank" rel="noopener" title="Open repository"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 4.7 18 5 18 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>Code</a>{{end}}</div>
+          {{if or .Framework .Database .Redis .Runtime .Worker}}<div class="tags">{{if .Worker}}<span class="tag worker">worker</span>{{end}}{{if .Framework}}<span class="tag fw">{{tech .Framework}}</span>{{end}}{{if .Database}}<span class="tag db">{{tech .Database}}</span>{{end}}{{if .Redis}}<span class="tag redis">Redis</span>{{end}}{{if .Runtime}}<span class="tag rt">{{.Runtime}}</span>{{end}}</div>{{end}}
          </div>
          <div class="srv-acts">
           <div class="seg">
@@ -834,6 +880,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
          </div>
         </div>
         {{if .Memory}}<div class="srv-bar"><div class="mlabel">Memory <b>{{mempct .Memory}}%</b></div><div class="bar"><span class="fill {{memcolor .Memory}}" style="width:{{mempct .Memory}}%"></span></div></div>{{end}}
+        {{if eq .State "running"}}<div class="srv-metrics">{{if .CPU}}<span class="me"><i>CPU</i>{{.CPU}}</span>{{end}}{{if .Memory}}<span class="me"><i>MEM</i>{{.Memory}}</span>{{end}}{{if .Net}}<span class="me"><i>NET</i>{{.Net}}</span>{{end}}{{if .Up}}<span class="me up"><i>UP</i>{{.Up}}</span>{{end}}</div>{{end}}
        </div>
       {{end}}
       </div>
@@ -975,14 +1022,17 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  // from the current origin so it works on any host.
  var lo=document.getElementById("logout");
  if(lo)lo.href="/cdn-cgi/access/logout?returnTo="+encodeURIComponent(location.origin+"/");
- // Copy-to-clipboard (e.g. the ssh login command).
- document.querySelectorAll("[data-copy]").forEach(function(b){
-  b.addEventListener("click",function(){
-   (navigator.clipboard?navigator.clipboard.writeText(b.dataset.copy):Promise.reject()).then(function(){
-    var t=b.textContent; b.textContent="Copied"; setTimeout(function(){b.textContent=t;},1200);
-   }).catch(function(){});
+ // Copy-to-clipboard (e.g. the ssh login command). Re-run after a live swap.
+ function attachCopy(){
+  document.querySelectorAll("[data-copy]").forEach(function(b){
+   if(b._c)return; b._c=1;
+   b.addEventListener("click",function(){
+    (navigator.clipboard?navigator.clipboard.writeText(b.dataset.copy):Promise.reject()).then(function(){
+     var t=b.textContent; b.textContent="Copied"; setTimeout(function(){b.textContent=t;},1200);
+    }).catch(function(){});
+   });
   });
- });
+ }
  var tb=document.getElementById("themebtn");
  if(tb)tb.addEventListener("click",function(){
   var d=document.documentElement.dataset.theme==="dark"?"light":"dark";
@@ -990,9 +1040,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   try{localStorage.setItem("roost-theme",d);}catch(e){}
  });
  // Memory-by-app hover tooltip: name + RAM for the bar under the cursor.
- var spark=document.querySelector(".spark"),tip=document.getElementById("sparkTip");
- if(spark&&tip){
+ function attachSpark(){
+  var spark=document.querySelector(".spark"); if(!spark||spark._s)return; spark._s=1;
   spark.addEventListener("mousemove",function(ev){
+   var tip=document.getElementById("sparkTip"); if(!tip)return;
    var sb=ev.target.closest(".sb");
    if(!sb){tip.hidden=true;return;}
    var prev=spark.querySelector(".sb.hot"); if(prev&&prev!==sb)prev.classList.remove("hot");
@@ -1004,7 +1055,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    tip.hidden=false;
   });
   spark.addEventListener("mouseleave",function(){
-   tip.hidden=true;
+   var tip=document.getElementById("sparkTip"); if(tip)tip.hidden=true;
    var h=spark.querySelector(".sb.hot"); if(h)h.classList.remove("hot");
   });
  }
@@ -1026,6 +1077,40 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  var burger=document.getElementById("burger");
  if(burger)burger.addEventListener("click",function(){document.body.classList.toggle("nav-open");});
  document.querySelectorAll(".side .nav a:not(.navf)").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});
+
+ // Reattach listeners + reapply view/filter to freshly rendered main/rail.
+ function initDynamic(){ apply(localStorage.getItem(KEY)||"list"); filter(); attachSpark(); attachCopy(); }
+ initDynamic();
+
+ // Live auto-refresh: poll the page and swap only main + rail, preserving
+ // scroll, view mode, search/filter, and any open menu or dialog. One source
+ // of truth (the server template) — no client-side rendering to drift.
+ var busy=false;
+ function refresh(){
+  if(busy||document.hidden)return;
+  if(document.querySelector("dialog[open]"))return;         // adding an app
+  if(document.querySelector("details.menu[open]"))return;   // a menu is open
+  if(document.activeElement&&document.activeElement.id==="q")return; // typing search
+  busy=true;
+  fetch(location.pathname,{headers:{"X-Roost-Poll":"1"},cache:"no-store"})
+   .then(function(r){return r.ok?r.text():Promise.reject(r.status);})
+   .then(function(html){
+    var doc=new DOMParser().parseFromString(html,"text/html");
+    var nm=doc.querySelector("main"),nr=doc.querySelector(".rail");
+    var cm=document.querySelector("main"),cr=document.querySelector(".rail");
+    if(!nm||!cm)return;                                      // auth redirect etc — skip
+    var sTop=cm.scrollTop,rTop=cr?cr.scrollTop:0;
+    cm.innerHTML=nm.innerHTML;
+    if(nr&&cr)cr.innerHTML=nr.innerHTML;
+    cm.scrollTop=sTop; if(cr)cr.scrollTop=rTop;
+    initDynamic();
+    var d=document.getElementById("livedot"); if(d){d.classList.remove("beat");void d.offsetWidth;d.classList.add("beat");}
+   })
+   .catch(function(){})
+   .finally(function(){busy=false;});
+ }
+ setInterval(refresh,5000);
+ document.addEventListener("visibilitychange",function(){ if(!document.hidden)refresh(); });
 })();
 </script>
 </body></html>`))

@@ -320,12 +320,12 @@ func TestStatus(t *testing.T) {
 		RunFunc: func(name string, args ...string) (shell.Result, error) {
 			joined := strings.Join(args, " ")
 			if strings.Contains(joined, "ps") {
-				return shell.Result{Stdout: `{"Service":"blog","State":"running","Health":"healthy"}
-{"Service":"crm","State":"exited","Health":""}
-{"Service":"caddy","State":"running","Health":""}`}, nil
+				return shell.Result{Stdout: `{"Service":"blog","State":"running","Health":"healthy","Status":"Up 3 hours (healthy)"}
+{"Service":"crm","State":"exited","Health":"","Status":"Exited (0) 5 minutes ago"}
+{"Service":"caddy","State":"running","Health":"","Status":"Up 3 hours"}`}, nil
 			}
 			if strings.Contains(joined, "stats") {
-				return shell.Result{Stdout: `{"Name":"roost-blog-1","MemUsage":"120MiB / 512MiB"}`}, nil
+				return shell.Result{Stdout: `{"Name":"roost-blog-1","MemUsage":"120MiB / 512MiB","CPUPerc":"2.75%","NetIO":"1.2MB / 800kB"}`}, nil
 			}
 			return shell.Result{}, nil
 		},
@@ -344,6 +344,13 @@ func TestStatus(t *testing.T) {
 	}
 	if !strings.Contains(byName["blog"].Memory, "120MiB") {
 		t.Errorf("blog memory = %q, want usage from docker stats", byName["blog"].Memory)
+	}
+	// Richer per-app data: CPU, network, uptime, and framework/db badges.
+	if b := byName["blog"]; b.CPU != "2.75%" || !strings.Contains(b.Net, "1.2MB") || !strings.Contains(b.Up, "Up 3 hours") {
+		t.Errorf("blog cpu/net/up = %q/%q/%q", b.CPU, b.Net, b.Up)
+	}
+	if b := byName["blog"]; b.Framework != "rails" || b.Database != "mysql" {
+		t.Errorf("blog badges = framework %q db %q, want rails/mysql", b.Framework, b.Database)
 	}
 	if s := byName["crm"]; s.State != "exited" {
 		t.Errorf("crm status = %+v, want exited", s)

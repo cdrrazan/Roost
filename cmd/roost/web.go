@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,7 +28,22 @@ import (
 type stackController struct {
 	cmd   *cobra.Command
 	flags *rootFlags
+
+	// reachability probe cache — probing the public URLs hits Cloudflare on
+	// every call, so results are cached briefly and shared by the page load
+	// and the live /api/status poll.
+	reachMu sync.Mutex
+	reachAt time.Time
+	reach   map[string]reachResult
 }
+
+type reachResult struct {
+	code string
+	ok   bool
+}
+
+// reachTTL is how long a reachability probe result is reused before re-probing.
+const reachTTL = 25 * time.Second
 
 var _ web.Controller = (*stackController)(nil)
 
@@ -53,7 +69,65 @@ func (c *stackController) Status() ([]runner.AppStatus, error) {
 	for i := range statuses {
 		statuses[i].Repo = repoURL(paths[statuses[i].Name])
 	}
+	// Real end-to-end reachability: does the public URL actually answer?
+	reach := c.reachability(statuses)
+	for i := range statuses {
+		if r, ok := reach[statuses[i].Name]; ok {
+			statuses[i].HTTP = r.code
+			statuses[i].Reachable = r.ok
+		}
+	}
 	return statuses, nil
+}
+
+// reachability returns a per-app HTTP probe result for every running,
+// non-worker app, cached for reachTTL so the live poll doesn't hammer the
+// edge. Results are keyed by app name.
+func (c *stackController) reachability(apps []runner.AppStatus) map[string]reachResult {
+	c.reachMu.Lock()
+	defer c.reachMu.Unlock()
+	if c.reach != nil && time.Since(c.reachAt) < reachTTL {
+		return c.reach
+	}
+	out := map[string]reachResult{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	client := &http.Client{Timeout: 4 * time.Second}
+	for _, a := range apps {
+		if a.Worker || a.State != "running" || !strings.HasPrefix(a.URL, "http") {
+			continue
+		}
+		wg.Add(1)
+		go func(name, url string) {
+			defer wg.Done()
+			res := probeURL(client, url)
+			mu.Lock()
+			out[name] = res
+			mu.Unlock()
+		}(a.Name, a.URL)
+	}
+	wg.Wait()
+	c.reach = out
+	c.reachAt = time.Now()
+	return out
+}
+
+// probeURL does one GET and classifies the result. Any HTTP answer means the
+// app is up — even a 401/302 is the app serving — except gateway errors
+// (502/503/504), which mean the upstream is down behind a healthy proxy.
+func probeURL(client *http.Client, url string) reachResult {
+	resp, err := client.Get(url)
+	if err != nil {
+		if strings.Contains(err.Error(), "Timeout") || strings.Contains(err.Error(), "deadline") {
+			return reachResult{code: "timeout", ok: false}
+		}
+		return reachResult{code: "error", ok: false}
+	}
+	defer resp.Body.Close()
+	ok := resp.StatusCode != http.StatusBadGateway &&
+		resp.StatusCode != http.StatusServiceUnavailable &&
+		resp.StatusCode != http.StatusGatewayTimeout
+	return reachResult{code: fmt.Sprintf("%d", resp.StatusCode), ok: ok}
 }
 
 // repoURL reads path/.git/config and returns the origin remote normalized to a

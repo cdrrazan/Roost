@@ -169,6 +169,35 @@ func TestStatusRendersApps(t *testing.T) {
 	}
 }
 
+func TestAppCardShowsBadgesAndMetrics(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "keeparu", State: "running", URL: "https://keeparu.byaru.com",
+			Framework: "rails", Database: "mysql", Redis: true, Runtime: "3.3.0",
+			Memory: "160MiB / 512MiB", CPU: "2.75%", Net: "1.2MB / 800kB", Up: "Up 3 hours"},
+	}}
+	rr := serve(NewServer(f, ""), "GET", "/", nil)
+	body := rr.Body.String()
+	for _, want := range []string{"Rails", "MySQL", "Redis", "3.3.0", "2.75%", "1.2MB", "Up 3 hours"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("card missing %q", want)
+		}
+	}
+}
+
+func TestAppCardShowsReachabilityChip(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "up-app", State: "running", URL: "https://a.example.com", HTTP: "200", Reachable: true},
+		{Name: "bad-app", State: "running", URL: "https://b.example.com", HTTP: "502", Reachable: false},
+	}}
+	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
+	if !strings.Contains(body, `class="rchip up"`) || !strings.Contains(body, `class="rchip down"`) {
+		t.Error("reachability chips (up/down) not both rendered")
+	}
+	if !strings.Contains(body, "502") {
+		t.Error("down chip should show the failing HTTP code")
+	}
+}
+
 func TestSidebarCollapseTogglesRender(t *testing.T) {
 	rr := serve(NewServer(&fakeController{}, ""), "GET", "/", nil)
 	body := rr.Body.String()
