@@ -1015,13 +1015,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .shell{width:100vw;height:100vh;background:var(--bg);overflow:hidden;display:grid;grid-template-columns:246px minmax(0,1fr)}
  .content{display:flex;flex-direction:column;min-width:0;overflow:hidden}
  /* sidebar — fixed column, scrolls on its own */
- .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto}
- .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px}
+ .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow:hidden}
+ .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px;flex:none}
  .logo{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);flex:none;overflow:hidden}
  .logo svg{width:100%;height:100%;display:block}
  .brand .bt{font-size:15.5px;font-weight:700;letter-spacing:-.2px}
  .brand .bs{font-size:12px;color:var(--faint)}
- .nav{display:flex;flex-direction:column;gap:1px}
+ .nav{display:flex;flex-direction:column;gap:1px;flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;margin:0 -4px;padding:0 4px}
  .nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:var(--muted);font-weight:550;font-size:14px}
  .nav a:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
  .nav a.active{background:var(--indigo-bg);color:var(--indigo-ink)}
@@ -1029,8 +1029,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .nav .ico svg{width:18px;height:18px;stroke:currentColor}
  .nav a:hover .ico,.nav a.active .ico{color:currentColor}
  .navlabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);padding:15px 11px 5px;font-weight:700}
- .side .grow{flex:1;min-height:12px}
- .sideinc{padding:11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
+ .side .grow{display:none}
+ .sideinc,.sidesys{flex:none}
+ .side .user{flex:none}
+ .sideinc{padding:11px;margin:12px 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
  .sideinc .si-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
  .sideinc .si-list{list-style:none;margin:0 0 2px;padding:0;display:flex;flex-direction:column;gap:6px}
  .sideinc .si-list li{font-size:11.5px;color:var(--muted);padding-left:13px;position:relative;line-height:1.4}
@@ -1250,6 +1252,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .timeline .tx{color:var(--ink)}
  .status-line{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600}
  .spin{width:15px;height:15px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--brand);animation:spin .7s linear infinite;flex:none}
+ .btnspin{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid color-mix(in srgb,currentColor 35%,transparent);border-top-color:currentColor;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:5px}
  @keyframes spin{to{transform:rotate(360deg)}}
  .steps{list-style:none;margin:12px 0 0;padding:0}
  .steps li{position:relative;padding:4px 0 4px 20px;font-size:12px;font-family:var(--mono);color:var(--muted)}
@@ -1742,6 +1745,20 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  if(palList)palList.addEventListener("click",function(e){var li=e.target.closest("li[data-i]");if(li)palRun(+li.dataset.i);});
  var palbtn=document.getElementById("palbtn");
  if(palbtn)palbtn.addEventListener("click",palOpen);
+
+ // Test-alert button: post via fetch and show an in-button spinner (no reload).
+ document.addEventListener("submit",function(e){
+  var f=e.target;
+  if(!f||f.getAttribute("action")!=="/test-alert")return;
+  e.preventDefault();
+  var btn=f.querySelector("button");
+  if(!btn||btn._busy)return; btn._busy=1;
+  var orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<span class="btnspin"></span>Sending…';
+  fetch("/test-alert",{method:"POST",body:new FormData(f)})
+   .then(function(r){btn.innerHTML=r.ok?"✓ Sent":"Failed";})
+   .catch(function(){btn.innerHTML="Failed";})
+   .finally(function(){setTimeout(function(){btn.disabled=false;btn.innerHTML=orig;btn._busy=0;},2000);});
+ },true);
  // After Cloudflare Access clears the session, return to the app root so the
  // login page shows again (instead of the generic "logged out" page). Built
  // from the current origin so it works on any host.
