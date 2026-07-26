@@ -1,9 +1,10 @@
 # Roadmap
 
 roost v1 is complete: config → detection → generation → runner → tunnel →
-doctor → distribution. This file tracks where it goes next. Items are ordered
-by likely value, not by promise — this is a side project serving side
-projects.
+doctor → distribution — plus a **Material Design 3 browser control panel**
+(`roost web`) and push-to-`main` auto-deploy. This file tracks where it goes
+next. Items are ordered by likely value, not by promise — this is a side
+project serving side projects.
 
 ## v1.x — polish
 
@@ -39,6 +40,8 @@ These are boundaries, not backlog:
 - No reimplementation of Docker Compose — generate and shell out.
 - Never write into the user's app repositories.
 - No silent dependency installation; `doctor` prints install commands.
-- No web UI; no roost daemon (Docker's restart policy is the supervisor).
+- No roost daemon supervising the stack — Docker's restart policy is the
+  supervisor. (The optional `roost web` panel is a host process you choose to
+  run, not a daemon roost manages; it controls the stack, it doesn't babysit it.)
 
 Suggest changes via an issue — see [CONTRIBUTING.md](CONTRIBUTING.md).

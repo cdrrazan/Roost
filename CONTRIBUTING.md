@@ -33,7 +33,9 @@ Layout: `internal/config` (schema, hostnames), `internal/detect` (framework
 rules + `testdata/` fixtures), `internal/generate` (templates → artifacts),
 `internal/runner` (compose orchestration), `internal/tunnel` (Cloudflare),
 `internal/doctor`, `internal/lifecycle`, `internal/shell` (the only package
-allowed to call `os/exec`), `internal/state`.
+allowed to call `os/exec`), `internal/state`, `internal/web` (the `roost web`
+browser control panel — Material Design 3 UI over a `Controller` interface so
+tests use a fake and never touch Docker), `internal/notify` (incident email).
 
 ## Adding a framework
 
@@ -48,9 +50,20 @@ The most welcome contribution. You'll touch:
 Remember the bind rule: start commands must listen on `0.0.0.0`, never
 loopback — a loopback bind is a 502 from Caddy with healthy-looking app logs.
 
+## Branches & deploys
+
+- **`develop` is the default branch** — open all PRs against `develop`, not
+  `main`. Feature and fix work lands here; CI runs on every push and PR.
+- **`main` is the deploy branch.** Only a maintainer opens a PR from `develop`
+  into `main`. Merging it triggers the **`deploy-web`** GitHub Action, which
+  builds the binary (arch-detected), ships it to the box, and restarts the
+  `roost-web` user service. So a merge to `main` is a release — keep it green.
+- Don't push directly to `main`; go through `develop` + a PR.
+
 ## PRs
 
-- One logical change per PR; reference an issue for anything non-obvious.
+- Open against **`develop`**. One logical change per PR; reference an issue for
+  anything non-obvious.
 - `gofmt`, `go vet`, `golangci-lint run`, `go test -race ./...` all clean —
   CI checks the same.
 - Commit messages: imperative summary line; body explains *why*.
