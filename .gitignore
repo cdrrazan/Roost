@@ -1,3 +1,6 @@
 /roost
 /dist/
 *.test
+
+# Fleet Pro — COMMERCIAL, delivered separately (private repo / Gumroad). Never in this public repo.
+fleet-pro/
