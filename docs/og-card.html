@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Source for the social/OG card. Render to assets/img/og.png at 1200x630:
+     chrome --headless --window-size=1200,630 --screenshot=../assets/img/og.png og-card.html -->
+<html lang="en"><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+ *{box-sizing:border-box;margin:0}
+ html,body{width:1200px;height:630px;overflow:hidden}
+ body{display:flex;font-family:"Google Sans",system-ui,sans-serif;color:#e7ecf5;
+   background:radial-gradient(1200px 700px at 78% -10%,#241f52 0%,#12101f 42%,#0a0d13 100%)}
+ .left{width:560px;flex:none;padding:64px 0 56px 64px;display:flex;flex-direction:column}
+ .brand{display:flex;align-items:center;gap:14px;margin-bottom:40px}
+ .logo{width:56px;height:56px;border-radius:16px;overflow:hidden;box-shadow:0 12px 30px -10px rgba(91,84,230,.6)}
+ .logo img{width:100%;height:100%;display:block}
+ .wm{font-size:30px;font-weight:700;letter-spacing:-.4px}
+ h1{font-size:56px;line-height:1.05;font-weight:700;letter-spacing:-1.5px;margin-bottom:22px}
+ h1 .g{background:linear-gradient(100deg,#a9a3ff,#7c75f5 55%,#c084fc);-webkit-background-clip:text;background-clip:text;color:transparent}
+ p{font-size:21px;line-height:1.5;color:#aab2c6;margin-bottom:30px;max-width:470px}
+ .chips{display:flex;gap:10px;flex-wrap:wrap}
+ .chip{font-size:14px;font-weight:600;padding:8px 14px;border-radius:999px;background:rgba(124,117,245,.16);color:#c7c2ff;border:1px solid rgba(124,117,245,.35)}
+ .url{margin-top:auto;font-size:17px;font-weight:600;color:#8b93a7}
+ .url b{color:#e7ecf5}
+ .right{flex:1;position:relative;overflow:hidden}
+ .shot{position:absolute;top:70px;left:20px;width:820px;border-radius:16px;
+   border:1px solid rgba(255,255,255,.08);box-shadow:0 50px 90px -30px rgba(0,0,0,.75);
+   transform:perspective(1600px) rotateY(-14deg) rotateX(3deg)}
+</style></head>
+<body>
+ <div class="left">
+  <div class="brand"><div class="logo"><img src="../assets/img/favicon.svg" alt=""></div><span class="wm">Fleet</span></div>
+  <h1>The <span class="g">control dashboard</span> template</h1>
+  <p>Live metrics, real reachability, incidents, and a ⌘K palette — in pure HTML/CSS/JS. Zero build.</p>
+  <div class="chips"><span class="chip">HTML · CSS · JS</span><span class="chip">Light + Dark</span><span class="chip">MIT + Pro</span><span class="chip">Responsive</span></div>
+  <div class="url">cdrrazan.github.io/<b>Roost</b></div>
+ </div>
+ <div class="right"><img class="shot" src="screenshots/dashboard-dark.png" alt=""></div>
+</body></html>
