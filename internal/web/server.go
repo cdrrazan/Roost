@@ -1090,6 +1090,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <div class="navlabel">Monitoring</div>
    <a href="#attention" data-scroll="attention"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Attention</a>
    <a href="#processing" data-scroll="processing"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Activity</a>
+   <a href="/status" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></span> Status page ↗</a>
    <div class="navlabel">Manage</div>
    <a href="#removed" data-scroll="removed"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg></span> Removed</a>
    <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span> Repository</a>
@@ -1579,7 +1580,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 // styling; carries only app name + up/down + reachability (no secrets).
 var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Status</title>
+<title>Status · roost</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iMTEiIGZpbGw9InVybCgjcmcpIi8+PHBhdGggZD0iTTEwLjUgMTkuMiBMMjAgMTEgTDI5LjUgMTkuMiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEzLjQgMTguNCBWMjguNiBIMjYuNiBWMTguNCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE3LjQgMjguNiBWMjQgYTIuNiAyLjYgMCAwIDEgNS4yIDAgVjI4LjYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0icmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjOGI4M2Y3Ii8+PHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiM1YjU0ZTYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM0MzM4Y2EiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4K">
 <style>
  :root{--bg:#f6f7f9;--panel:#fff;--line:#e6e8ee;--ink:#12141c;--muted:#5f6675;--ok:#12a150;--bad:#e5484d;--font:'Google Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
  @media(prefers-color-scheme:dark){:root{--bg:#0a0d13;--panel:#12151d;--line:#232838;--ink:#e7ecf5;--muted:#9aa4b6}}
@@ -1599,6 +1601,8 @@ var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
  .st.up{color:var(--ok)} .st.up .d{background:var(--ok)}
  .st.down{color:var(--bad)} .st.down .d{background:var(--bad)}
  .ft{text-align:center;color:var(--muted);font-size:12px;margin-top:22px}
+ .ft a{color:var(--muted)} .ft a:hover{color:var(--ink);text-decoration:underline}
+ .ft .back{color:var(--ink);font-weight:600}
  a{color:inherit;text-decoration:none} a.nm:hover{text-decoration:underline}
 </style></head>
 <body><div class="wrap">
@@ -1614,5 +1618,8 @@ var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
    {{if and (eq .State "running") (or (eq .HTTP "") .Reachable)}}<span class="st up"><span class="d"></span>Operational</span>{{else if eq .State "running"}}<span class="st down"><span class="d"></span>Degraded{{if .HTTP}} ({{.HTTP}}){{end}}</span>{{else}}<span class="st down"><span class="d"></span>Down</span>{{end}}
   </div>{{end}}
  </div>
- <div class="ft">Updated {{.Generated}} · powered by roost</div>
+ <div class="ft">
+  <div><a class="back" href="/">← Control panel</a></div>
+  <div style="margin-top:8px">Updated {{.Generated}} · powered by <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener">roost</a> · built by <a href="https://github.com/cdrrazan" target="_blank" rel="noopener">Rajan Bhattarai</a></div>
+ </div>
 </div></body></html>`))
