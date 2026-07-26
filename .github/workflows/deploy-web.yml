@@ -1,0 +1,101 @@
+name: deploy-web
+
+# Auto-deploy the roost binary (which serves the web control panel) to the box
+# on every change to main that affects it. The box has no Go toolchain and no
+# source clone — it runs a prebuilt binary at /usr/local/bin/roost — so this
+# builds here, detects the box CPU arch, ships the static binary, installs it,
+# and restarts the roost-web systemd *user* service. Only roost-web is
+# restarted; the app stack (roost.service) is left running.
+#
+# ── One-time setup ──────────────────────────────────────────────────────────
+# 1. Make a dedicated deploy key (do NOT reuse a personal key):
+#       ssh-keygen -t ed25519 -f roost-deploy -N ""
+#    Append roost-deploy.pub to the box:  ~ubuntu/.ssh/authorized_keys
+# 2. Add repo secrets (Settings → Secrets and variables → Actions):
+#       DEPLOY_SSH_KEY  = contents of the private key `roost-deploy`
+#       DEPLOY_HOST     = box IP or hostname
+#       DEPLOY_USER     = ubuntu           (the box user)
+#       DEPLOY_PORT     = 22               (optional; defaults to 22)
+# 3. The box already has: passwordless sudo (Oracle ubuntu default),
+#    linger enabled (bootstrap runs `loginctl enable-linger`), and the
+#    roost-web.service user unit installed. Nothing else to do.
+#
+# Trigger it by hand anytime from the Actions tab (workflow_dispatch).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Configure SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          test -n "$KEY" && test -n "$HOST" || { echo "::error::DEPLOY_SSH_KEY / DEPLOY_HOST secrets are not set"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          ssh-keyscan -p "${PORT:-22}" -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Detect box architecture
+        id: arch
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          BOXUSER: ${{ secrets.DEPLOY_USER }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          m=$(ssh -i ~/.ssh/deploy -p "${PORT:-22}" "$BOXUSER@$HOST" uname -m)
+          case "$m" in
+            aarch64|arm64) echo "goarch=arm64" >> "$GITHUB_OUTPUT" ;;
+            x86_64|amd64)  echo "goarch=amd64" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::unsupported box arch: $m"; exit 1 ;;
+          esac
+          echo "box arch: $m"
+
+      - name: Build static binary (linux/${{ steps.arch.outputs.goarch }})
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ steps.arch.outputs.goarch }} go build -trimpath -ldflags="-s -w" -o roost ./cmd/roost
+
+      - name: Ship, install, restart roost-web
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          BOXUSER: ${{ secrets.DEPLOY_USER }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          scp -i ~/.ssh/deploy -P "${PORT:-22}" roost "$BOXUSER@$HOST:/tmp/roost.new"
+          ssh -i ~/.ssh/deploy -p "${PORT:-22}" "$BOXUSER@$HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          sudo install -m0755 /tmp/roost.new /usr/local/bin/roost
+          rm -f /tmp/roost.new
+          systemctl --user restart roost-web
+          sleep 1
+          if systemctl --user is-active --quiet roost-web; then
+            echo "✓ roost-web restarted on the new binary"
+          else
+            echo "✗ roost-web failed to start"
+            systemctl --user status roost-web --no-pager -l | tail -30
+            exit 1
+          fi
+          REMOTE
