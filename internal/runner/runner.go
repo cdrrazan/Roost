@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -266,6 +267,56 @@ func (r *Runner) Logs(app string, follow bool) error {
 	return r.Shell.Stream("docker", r.compose(args...)...)
 }
 
+// LogTail captures the last n lines of an app's logs (for the panel drawer).
+func (r *Runner) LogTail(app string, n int) (string, error) {
+	out, err := r.run(r.compose("logs", "--no-color", "--tail", fmt.Sprintf("%d", n), app)...)
+	if err != nil {
+		return "", fmt.Errorf("logs %q: %w", app, err)
+	}
+	return out.Stdout, nil
+}
+
+// AppInfo is one app's container detail for the panel drawer.
+type AppInfo struct {
+	Image    string
+	Status   string // "Up 2 hours"
+	Health   string
+	Restarts int
+}
+
+// AppInfo returns image, status/health, and restart count for one app,
+// combining `compose ps` (image/status) with `docker inspect` (restart count).
+func (r *Runner) AppInfo(app string) (AppInfo, error) {
+	psOut, err := r.run(r.compose("ps", "--all", "--format", "json", app)...)
+	if err != nil {
+		return AppInfo{}, fmt.Errorf("ps %q: %w", app, err)
+	}
+	var info AppInfo
+	var container string
+	for _, line := range strings.Split(psOut.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var p psLine
+		if err := json.Unmarshal([]byte(line), &p); err != nil {
+			continue
+		}
+		if p.Service == app || container == "" {
+			info.Image, info.Status, info.Health, container = p.Image, p.Status, p.Health, p.Name
+		}
+	}
+	// Restart count is best-effort — a missing container just leaves it 0.
+	if container != "" {
+		if out, err := r.run("inspect", "-f", "{{.RestartCount}}", container); err == nil {
+			if n, err := strconv.Atoi(strings.TrimSpace(out.Stdout)); err == nil {
+				info.Restarts = n
+			}
+		}
+	}
+	return info, nil
+}
+
 // AppStatus is one app's runtime state.
 type AppStatus struct {
 	Name     string
@@ -301,6 +352,7 @@ type psLine struct {
 	Health  string `json:"Health"`
 	Name    string `json:"Name"`
 	Status  string `json:"Status"` // "Up 3 hours (healthy)" — used for uptime
+	Image   string `json:"Image"`
 }
 
 // statsLine is the subset of `docker stats --format json` output we

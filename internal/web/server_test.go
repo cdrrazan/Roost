@@ -34,6 +34,7 @@ type fakeController struct {
 	server             ServerInfo
 	system             SystemInfo
 	edge               EdgeInfo
+	details            map[string]AppDetail
 	emitLines          []string // lines AddApp/RemoveApp emit when called
 }
 
@@ -125,6 +126,13 @@ func (f *fakeController) ServerInfo() ServerInfo { return f.server }
 func (f *fakeController) SystemInfo() SystemInfo { return f.system }
 func (f *fakeController) EdgeInfo() EdgeInfo     { return f.edge }
 
+func (f *fakeController) AppDetail(name string) (AppDetail, error) {
+	if d, ok := f.details[name]; ok {
+		return d, nil
+	}
+	return AppDetail{}, errString("unknown app")
+}
+
 func (f *fakeController) snapshot() fakeController {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -207,6 +215,32 @@ func TestDashboardCardsAndAlerts(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard missing %q", want)
 		}
+	}
+}
+
+func TestAppDetailEndpoint(t *testing.T) {
+	f := &fakeController{details: map[string]AppDetail{
+		"keeparu": {Name: "keeparu", Image: "roost-keeparu", Status: "Up 2 hours", Restarts: 1, Logs: "listening on 0.0.0.0:3000"},
+	}}
+	s := NewServer(f, "")
+	// Known app → JSON detail.
+	rr := serve(s, "GET", "/api/app?name=keeparu", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{`"image":"roost-keeparu"`, `"status":"Up 2 hours"`, "0.0.0.0:3000"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail JSON missing %q; got %s", want, body)
+		}
+	}
+	// Unknown app → 404, never a zero-value 200.
+	if rr := serve(s, "GET", "/api/app?name=nope", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown app code = %d, want 404", rr.Code)
+	}
+	// Missing name → 400.
+	if rr := serve(s, "GET", "/api/app", nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("missing name code = %d, want 400", rr.Code)
 	}
 }
 

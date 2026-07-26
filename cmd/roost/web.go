@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -459,6 +460,50 @@ func (c *stackController) ServerInfo() web.ServerInfo {
 		}
 	}
 	return si
+}
+
+// AppDetail returns one app's container detail + recent logs for the drawer.
+// Unknown names are rejected so the panel can't read arbitrary containers.
+func (c *stackController) AppDetail(name string) (web.AppDetail, error) {
+	apps, _, err := loadPlanned(c.cmd, c.flags)
+	if err != nil {
+		return web.AppDetail{}, err
+	}
+	var app *generate.App
+	for i := range apps {
+		if apps[i].Name == name {
+			app = &apps[i]
+			break
+		}
+	}
+	if app == nil {
+		return web.AppDetail{}, fmt.Errorf("unknown app %q", name)
+	}
+	d := web.AppDetail{
+		Name:      app.Name,
+		Port:      app.Port,
+		Framework: app.Framework,
+		Database:  app.Database,
+	}
+	if app.FQDN != "" {
+		d.URL = "https://" + app.FQDN
+	}
+	for k := range app.Env {
+		d.EnvKeys = append(d.EnvKeys, k)
+	}
+	sort.Strings(d.EnvKeys)
+
+	r, err := newRunner()
+	if err != nil {
+		return d, nil // static detail is still useful without a runner
+	}
+	if info, err := r.AppInfo(name); err == nil {
+		d.Image, d.Status, d.Health, d.Restarts = info.Image, info.Status, info.Health, info.Restarts
+	}
+	if logs, err := r.LogTail(name, 200); err == nil {
+		d.Logs = logs
+	}
+	return d, nil
 }
 
 // SystemInfo reports docker's disk accounting via `docker system df`.

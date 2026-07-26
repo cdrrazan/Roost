@@ -361,6 +361,36 @@ func TestStatus(t *testing.T) {
 	}
 }
 
+func TestLogTailAndAppInfo(t *testing.T) {
+	fake := &shell.Fake{
+		RunFunc: func(name string, args ...string) (shell.Result, error) {
+			joined := strings.Join(args, " ")
+			switch {
+			case strings.Contains(joined, "logs"):
+				return shell.Result{Stdout: "blog-1  | listening on 0.0.0.0:3000\nblog-1  | GET / 200"}, nil
+			case strings.Contains(joined, "ps"):
+				return shell.Result{Stdout: `{"Service":"blog","Name":"roost-blog-1","Image":"roost-blog","State":"running","Health":"healthy","Status":"Up 2 hours"}`}, nil
+			case strings.Contains(joined, "inspect"):
+				return shell.Result{Stdout: "3\n"}, nil
+			}
+			return shell.Result{}, nil
+		},
+	}
+	r, _ := newTestRunner(fake)
+
+	logs, err := r.LogTail("blog", 100)
+	if err != nil || !strings.Contains(logs, "listening on 0.0.0.0:3000") {
+		t.Fatalf("LogTail = %q, %v", logs, err)
+	}
+	info, err := r.AppInfo("blog")
+	if err != nil {
+		t.Fatalf("AppInfo: %v", err)
+	}
+	if info.Image != "roost-blog" || info.Status != "Up 2 hours" || info.Health != "healthy" || info.Restarts != 3 {
+		t.Errorf("AppInfo = %+v", info)
+	}
+}
+
 func TestPrepareRunsSetupThenSeed(t *testing.T) {
 	fake := &shell.Fake{}
 	r, _ := newTestRunner(fake)

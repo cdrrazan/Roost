@@ -10,6 +10,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -206,6 +207,26 @@ type Controller interface {
 	// EdgeInfo returns Cloudflare tunnel/DNS facts (from roost's state) for
 	// the Edge card. Best-effort; a zero value hides the card.
 	EdgeInfo() EdgeInfo
+
+	// AppDetail returns one app's container detail (image, status, restart
+	// count, env keys, recent logs) for the drawer. It must reject unknown
+	// names so the panel can't read arbitrary containers.
+	AppDetail(name string) (AppDetail, error)
+}
+
+// AppDetail is the per-app drawer payload, serialized to JSON.
+type AppDetail struct {
+	Name      string   `json:"name"`
+	URL       string   `json:"url"`
+	Image     string   `json:"image"`
+	Status    string   `json:"status"`
+	Health    string   `json:"health"`
+	Restarts  int      `json:"restarts"`
+	Port      int      `json:"port"`
+	Framework string   `json:"framework"`
+	Database  string   `json:"database"`
+	EnvKeys   []string `json:"envKeys"`
+	Logs      string   `json:"logs"`
 }
 
 // SystemInfo is docker's disk accounting, shown on the System card.
@@ -295,7 +316,25 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /app/down", s.guard(s.handleAppAction("stopping", s.ctrl.StopApp)))
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
+	mux.HandleFunc("GET /api/app", s.handleAppDetail)
 	return mux
+}
+
+// handleAppDetail serves one app's drawer payload as JSON. Read-only, so it
+// needs no token guard; the controller rejects unknown names.
+func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "missing name", http.StatusBadRequest)
+		return
+	}
+	detail, err := s.ctrl.AppDetail(name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(detail)
 }
 
 // guard enforces the shared-secret token on mutating actions when one is set.
@@ -872,6 +911,27 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line2)}
  .modal-h h2{font-size:15px} .modal-x{background:none;border:0;font-size:20px;color:var(--faint);cursor:pointer;line-height:1}
  .modal-b{padding:18px}
+ /* kebab menu items */
+ .menu-item{display:block;width:100%;text-align:left;font:inherit;font-size:13px;font-weight:550;color:var(--ink);background:none;border:0;border-radius:8px;padding:8px 10px;cursor:pointer}
+ .menu-item:hover{background:var(--panel2);text-decoration:none;color:var(--ink)}
+ .menu-sep{height:1px;background:var(--line);margin:8px 0}
+ .srv-ico[role=button]{cursor:pointer}
+ /* detail drawer — right-side slide-in */
+ dialog.drawer{width:min(560px,96vw);max-height:none;height:100vh;margin:0 0 0 auto;border-radius:0;border-left:1px solid var(--line);border-top:0;border-right:0;border-bottom:0;display:flex;flex-direction:column}
+ dialog.drawer[open]{animation:drawin .18s ease}
+ @keyframes drawin{from{transform:translateX(24px);opacity:.4}to{transform:none;opacity:1}}
+ .drawer-h{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line2)}
+ .drawer-h h2{font-size:17px}
+ .dr-url{font-size:12.5px;color:var(--indigo-ink);display:inline-block;margin-top:3px}
+ .drawer-b{padding:18px 20px;overflow-y:auto}
+ .dr-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+ .dr-cell{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+ .dr-cell .kk{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+ .dr-cell .vv{font-size:13.5px;font-weight:600;margin-top:3px;word-break:break-word}
+ .dr-env{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px}
+ .dr-env .tag{background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+ .dr-logs-h{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+ .dr-logs{background:#0b0e14;color:#c9d3e3;font:12px/1.55 ui-monospace,Menlo,monospace;padding:14px;border-radius:10px;overflow:auto;max-height:46vh;white-space:pre-wrap;word-break:break-word;margin:0}
  .field{margin-bottom:12px}
  .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
  .field input{width:100%;font:inherit;font-size:14px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
@@ -1014,9 +1074,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
       <div class="grouphdr" id="{{slug .Title}}">{{.Title}}<span class="gc">{{len .Apps}}</span></div>
       <div class="glist">
       {{range .Apps}}
-       <div class="srv" data-name="{{humanize .Name}}" data-state="{{if eq .State "running"}}running{{else}}stopped{{end}}">
+       <div class="srv" data-name="{{humanize .Name}}" data-app="{{.Name}}" data-state="{{if eq .State "running"}}running{{else}}stopped{{end}}">
         <div class="srv-top">
-         <span class="srv-ico">{{if .URL}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>{{end}}</span>
+         <span class="srv-ico" data-detail="{{.Name}}" title="View details" role="button" tabindex="0">{{if .URL}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>{{end}}</span>
          <div class="srv-idb">
           <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}{{if and (eq .State "running") .HTTP}}<span class="rchip {{if .Reachable}}up{{else}}down{{end}}" title="Live HTTP probe: {{.HTTP}}">{{if .Reachable}}live · {{.HTTP}}{{else}}{{.HTTP}}{{end}}</span>{{end}}</div>
           <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}{{if .Repo}} · <a class="repo" href="{{.Repo}}" target="_blank" rel="noopener" title="Open repository"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 4.7 18 5 18 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>Code</a>{{end}}</div>
@@ -1030,6 +1090,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
           <details class="menu">
            <summary class="kebab" title="More actions">⋯</summary>
            <div class="menu-pop">
+            <button type="button" class="menu-item" data-detail="{{.Name}}">View details</button>
+            {{if .URL}}<a class="menu-item" href="{{.URL}}" target="_blank" rel="noopener">Open site ↗</a>{{end}}
+            <div class="menu-sep"></div>
             <form method="post" action="/remove" onsubmit="return confirm('Remove {{humanize .Name}} from the config?')"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}
              <label class="free"><input type="checkbox" name="image" value="on"> Also delete image <span>(free disk)</span></label>
              <button class="btn btn-sm btn-danger" style="width:100%;justify-content:center" {{if $.Busy}}disabled{{end}}>Remove app</button>
@@ -1134,6 +1197,19 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  </div>
 </div>
 
+<dialog id="drawer" class="drawer">
+ <div class="drawer-h">
+  <div><h2 id="dr-name">App</h2><a id="dr-url" href="#" target="_blank" rel="noopener" class="dr-url"></a></div>
+  <button class="modal-x" id="dr-close" aria-label="Close">×</button>
+ </div>
+ <div class="drawer-b">
+  <div class="dr-grid" id="dr-grid"></div>
+  <div class="dr-env" id="dr-env"></div>
+  <div class="dr-logs-h">Recent logs</div>
+  <pre class="dr-logs" id="dr-logs">Loading…</pre>
+ </div>
+</dialog>
+
 <dialog id="addapp">
  <div class="modal-h"><h2>Add an app</h2><button class="modal-x" id="closeadd" aria-label="Close">×</button></div>
  <form method="post" action="/add">
@@ -1203,6 +1279,36 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  if(o&&dlg)o.addEventListener("click",function(){dlg.showModal();});
  if(c&&dlg)c.addEventListener("click",function(){dlg.close();});
  if(dlg)dlg.addEventListener("click",function(e){if(e.target===dlg)dlg.close();});
+
+ // Per-app detail drawer.
+ function esc(s){return s.replace(/[&<>"]/g,function(m){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m];});}
+ var drawer=document.getElementById("drawer");
+ function openDrawer(name){
+  if(!drawer)return;
+  document.querySelectorAll("details.menu[open]").forEach(function(d){d.removeAttribute("open");});
+  document.getElementById("dr-name").textContent=name;
+  document.getElementById("dr-grid").innerHTML="";
+  document.getElementById("dr-env").innerHTML="";
+  document.getElementById("dr-logs").textContent="Loading…";
+  if(drawer.showModal)drawer.showModal();
+  fetch("/api/app?name="+encodeURIComponent(name)).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(d){
+   document.getElementById("dr-name").textContent=d.name;
+   var u=document.getElementById("dr-url");
+   if(d.url){u.textContent=d.url;u.href=d.url;u.style.display="";}else{u.style.display="none";}
+   var cells=[["Status",d.status||"—"],["Health",d.health||"—"],["Image",d.image||"—"],["Restarts",d.restarts],["Port",d.port||"—"],["Stack",(d.framework||"—")+(d.database?" · "+d.database:"")]];
+   document.getElementById("dr-grid").innerHTML=cells.map(function(c){return '<div class="dr-cell"><div class="kk">'+c[0]+'</div><div class="vv">'+esc(String(c[1]))+'</div></div>';}).join("");
+   var env=document.getElementById("dr-env");
+   env.innerHTML=(d.envKeys&&d.envKeys.length)?d.envKeys.map(function(k){return '<span class="tag">'+esc(k)+'</span>';}).join(""):'<span class="tag">no env keys</span>';
+   var lg=document.getElementById("dr-logs"); lg.textContent=d.logs||"(no recent logs)"; lg.scrollTop=lg.scrollHeight;
+  }).catch(function(){document.getElementById("dr-logs").textContent="Failed to load details.";});
+ }
+ document.addEventListener("click",function(e){
+  var t=e.target.closest("[data-detail]"); if(!t)return;
+  e.preventDefault(); openDrawer(t.dataset.detail);
+ });
+ var drc=document.getElementById("dr-close");
+ if(drc&&drawer)drc.addEventListener("click",function(){drawer.close();});
+ if(drawer)drawer.addEventListener("click",function(e){if(e.target===drawer)drawer.close();});
  // After Cloudflare Access clears the session, return to the app root so the
  // login page shows again (instead of the generic "logged out" page). Built
  // from the current origin so it works on any host.
