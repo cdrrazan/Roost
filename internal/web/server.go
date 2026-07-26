@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cdrrazan/roost/internal/runner"
 )
@@ -295,10 +296,32 @@ type Server struct {
 	// lives only for the panel process's lifetime.
 	trendMu sync.Mutex
 	trend   map[string][]float64
+
+	// events is a rolling in-memory audit log of panel actions (most recent
+	// first, capped), rendered as the activity timeline. Guarded by mu.
+	events []event
+}
+
+// event is one entry in the activity timeline.
+type event struct {
+	At   time.Time
+	Text string
+	OK   bool
 }
 
 // trendCap is how many CPU samples per app the sparkline retains.
 const trendCap = 40
+
+// eventsCap is how many recent actions the activity timeline retains.
+const eventsCap = 24
+
+// addEvent records a completed action in the timeline (newest first).
+func (s *Server) addEvent(text string, ok bool) {
+	s.events = append([]event{{At: time.Now(), Text: text, OK: ok}}, s.events...)
+	if len(s.events) > eventsCap {
+		s.events = s.events[:eventsCap]
+	}
+}
 
 // NewServer returns a panel over ctrl. An empty token disables the action
 // guard (rely on edge auth); a non-empty token is required on /up and /down.
@@ -317,7 +340,61 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
 	mux.HandleFunc("GET /api/app", s.handleAppDetail)
+	mux.HandleFunc("GET /status", s.handleStatusPage)
 	return mux
+}
+
+// publicView is the read-only status-page payload. It deliberately carries no
+// secrets (no IP/SSH/env/logs/tunnel ids) so the page is safe to expose.
+type publicView struct {
+	Apps      []publicApp
+	Total     int
+	Up        int
+	AllOK     bool
+	Generated string
+}
+
+type publicApp struct {
+	Name      string
+	State     string
+	Reachable bool
+	HTTP      string
+	Up        string
+	URL       string
+}
+
+// handleStatusPage renders a controls-free public status page. Same host, so
+// it sits behind Cloudflare Access by default; add an Access bypass for the
+// /status path to make it truly public.
+func (s *Server) handleStatusPage(w http.ResponseWriter, _ *http.Request) {
+	apps, err := s.ctrl.Status()
+	view := publicView{Generated: time.Now().Format("2006-01-02 15:04 MST")}
+	if err == nil {
+		view.AllOK = true
+		for _, a := range apps {
+			if a.Worker {
+				continue
+			}
+			view.Total++
+			ok := a.State == "running" && (a.HTTP == "" || a.Reachable)
+			if a.State == "running" {
+				view.Up++
+			}
+			if !ok {
+				view.AllOK = false
+			}
+			view.Apps = append(view.Apps, publicApp{
+				Name: humanize(a.Name), State: a.State, Reachable: a.Reachable,
+				HTTP: a.HTTP, Up: a.Up, URL: a.URL,
+			})
+		}
+	} else {
+		view.AllOK = false
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := publicTmpl.Execute(w, view); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 // handleAppDetail serves one app's drawer payload as JSON. Read-only, so it
@@ -436,8 +513,10 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, verb string, 
 		if err != nil {
 			s.last = fmt.Sprintf("%s failed: %v", verb, err)
 			s.steps = append(s.steps, "✗ "+err.Error())
+			s.addEvent(verb+" failed", false)
 		} else {
 			s.last = verb + " complete"
+			s.addEvent(verb+" complete", true)
 		}
 		s.busy = ""
 		s.mu.Unlock()
@@ -467,8 +546,16 @@ type statusView struct {
 	Edge         EdgeInfo     // Cloudflare tunnel/DNS facts for the Edge card
 	Alerts       []Alert      // warnings surfaced in the top banner
 	Sparks       map[string]template.HTML
+	Events       []eventView // activity timeline (newest first)
 	Error        string
 	Token        string // embedded in the form when non-empty
+}
+
+// eventView is one rendered timeline entry.
+type eventView struct {
+	Time string
+	Text string
+	OK   bool
 }
 
 // humanBytes formats a byte count in docker-style IEC units.
@@ -489,6 +576,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	view := statusView{Busy: s.busy, Last: s.last, Token: s.token,
 		Steps: append([]string(nil), s.steps...)}
+	for _, e := range s.events {
+		view.Events = append(view.Events, eventView{Time: e.At.Format("15:04:05"), Text: e.Text, OK: e.OK})
+	}
 	s.mu.Unlock()
 
 	if apps, err := s.ctrl.Status(); err != nil {
@@ -714,6 +804,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .iconbtn{width:37px;height:37px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;flex:none}
  .iconbtn:hover{color:var(--ink);background:var(--panel2)}
  .iconbtn.on{background:var(--indigo-bg);color:var(--indigo-ink);border-color:transparent}
+ .iconbtn.palk{width:auto;padding:0 10px} .iconbtn.palk kbd{font:inherit;font-size:11px;font-weight:600;color:var(--muted)}
  .iconbtn svg{width:18px;height:18px;stroke:currentColor}
  .iconbtn .sun{display:none} :root[data-theme="dark"] .iconbtn .moon{display:none} :root[data-theme="dark"] .iconbtn .sun{display:inline-flex}
  .user .logout{margin-left:auto;flex:none;width:32px;height:32px;border-radius:9px;color:var(--faint);display:inline-flex;align-items:center;justify-content:center}
@@ -890,6 +981,12 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .ov-bar{margin:6px 0 14px}
  .ov-bar .mlabel{margin-bottom:6px}
  .procbody{padding:15px 18px}
+ .timeline{list-style:none;margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:9px}
+ .timeline li{display:flex;align-items:baseline;gap:10px;font-size:12.5px;position:relative;padding-left:15px}
+ .timeline li::before{content:"";position:absolute;left:0;top:6px;width:7px;height:7px;border-radius:50%;background:var(--ok)}
+ .timeline li.bad::before{background:var(--danger)}
+ .timeline .tt{font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums;flex:none}
+ .timeline .tx{color:var(--ink)}
  .status-line{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600}
  .spin{width:15px;height:15px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--brand);animation:spin .7s linear infinite;flex:none}
  @keyframes spin{to{transform:rotate(360deg)}}
@@ -911,6 +1008,22 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .modal-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line2)}
  .modal-h h2{font-size:15px} .modal-x{background:none;border:0;font-size:20px;color:var(--faint);cursor:pointer;line-height:1}
  .modal-b{padding:18px}
+ /* command palette */
+ dialog.palette{width:min(560px,94vw);margin:12vh auto auto;border-radius:16px;padding:0;overflow:hidden}
+ .pal-in{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line2)}
+ .pal-i{color:var(--faint);font-size:15px}
+ .pal-in input{flex:1;font:inherit;font-size:15px;border:0;background:none;color:var(--ink);outline:none}
+ .pal-list{list-style:none;margin:0;padding:7px;max-height:52vh;overflow-y:auto}
+ .pal-list li{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13.5px}
+ .pal-list li .pk{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-left:auto}
+ .pal-list li.sel{background:var(--indigo-bg);color:var(--indigo-ink)}
+ .pal-list li.sel .pk{color:var(--indigo-ink)}
+ .pal-list li .pi{width:16px;height:16px;flex:none;color:var(--faint);display:inline-flex}
+ .pal-list li.sel .pi{color:currentColor}
+ .pal-list li svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+ .pal-empty{padding:18px;text-align:center;color:var(--faint);font-size:13px}
+ .pal-foot{display:flex;gap:16px;padding:9px 16px;border-top:1px solid var(--line2);font-size:11px;color:var(--faint)}
+ .pal-foot kbd{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font:inherit;font-size:10px;margin-right:3px}
  /* kebab menu items */
  .menu-item{display:block;width:100%;text-align:left;font:inherit;font-size:13px;font-weight:550;color:var(--ink);background:none;border:0;border-radius:8px;padding:8px 10px;cursor:pointer}
  .menu-item:hover{background:var(--panel2);text-decoration:none;color:var(--ink)}
@@ -999,6 +1112,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <option value="running">Running</option>
     <option value="stopped">Stopped</option>
    </select>
+   <button class="iconbtn palk" id="palbtn" title="Command palette (⌘K)" aria-label="Command palette"><kbd>⌘K</kbd></button>
    <button class="iconbtn" id="themebtn" title="Toggle light / dark" aria-label="Toggle theme"><span class="moon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg></span><span class="sun"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span></button>
    <div class="toggle"><button data-view="list">▤ List</button><button data-view="grid">▦ Grid</button></div>
    <form class="inline" method="post" action="/up">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-ok" {{if .Busy}}disabled{{end}}>Start all</button></form>
@@ -1177,6 +1291,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
      {{if .Busy}}<div class="status-line"><span class="spin"></span>{{.Busy}}…</div>{{else}}<div class="idle"><span class="dot"></span>Idle — no action running</div>{{end}}
      {{if .Steps}}<ul class="steps">{{range .Steps}}<li>{{.}}</li>{{end}}</ul>{{end}}
      {{if and (not .Busy) .Last}}<div class="result">{{.Last}}</div>{{end}}
+     {{if .Events}}<ul class="timeline">{{range .Events}}<li class="{{if .OK}}ok{{else}}bad{{end}}"><span class="tt">{{.Time}}</span><span class="tx">{{.Text}}</span></li>{{end}}</ul>{{end}}
     </div>
    </div>
 
@@ -1196,6 +1311,12 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   </footer>
  </div>
 </div>
+
+<dialog id="palette" class="palette">
+ <div class="pal-in"><span class="pal-i">⌘</span><input id="pal-q" type="text" placeholder="Search apps and actions…" autocomplete="off"></div>
+ <ul class="pal-list" id="pal-list"></ul>
+ <div class="pal-foot"><span><kbd>↑</kbd><kbd>↓</kbd> navigate</span><span><kbd>↵</kbd> select</span><span><kbd>esc</kbd> close</span></div>
+</dialog>
 
 <dialog id="drawer" class="drawer">
  <div class="drawer-h">
@@ -1309,6 +1430,53 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  var drc=document.getElementById("dr-close");
  if(drc&&drawer)drc.addEventListener("click",function(){drawer.close();});
  if(drawer)drawer.addEventListener("click",function(e){if(e.target===drawer)drawer.close();});
+
+ // Command palette (⌘K / Ctrl+K).
+ var pal=document.getElementById("palette"),palQ=document.getElementById("pal-q"),palList=document.getElementById("pal-list");
+ var ICON_APP='<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+ var ICON_ACT='<svg viewBox="0 0 24 24"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>';
+ var palItems=[],palShown=[],palSel=0;
+ function palBuild(){
+  var a=[
+   ["Start all apps",function(){var f=document.querySelector('form[action="/up"]');if(f)f.submit();}],
+   ["Stop all apps",function(){var f=document.querySelector('form[action="/down"]');if(f)f.submit();}],
+   ["New app…",function(){var d=document.getElementById("addapp");if(d&&d.showModal)d.showModal();}],
+   ["Toggle theme",function(){var t=document.getElementById("themebtn");if(t)t.click();}],
+   ["Toggle sidebar",function(){var t=document.getElementById("sidetgl");if(t)t.click();}],
+   ["Toggle info panel",function(){var t=document.getElementById("railtgl");if(t)t.click();}]
+  ];
+  var items=a.map(function(x){return {label:x[0],kind:"Action",act:x[1]};});
+  document.querySelectorAll(".srv[data-app]").forEach(function(s){
+   var name=s.dataset.app;
+   items.push({label:s.dataset.name+" — details",kind:"App",act:function(){openDrawer(name);}});
+  });
+  return items;
+ }
+ function palRender(term){
+  term=(term||"").toLowerCase();
+  palShown=palItems.filter(function(it){return it.label.toLowerCase().indexOf(term)>-1;});
+  palSel=0;
+  if(!palShown.length){palList.innerHTML='<div class="pal-empty">No matches</div>';return;}
+  palList.innerHTML=palShown.map(function(it,i){return '<li data-i="'+i+'" class="'+(i===0?"sel":"")+'"><span class="pi">'+(it.kind==="App"?ICON_APP:ICON_ACT)+'</span>'+esc(it.label)+'<span class="pk">'+it.kind+'</span></li>';}).join("");
+ }
+ function palOpen(){ palItems=palBuild(); palRender(""); if(pal.showModal)pal.showModal(); setTimeout(function(){palQ.value="";palQ.focus();},20); }
+ function palMove(d){ if(!palShown.length)return; palSel=(palSel+d+palShown.length)%palShown.length; Array.prototype.forEach.call(palList.children,function(li,i){li.classList.toggle("sel",i===palSel); if(i===palSel&&li.scrollIntoView)li.scrollIntoView({block:"nearest"});}); }
+ function palRun(i){ var it=palShown[i]; if(!it)return; pal.close(); it.act(); }
+ document.addEventListener("keydown",function(e){
+  if((e.metaKey||e.ctrlKey)&&(e.key==="k"||e.key==="K")){e.preventDefault(); if(pal&&pal.open)pal.close(); else if(pal)palOpen();}
+ });
+ if(palQ){
+  palQ.addEventListener("input",function(){palRender(palQ.value);});
+  palQ.addEventListener("keydown",function(e){
+   if(e.key==="ArrowDown"){e.preventDefault();palMove(1);}
+   else if(e.key==="ArrowUp"){e.preventDefault();palMove(-1);}
+   else if(e.key==="Enter"){e.preventDefault();palRun(palSel);}
+  });
+ }
+ if(pal)pal.addEventListener("click",function(e){if(e.target===pal)pal.close();});
+ if(palList)palList.addEventListener("click",function(e){var li=e.target.closest("li[data-i]");if(li)palRun(+li.dataset.i);});
+ var palbtn=document.getElementById("palbtn");
+ if(palbtn)palbtn.addEventListener("click",palOpen);
  // After Cloudflare Access clears the session, return to the app root so the
  // login page shows again (instead of the generic "logged out" page). Built
  // from the current origin so it works on any host.
@@ -1406,3 +1574,45 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 })();
 </script>
 </body></html>`))
+
+// publicTmpl is the standalone, controls-free status page. Self-contained
+// styling; carries only app name + up/down + reachability (no secrets).
+var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status</title>
+<style>
+ :root{--bg:#f6f7f9;--panel:#fff;--line:#e6e8ee;--ink:#12141c;--muted:#5f6675;--ok:#12a150;--bad:#e5484d;--font:'Google Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+ @media(prefers-color-scheme:dark){:root{--bg:#0a0d13;--panel:#12151d;--line:#232838;--ink:#e7ecf5;--muted:#9aa4b6}}
+ *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--font);-webkit-font-smoothing:antialiased}
+ .wrap{max-width:640px;margin:0 auto;padding:56px 20px}
+ .hd{display:flex;align-items:center;gap:14px;margin-bottom:26px}
+ .logo{width:40px;height:40px;border-radius:11px;flex:none;overflow:hidden}
+ h1{font-size:20px;margin:0} .sub{color:var(--muted);font-size:13px;margin-top:2px}
+ .banner{display:flex;align-items:center;gap:11px;padding:16px 18px;border-radius:14px;font-weight:600;margin-bottom:22px;background:var(--panel);border:1px solid var(--line)}
+ .banner .d{width:11px;height:11px;border-radius:50%} .banner.ok .d{background:var(--ok)} .banner.bad .d{background:var(--bad)}
+ .list{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+ .row{display:flex;align-items:center;gap:12px;padding:14px 18px;border-top:1px solid var(--line)}
+ .row:first-child{border-top:0}
+ .row .nm{font-weight:600} .row .u{color:var(--muted);font-size:12px;margin-left:2px}
+ .row .st{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
+ .row .st .d{width:8px;height:8px;border-radius:50%}
+ .st.up{color:var(--ok)} .st.up .d{background:var(--ok)}
+ .st.down{color:var(--bad)} .st.down .d{background:var(--bad)}
+ .ft{text-align:center;color:var(--muted);font-size:12px;margin-top:22px}
+ a{color:inherit;text-decoration:none} a.nm:hover{text-decoration:underline}
+</style></head>
+<body><div class="wrap">
+ <div class="hd">
+  <div class="logo"><svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="url(#g)"/><path d="M10.5 19.2 L20 11 L29.5 19.2" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.4 18.4 V28.6 H26.6 V18.4" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.4 28.6 V24 a2.6 2.6 0 0 1 5.2 0 V28.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b83f7"/><stop offset=".55" stop-color="#5b54e6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs></svg></div>
+  <div><h1>Service status</h1><div class="sub">{{.Up}}/{{.Total}} services operational</div></div>
+ </div>
+ <div class="banner {{if .AllOK}}ok{{else}}bad{{end}}"><span class="d"></span>{{if .AllOK}}All systems operational{{else}}Some services are degraded{{end}}</div>
+ <div class="list">
+  {{range .Apps}}<div class="row">
+   {{if .URL}}<a class="nm" href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>{{else}}<span class="nm">{{.Name}}</span>{{end}}
+   {{if .Up}}<span class="u">· {{.Up}}</span>{{end}}
+   {{if and (eq .State "running") (or (eq .HTTP "") .Reachable)}}<span class="st up"><span class="d"></span>Operational</span>{{else if eq .State "running"}}<span class="st down"><span class="d"></span>Degraded{{if .HTTP}} ({{.HTTP}}){{end}}</span>{{else}}<span class="st down"><span class="d"></span>Down</span>{{end}}
+  </div>{{end}}
+ </div>
+ <div class="ft">Updated {{.Generated}} · powered by roost</div>
+</div></body></html>`))

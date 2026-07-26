@@ -268,6 +268,51 @@ func TestAppCardShowsReachabilityChip(t *testing.T) {
 	}
 }
 
+func TestCommandPaletteRenders(t *testing.T) {
+	body := serve(NewServer(&fakeController{}, ""), "GET", "/", nil).Body.String()
+	for _, want := range []string{`id="palette"`, `id="palbtn"`, `id="pal-list"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("command palette missing %q", want)
+		}
+	}
+}
+
+func TestPublicStatusPage(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "keeparu", State: "running", URL: "https://keeparu.byaru.com", HTTP: "200", Reachable: true, Up: "Up 3 hours"},
+		{Name: "broken", State: "exited", URL: "https://broken.byaru.com"},
+	}}
+	rr := serve(NewServer(f, ""), "GET", "/status", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"Keeparu", "Operational", "Broken", "Down", "1/2 services operational"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("status page missing %q", want)
+		}
+	}
+	// Must not leak controls or the token into a page meant to be public.
+	for _, bad := range []string{`action="/remove"`, `action="/up"`, "New app"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("public status page leaks control %q", bad)
+		}
+	}
+}
+
+func TestActivityTimelineRecordsActions(t *testing.T) {
+	f := &fakeController{}
+	s := NewServer(f, "")
+	serve(s, "POST", "/up", nil) // fires Up in a goroutine, then records an event
+	waitFor(t, func() bool {
+		return strings.Contains(serve(s, "GET", "/", nil).Body.String(), `class="timeline"`)
+	})
+	body := serve(s, "GET", "/", nil).Body.String()
+	if !strings.Contains(body, "complete") {
+		t.Error("timeline should record the completed action")
+	}
+}
+
 func TestSidebarCollapseTogglesRender(t *testing.T) {
 	rr := serve(NewServer(&fakeController{}, ""), "GET", "/", nil)
 	body := rr.Body.String()
