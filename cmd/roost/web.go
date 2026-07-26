@@ -798,9 +798,15 @@ func buildMailer(flags *rootFlags) (notify.Mailer, string) {
 	if port == 0 {
 		port = 587
 	}
+	pass := os.Getenv("ROOST_SMTP_PASSWORD")
+	// An SMTP login with no password would just fail auth on every incident;
+	// keep alerts cleanly off until $ROOST_SMTP_PASSWORD is set.
+	if n.SMTPUser != "" && pass == "" {
+		return notify.Mailer{}, ""
+	}
 	m := notify.Mailer{
 		Host: n.SMTPHost, Port: port,
-		User: n.SMTPUser, Pass: os.Getenv("ROOST_SMTP_PASSWORD"),
+		User: n.SMTPUser, Pass: pass,
 		From: n.From, To: n.Email,
 	}
 	return m, strings.Join(n.Email, ", ")
