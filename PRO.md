@@ -18,12 +18,18 @@ more looks, framework ports, integration recipes, and support.
 | All 6 HTML pages + assets | ✅ | ✅ |
 | Light / dark + theming tokens | ✅ | ✅ |
 | **6 extra premium themes** (Ocean, Slate, Forest, Sunset, Mono, High-contrast) | — | ✅ |
-| **React port** (Vite + TypeScript) | — | ✅ |
-| **Vue port** (Vite + TypeScript) | — | ✅ |
-| **Backend integration recipes** (REST, SSE/WebSocket, Go/Node/Rails adapters) | basic | ✅ full |
-| **Email/incident wiring guide** (SMTP, Slack, webhooks) | — | ✅ |
+| **Live theme picker** (`data-skin` + remembered choice) | — | ✅ |
+| **Backend integration recipes** (Go / Rails / Node / SSE, working code) | basic | ✅ full |
+| **Design-system doc** (tokens, scales, component specs, a11y) | — | ✅ |
+| **React port** (Vite + TypeScript) | — | 🔜 roadmap |
+| **Vue port** (Vite + TypeScript) | — | 🔜 roadmap |
 | Priority email support (1 year) | — | ✅ |
-| Lifetime updates | — | ✅ |
+| Lifetime updates (incl. the ports when they land) | — | ✅ |
+
+> **Available now:** the 6 themes + live picker, the Go/Rails/Node/SSE
+> integration recipes, and the full design-system doc all ship in the Pro pack
+> today. The React/Vue ports are on the roadmap and reach Pro buyers as a free
+> update (lifetime updates included).
 
 **Extended license** (resell in a SaaS/product sold to end-users, or use in
 unlimited client projects): **$600 one-time.**
