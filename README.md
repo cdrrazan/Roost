@@ -218,6 +218,7 @@ flowchart TD
     S -->|"package.json · express"| NO["node · :3000"]
     S -->|"manage.py + requirements"| D["django · :8000"]
     S -->|"requirements/pyproject · Flask"| FL["flask · :8000"]
+    S -->|"artisan + composer.json"| LV["laravel · :8000"]
     S -->|"index.html, no manifest"| ST["static · :80"]
     S -->|"nothing recognized"| E["❌ error: set framework:"]
 ```
@@ -233,6 +234,7 @@ flowchart TD
 | `package.json` with `express` | node | 3000 | `npm run start` |
 | `manage.py` + requirements/pyproject | django | 8000 | gunicorn |
 | requirements/pyproject with `Flask` | flask | 8000 | `gunicorn … app:app` |
+| `artisan` + `composer.json` | laravel | 8000 | `php artisan serve` |
 | `index.html`, no manifest | static | 80 | served by Caddy |
 
 Also inferred: **runtime version** (`.ruby-version`, `engines`, …), **database

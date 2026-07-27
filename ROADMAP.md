@@ -15,7 +15,7 @@ project serving side projects.
       create missing DNS records, chmod credentials.
 - [ ] `roost down --remove-dns` / `roost uninstall`: clean up only the
       records recorded in `state.json`.
-- [ ] Framework detection: Laravel, Flask, Astro, SvelteKit.
+- [x] Framework detection: Laravel, Flask, Astro, SvelteKit.
 - [x] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
 - [x] `roost logs` multiplexing (`roost logs` with no app = all apps).
 

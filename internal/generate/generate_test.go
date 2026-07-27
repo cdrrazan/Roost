@@ -525,6 +525,22 @@ func TestRenderDockerfile(t *testing.T) {
 		}
 	})
 
+	t.Run("laravel builds via the php image with artisan serve", func(t *testing.T) {
+		out, err := RenderDockerfile(App{
+			Name: "shop", Framework: "laravel", Port: 8000,
+			StartCommand: "php artisan serve --host=0.0.0.0 --port=8000",
+		})
+		if err != nil {
+			t.Fatalf("RenderDockerfile: %v", err)
+		}
+		s := string(out)
+		for _, want := range []string{"FROM composer", "FROM php:8.3-cli", "docker-php-ext-install", "php artisan serve"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("laravel Dockerfile missing %q:\n%s", want, s)
+			}
+		}
+	})
+
 	t.Run("build_env is injected into the builder stage, sorted", func(t *testing.T) {
 		app := apps["api"]
 		app.BuildEnv = map[string]string{

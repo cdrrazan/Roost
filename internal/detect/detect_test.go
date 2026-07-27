@@ -106,6 +106,15 @@ func TestDetectFixtures(t *testing.T) {
 				StartCommand: "gunicorn -b 0.0.0.0:8000 app:app",
 			},
 		},
+		{
+			fixture: "laravel-app",
+			want: Detection{
+				Framework:    "laravel",
+				Signal:       "artisan + composer.json",
+				Port:         8000,
+				StartCommand: "php artisan serve --host=0.0.0.0 --port=8000",
+			},
+		},
 	}
 
 	for _, tt := range tests {

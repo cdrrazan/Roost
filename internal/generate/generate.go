@@ -176,6 +176,8 @@ func dbSetupCommand(framework string) string {
 		return "bin/rails db:prepare"
 	case "django":
 		return "python manage.py migrate --noinput"
+	case "laravel":
+		return "php artisan migrate --force"
 	}
 	return ""
 }
@@ -184,8 +186,11 @@ func dbSetupCommand(framework string) string {
 // without an explicit command. Only frameworks with a conventional seed
 // task have one; others must supply a command string.
 func defaultSeedCommand(framework string) string {
-	if framework == "rails" {
+	switch framework {
+	case "rails":
 		return "bin/rails db:seed"
+	case "laravel":
+		return "php artisan db:seed --force"
 	}
 	return ""
 }
@@ -212,7 +217,9 @@ func fileExists(path string) bool {
 // the host source over /app would shadow the build and break startup.
 func mountsSource(framework string) bool {
 	switch framework {
-	case "static", "next", "node":
+	case "static", "next", "node", "laravel":
+		// laravel installs vendor/ into /app during build; a bind mount would
+		// shadow it.
 		return false
 	}
 	return true
@@ -450,6 +457,7 @@ type dockerfileData struct {
 	RubyTag     string
 	NodeTag     string
 	PythonTag   string
+	PhpTag      string
 	RailsAssets bool
 	// BuildEnvPairs is app.BuildEnv sorted for a deterministic Dockerfile;
 	// templates range over it to emit build-stage ENV lines.
@@ -463,6 +471,7 @@ func RenderDockerfile(app App) ([]byte, error) {
 		RubyTag:       versionTag(app.RuntimeVersion, "3.4"),
 		NodeTag:       nodeTag(app.RuntimeVersion),
 		PythonTag:     "3.12-slim",
+		PhpTag:        "8.3-cli",
 		RailsAssets:   app.Framework == "rails",
 		BuildEnvPairs: sortedPairs(app.BuildEnv),
 	}
@@ -474,6 +483,8 @@ func RenderDockerfile(app App) ([]byte, error) {
 		name = "node.Dockerfile.tmpl"
 	case "django", "flask":
 		name = "python.Dockerfile.tmpl"
+	case "laravel":
+		name = "php.Dockerfile.tmpl"
 	case "static":
 		name = "static.Dockerfile.tmpl"
 	default:

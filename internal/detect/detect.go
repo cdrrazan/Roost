@@ -17,8 +17,9 @@ import (
 // Detection is the result of inspecting one app directory.
 type Detection struct {
 	// Framework is one of: rails, sinatra, next, node, django, flask,
-	// static. (Astro resolves to static, SvelteKit to node — the build tool
-	// is detected but the runtime category is what roost builds against.)
+	// laravel, static. (Astro resolves to static, SvelteKit to node — the
+	// build tool is detected but the runtime category is what roost builds
+	// against.)
 	Framework string
 	// Signal is the human-readable rule that triggered the detection,
 	// e.g. "Gemfile + config/application.rb".
@@ -76,6 +77,8 @@ func Defaults(framework string) (Detection, bool) {
 		return Detection{Framework: "django", Port: 8000, StartCommand: "gunicorn -b 0.0.0.0:8000"}, true
 	case "flask":
 		return Detection{Framework: "flask", Port: 8000, StartCommand: "gunicorn -b 0.0.0.0:8000 app:app"}, true
+	case "laravel":
+		return Detection{Framework: "laravel", Port: 8000, StartCommand: "php artisan serve --host=0.0.0.0 --port=8000"}, true
 	case "static":
 		return Detection{Framework: "static", Port: 80}, true
 	default:
@@ -202,6 +205,18 @@ func Detect(dir string) (Detection, error) {
 			Signal:       signal,
 			Port:         8000,
 			StartCommand: "gunicorn -b 0.0.0.0:8000",
+			Database:     detectDatabase(dir, read),
+			Redis:        detectRedis(read),
+		}, nil
+
+	case has("artisan") && has("composer.json"):
+		// Laravel. `php artisan serve` is single-process but fine behind the
+		// tunnel for personal apps; migrations run via db:prepare (migrate).
+		return Detection{
+			Framework:    "laravel",
+			Signal:       "artisan + composer.json",
+			Port:         8000,
+			StartCommand: "php artisan serve --host=0.0.0.0 --port=8000",
 			Database:     detectDatabase(dir, read),
 			Redis:        detectRedis(read),
 		}, nil
