@@ -568,6 +568,10 @@ func (c *stackController) EdgeInfo() web.EdgeInfo {
 			e.Protected = cfg.Tunnel.Access != nil && len(cfg.Tunnel.Access.Emails) > 0
 		}
 	}
+	// Live connector health for the Edge card (connected/reconnecting/down).
+	if r, err := newRunner(); err == nil {
+		e.TunnelState = string(r.TunnelStatus())
+	}
 	return e
 }
 

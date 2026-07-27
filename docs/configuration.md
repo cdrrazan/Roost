@@ -40,9 +40,10 @@ apps: [...]                # see below
   the Add form builds arbitrary code). Omit it and the panel is loopback-only.
   The panel is a live dashboard: per-app tech badges, CPU/memory/network and
   uptime, an end-to-end HTTP reachability probe, CPU sparklines, an alerts
-  banner, Server/Edge/System cards, a per-app detail drawer (image, restarts,
-  env keys, recent logs), an activity timeline, and a ⌘K command palette. It
-  auto-refreshes every 5s.
+  banner, Server/Edge/System cards (the Edge card shows a live connection chip
+  — connected / reconnecting-after-wake / down), a per-app detail drawer
+  (image, restarts, env keys, recent logs), an activity timeline, and a ⌘K
+  command palette. It auto-refreshes every 5s.
   - **Public status page** — the panel also serves a controls-free, secret-free
     board at **`/status`** (app name + operational/degraded/down + uptime),
     safe to share. Because it lives on the same host, it sits behind Access by

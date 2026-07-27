@@ -376,6 +376,8 @@ it does:
 - **At a glance** — donut gauges for fleet + memory and a per-app memory bar
   chart up top; a right rail with an Overview, a **Server** card (disk, host, OS,
   CPU/RAM, uptime, and the IP + a copyable SSH login from the `server:` block),
+  an **Edge** card with a live connection chip (**connected** / **reconnecting**
+  after a wake / **down**, so a brief 502 reads as the tunnel, not your apps),
   recent activity, and the removed-apps list.
 - **Health & incidents** — real HTTP **reachability chips** (`live · 200` vs a
   `502` that a green "container up" would hide), an **incident** banner + timeline

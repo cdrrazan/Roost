@@ -204,13 +204,14 @@ func TestDashboardCardsAndAlerts(t *testing.T) {
 			{Name: "broken", State: "running", URL: "https://c.example.com", HTTP: "502", Reachable: false},
 		},
 		system: SystemInfo{Images: 12, ImagesSize: "3.1GB", Containers: 14, Volumes: 5, VolumesSize: "1.2GB", Reclaimable: "800MB (25%)"},
-		edge:   EdgeInfo{TunnelName: "roost", TunnelID: "abcdef012345", Account: "acc123", Hosts: []string{"byaru.com"}, Protected: true},
+		edge:   EdgeInfo{TunnelName: "roost", TunnelID: "abcdef012345", Account: "acc123", Hosts: []string{"byaru.com"}, Protected: true, TunnelState: "reconnecting"},
 	}
 	body := serve(NewServer(f, ""), "GET", "/", nil).Body.String()
 	for _, want := range []string{
 		`class="alerts"`, "Down App is exited", "Broken is up but returns 502", // alerts (names humanized)
 		"System", "3.1GB", "800MB (25%)", // system card
 		"Edge", "roost", "protected", // edge card
+		"Connection", "reconnecting", // live tunnel state
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("dashboard missing %q", want)
