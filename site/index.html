@@ -382,14 +382,17 @@
     <tr><td><code>roost add</code> / <code>remove</code></td><td>edit the app list — your config comments are preserved</td></tr>
     <tr><td><code>roost list</code> / <code>detect</code></td><td>resolved apps and URLs; detection with the signal that triggered it</td></tr>
     <tr><td><code>roost generate</code></td><td>write <code>~/.roost/build/*</code> without starting anything</td></tr>
-    <tr><td><code>roost up [--profile] [--reseed] [--no-seed]</code> / <code>down</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps (<code>--no-seed</code> skips seeding for a clean start) / stop it</td></tr>
+    <tr><td><code>roost up [--profile] [--reseed] [--no-seed]</code> / <code>down [--remove-dns]</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps (<code>--no-seed</code> skips seeding for a clean start) / stop it (<code>--remove-dns</code> also deletes the DNS records roost created)</td></tr>
+    <tr><td><code>roost uninstall</code></td><td>stop the stack and delete the DNS records <b>and</b> tunnel roost created — only what <code>state.json</code> records, never foreign ones</td></tr>
     <tr><td><code>roost start</code> / <code>stop</code> / <code>restart</code></td><td>bring one app up, take it down, or bounce it — without touching the rest of the stack</td></tr>
-    <tr><td><code>roost status</code> / <code>logs</code></td><td>state, health, memory vs cap, public URL; tail one app's logs</td></tr>
-    <tr><td><code>roost doctor</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth — with a fix per failure</td></tr>
+    <tr><td><code>roost share &lt;app&gt;</code></td><td>expose one running app at a temporary hostname on your own domain until Ctrl-C — a nicer <code>cloudflared tunnel --url</code></td></tr>
+    <tr><td><code>roost status</code> / <code>logs [app]</code></td><td>state, health, memory vs cap, public URL + an advisory edge line (tunnel reconnecting vs app down); tail one app's logs, or all apps when none named</td></tr>
+    <tr><td><code>roost web</code></td><td>serve the Material 3 browser control panel (host process outside the stack; front it with Cloudflare Access)</td></tr>
+    <tr><td><code>roost doctor [--fix]</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth, credential perms — with a fix per failure; <code>--fix</code> applies the safe subset (chmod creds, create/proxy DNS)</td></tr>
     <tr><td><code>roost tunnel setup</code></td><td>create the tunnel + every DNS record via API; idempotent, refuses to clobber records it didn't create</td></tr>
     <tr><td><code>roost tunnel access</code></td><td>apply the Cloudflare Access policy across every suffix</td></tr>
     <tr><td><code>roost auth login</code></td><td>verify and store the API token (<code>~/.roost/credentials</code>, 0600)</td></tr>
-    <tr><td><code>roost enable</code> / <code>disable</code></td><td>run at login via launchd (macOS) / systemd --user (Linux); fully removable</td></tr>
+    <tr><td><code>roost enable</code> / <code>disable</code></td><td>run at login via launchd (macOS) / systemd --user (Linux) / Task Scheduler (Windows); fully removable</td></tr>
   </table>
   </div>
   <p class="sub" style="margin-top:14px">Full schema and hostname rules:

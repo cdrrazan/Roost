@@ -13,7 +13,8 @@ roost --config examples/demo/config.yml detect
 | [`minimal.yml`](minimal.yml) | the smallest useful config: a domain and a list of paths |
 | [`explicit.yml`](explicit.yml) | explicit per-app hostnames — what `roost init` writes |
 | [`multi-domain.yml`](multi-domain.yml) | one config spanning three domains plus a bare apex |
-| [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env, build_env, seed, `control_host` |
+| [`frameworks.yml`](frameworks.yml) | one app per detected framework — Rails, Sinatra, Next, SvelteKit, Express, Astro, Vite, Django, Flask, Laravel, static |
+| [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env, build_env, seed, `control_host`, `remote` |
 | [`includes/config.yml`](includes/config.yml) | a main file that pulls apps from `apps/*.yml`, one file per feature |
 | [`demo/config.yml`](demo/config.yml) | a fully-populated fake setup for a fictional developer |
 
@@ -37,6 +38,16 @@ gets a Cloudflare Access wall before first exposure (`full.yml`).
 (`full.yml`) and roost routes that hostname to the `roost web` control panel.
 Front it with Cloudflare Access — the panel starts, stops, adds, and removes
 apps, so an unprotected URL is infra control for anyone who reaches it.
+
+**"Run it on a VPS, not my laptop"** — set `remote: ssh://user@host`
+(`full.yml`). roost still generates locally but points Docker at the remote
+daemon, so the stack runs on the box with the same config. Source isn't
+bind-mounted in remote mode (the box has no copy), so apps build into their
+image. Omit `remote:` and everything stays local — that's the default.
+
+**"What framework will roost pick for my app?"** — see
+[`frameworks.yml`](frameworks.yml): one app per detected framework with the
+folder signal that triggers each. You almost never set `framework:` yourself.
 
 **"One config.yml is getting unwieldy"** — split the apps into files and
 `include: apps/*.yml` them from the main config (`includes/config.yml`). Each

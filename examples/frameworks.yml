@@ -1,0 +1,25 @@
+# Every framework roost detects, one app each — a reference for what a
+# folder's signals map to. You rarely set `framework:` yourself; roost infers
+# it from the files in the folder. The comment on each line names the signal
+# roost looks for and the port/start command it picks. (Astro resolves to
+# `static`, SvelteKit to `node` — the build tool is detected, but the runtime
+# category is what roost builds against.)
+
+domain: example.com
+
+apps:
+  - ~/apps/blog        # Rails      — Gemfile + config/application.rb       → puma :3000
+  - ~/apps/api         # Sinatra    — Gemfile + config.ru + sinatra         → rackup :4567
+  - ~/apps/web         # Next.js    — package.json · next                   → npm run start :3000
+  - ~/apps/dashboard   # SvelteKit  — package.json · @sveltejs/kit          → node build :3000
+  - ~/apps/gateway     # Express    — package.json · express                → npm run start :3000
+  - ~/apps/marketing   # Astro      — package.json · astro                  → built, Caddy :80
+  - ~/apps/spa         # Vite       — package.json · vite                   → built dist/, Caddy :80
+  - ~/apps/analytics   # Django     — manage.py + requirements/pyproject    → gunicorn :8000
+  - ~/apps/webhooks    # Flask      — requirements/pyproject naming Flask    → gunicorn app:app :8000
+  - ~/apps/store       # Laravel    — artisan + composer.json               → php artisan serve :8000
+  - ~/apps/docs        # static     — index.html, no manifest               → Caddy :80
+
+# An unrecognizable folder is never guessed — roost errors and asks you to set
+# framework: explicitly. Every inferred value (port, start command, database,
+# memory) is overridable per app; see full.yml.
