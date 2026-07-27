@@ -60,29 +60,27 @@
 
     <section class="card" style="padding:6px 20px;margin-bottom:18px">
      <div class="setrow"><div class="lbl"><b>Theme</b><span>Light, dark, or follow system.</span></div>
-      <div class="seggroup"><button class="active">Light</button><button>Dark</button><button>System</button></div></div>
-     <div class="setrow"><div class="lbl"><b>Accent color</b><span>Drives buttons, links, and highlights.</span></div>
-      <div class="guide-row"><span class="swatch"><span class="chip" style="background:#5b54e6"></span></span><span class="swatch"><span class="chip" style="background:#0e7a54"></span></span><span class="swatch"><span class="chip" style="background:#d64550"></span></span></div></div>
+      <div class="seggroup" id="seg-theme"><button data-val="light">Light</button><button data-val="dark">Dark</button><button data-val="system">System</button></div></div>
      <div class="setrow"><div class="lbl"><b>Default view</b><span>How the app list renders on load.</span></div>
-      <div class="seggroup"><button class="active">List</button><button>Grid</button></div></div>
+      <div class="seggroup" id="seg-view"><button data-val="list">List</button><button data-val="grid">Grid</button></div></div>
+     <div class="setrow"><div class="lbl"><b>Mask sensitive info</b><span>Hide IP / SSH / host / tunnel ids on the cards — safe screen-sharing.</span></div>
+      <label class="switch"><input type="checkbox" id="set-mask"><span class="track"></span></label></div>
     </section>
 
     <section class="card" style="padding:6px 20px;margin-bottom:18px">
      <div class="setrow"><div class="lbl"><b>Email alerts</b><span>Notify me when an app goes down or recovers.</span></div>
-      <label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
-     <div class="setrow"><div class="lbl"><b>Recipient</b><span>Where incident emails are sent.</span></div>
-      <input type="email" value="alex@example.com" style="max-width:260px"></div>
-     <div class="setrow"><div class="lbl"><b>Memory alert threshold</b><span>Warn when an app exceeds this % of its cap.</span></div>
-      <input type="number" value="90" style="max-width:90px"> </div>
-     <div class="setrow"><div class="lbl"><b>Disk alert threshold</b><span>Warn when the host disk exceeds this %.</span></div>
-      <input type="number" value="80" style="max-width:90px"></div>
+      <label class="switch"><input type="checkbox" id="set-emailon" checked><span class="track"></span></label></div>
+     <div class="setrow"><div class="lbl"><b>Recipients</b><span>Where incident emails are sent (comma separated).</span></div>
+      <input type="text" id="set-recipient" value="alex@example.com" style="max-width:280px"></div>
+     <div class="setrow"><div class="lbl"><b>Subject template</b><span>Placeholders: {app} {status} {detail} {url} {time}.</span></div>
+      <input type="text" id="set-subject" style="max-width:280px"></div>
+     <div class="setrow" style="align-items:flex-start"><div class="lbl"><b>Body template</b><span>Placeholders as above.</span></div>
+      <textarea id="set-body" rows="3" style="max-width:280px;width:280px"></textarea></div>
     </section>
 
-    <section class="card" style="padding:6px 20px;margin-bottom:18px">
-     <div class="setrow"><div class="lbl"><b>Auto-refresh</b><span>Live-update metrics without reloading.</span></div>
-      <label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
-     <div class="setrow"><div class="lbl"><b>Public status page</b><span>Expose a read-only /status board.</span></div>
-      <label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+    <section class="card" style="padding:6px 20px 16px;margin-bottom:18px">
+     <div class="setrow" style="align-items:flex-start"><div class="lbl"><b>Tech stacks</b><span>Relabel a framework/db on the cards — one <code>key=Label</code> per line.</span></div>
+      <textarea id="set-tech" rows="4" placeholder="rails=Ruby on Rails&#10;next=Next.js" style="max-width:280px;width:280px"></textarea></div>
     </section>
 
     <section class="card" style="padding:16px 20px;border-color:var(--red-line)">
@@ -90,12 +88,41 @@
       <button class="btn btn-danger">Stop all apps</button></div>
     </section>
 
-    <div style="margin-top:20px;display:flex;gap:10px"><button class="btn btn-primary">Save changes</button><button class="btn">Cancel</button></div>
+    <div style="margin-top:20px;display:flex;gap:10px"><button class="btn btn-primary" id="set-save">Save changes</button><a class="btn" href="index.html">Back to dashboard</a></div>
    </div>
   </main>
  </div>
 </div>
 <script src="assets/js/chrome.js"></script>
 <script src="assets/js/md3.js" defer></script>
+<script>
+// Wire the settings form to localStorage — the static demo's stand-in for
+// ~/.roost/panel.json. Values apply on the dashboard + incidents pages.
+(function(){
+ var DEF={emailSubject:"Roost · {app} is {status}",emailBody:"{app} is {detail}.\n\n{url}\n{time}"};
+ function FS(){try{return JSON.parse(localStorage.getItem("fleet-settings")||"{}");}catch(e){return {};}}
+ function seg(id,val){var g=document.getElementById(id);if(!g)return;g.querySelectorAll("button").forEach(function(b){b.classList.toggle("active",b.dataset.val===val);});}
+ function segVal(id){var b=document.getElementById(id).querySelector("button.active");return b?b.dataset.val:"";}
+ var s=FS();
+ seg("seg-theme",localStorage.getItem("fleet-theme")||"system");
+ seg("seg-view",localStorage.getItem("fleet-view")||"list");
+ document.getElementById("set-mask").checked=!!s.mask;
+ if(s.recipient)document.getElementById("set-recipient").value=s.recipient;
+ document.getElementById("set-subject").value=s.emailSubject||DEF.emailSubject;
+ document.getElementById("set-body").value=s.emailBody||DEF.emailBody;
+ var tech=s.tech||{};document.getElementById("set-tech").value=Object.keys(tech).map(function(k){return k+"="+tech[k];}).join("\n");
+ ["seg-theme","seg-view"].forEach(function(id){document.getElementById(id).addEventListener("click",function(e){var b=e.target.closest("button[data-val]");if(!b)return;seg(id,b.dataset.val);});});
+ function parseTech(v){var o={};v.split("\n").forEach(function(line){line=line.trim();var i=line.indexOf("=");if(i>0){var k=line.slice(0,i).trim(),lab=line.slice(i+1).trim();if(k&&lab)o[k]=lab;}});return o;}
+ document.getElementById("set-save").addEventListener("click",function(){
+  var theme=segVal("seg-theme"),view=segVal("seg-view");
+  localStorage.setItem("fleet-theme",theme==="system"?(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):theme);
+  localStorage.setItem("fleet-view",view);
+  var next={mask:document.getElementById("set-mask").checked,recipient:document.getElementById("set-recipient").value.trim(),emailSubject:document.getElementById("set-subject").value,emailBody:document.getElementById("set-body").value,tech:parseTech(document.getElementById("set-tech").value)};
+  localStorage.setItem("fleet-settings",JSON.stringify(next));
+  document.documentElement.dataset.theme=localStorage.getItem("fleet-theme");
+  var t=document.createElement("div");t.className="toast in";t.textContent="Settings saved";document.body.appendChild(t);setTimeout(function(){t.classList.remove("in");setTimeout(function(){t.remove();},250);},1800);
+ });
+})();
+</script>
 </body>
 </html>

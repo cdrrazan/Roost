@@ -2,6 +2,17 @@
 
 All notable changes to Fleet are documented here. Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.3.0] — 2026-07-27
+
+### Added
+- **Functional settings** (localStorage — the demo's stand-in for a backend):
+  default view & theme, a **mask mode** that hides IP / SSH / host / tunnel ids on
+  the Server & Edge cards (safe screen-sharing), **email subject/body templates**
+  (`{app} {status} {detail} {url} {time}`), and **tech-stack label overrides**
+  (`rails=Ruby on Rails`). Saved values apply on the dashboard.
+- **Share status** on the Incidents page — copy / X / LinkedIn / Facebook buttons
+  that post a one-line summary of the current status plus the status-page link.
+
 ## [1.2.0] — 2026-07-27
 
 ### Added
