@@ -1,4 +1,4 @@
-name: deploy-web
+name: 🚀 Deploy — Web Control Panel
 
 # Auto-deploy the roost binary (which serves the web control panel) to the box
 # on every change to main that affects it. The box has no Go toolchain and no
@@ -41,7 +41,11 @@ concurrency:
 
 jobs:
   deploy:
+    name: Build · Ship · Restart roost-web
     runs-on: ubuntu-latest
+    environment:
+      name: control-panel
+      url: https://control.rsynk.com
     steps:
       - name: Gate on secrets
         id: gate

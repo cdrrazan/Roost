@@ -40,8 +40,8 @@ func TestMailerNotifyBuildsAndSends(t *testing.T) {
 func TestMailerDisabledIsNoop(t *testing.T) {
 	called := false
 	m := Mailer{Send: func(string, smtp.Auth, string, []string, []byte) error { called = true; return nil }}
-	if !m.Enabled() {
-		// good: no host / no recipients
+	if m.Enabled() {
+		t.Fatal("mailer with no host / no recipients must be disabled")
 	}
 	if err := m.Notify("x", "y"); err != nil {
 		t.Fatalf("disabled Notify should be a no-op, got %v", err)
