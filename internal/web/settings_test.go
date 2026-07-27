@@ -127,6 +127,50 @@ func TestDashboardMaskAndTechOverride(t *testing.T) {
 	}
 }
 
+func TestIncidentSummary(t *testing.T) {
+	// all clear
+	if got := incidentSummary(statusView{RunningCount: 5, Total: 5}); !strings.Contains(got, "operational") || !strings.Contains(got, "5/5") {
+		t.Errorf("all-clear summary = %q", got)
+	}
+	// with open incidents
+	v := statusView{
+		OpenIncidents: 2,
+		Incidents: []incidentView{
+			{Label: "Keeparu", Ago: "down 6m", Open: true},
+			{Label: "Crm", Ago: "down 23m", Open: true},
+			{Label: "Old", Ago: "resolved after 3m", Open: false},
+		},
+	}
+	got := incidentSummary(v)
+	if !strings.Contains(got, "2 services affected") || !strings.Contains(got, "Keeparu (down 6m)") || !strings.Contains(got, "Crm (down 23m)") {
+		t.Errorf("open-incident summary = %q", got)
+	}
+	if strings.Contains(got, "Old") {
+		t.Error("resolved incidents should not appear in the share summary")
+	}
+	// singular
+	if got := incidentSummary(statusView{OpenIncidents: 1, Incidents: []incidentView{{Label: "X", Ago: "down 1m", Open: true}}}); !strings.Contains(got, "1 service affected") {
+		t.Errorf("singular summary = %q", got)
+	}
+}
+
+func TestStatusPageShowsIncidentDetailAndRefreshes(t *testing.T) {
+	f := &fakeController{}
+	s := NewServer(f, "")
+	f.statuses = []runner.AppStatus{{Name: "keeparu", State: "running", URL: "https://keeparu.example.com", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+	f.statuses = []runner.AppStatus{{Name: "keeparu", State: "exited", URL: "https://keeparu.example.com"}}
+	s.checkIncidents() // open incident with detail "exited"
+
+	body := serve(s, "GET", "/status", nil).Body.String()
+	if !strings.Contains(body, "http-equiv=\"refresh\"") {
+		t.Error("status page should auto-refresh")
+	}
+	if !strings.Contains(body, "exited") {
+		t.Error("status page should surface the incident detail")
+	}
+}
+
 func TestSettingsNormalizeFillsDefaults(t *testing.T) {
 	got := Settings{DefaultView: "weird", DefaultTheme: "neon", EmailTo: []string{" a@x.com ", "", "b@x.com"}}.Normalize()
 	if got.SMTPPort != 587 {

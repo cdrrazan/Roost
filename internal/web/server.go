@@ -660,7 +660,11 @@ func (s *Server) handleStatusPage(w http.ResponseWriter, _ *http.Request) {
 			if in.App != "" {
 				label = humanize(in.App)
 			}
-			view.Incidents = append(view.Incidents, label+" — down "+compactDur(now.Sub(in.Since)))
+			line := label + " — down " + compactDur(now.Sub(in.Since))
+			if in.Detail != "" {
+				line += " · " + in.Detail
+			}
+			view.Incidents = append(view.Incidents, line)
 		}
 	}
 	s.mu.Unlock()
@@ -986,6 +990,7 @@ type statusView struct {
 	Page           string   // "dashboard" (default), "incidents", or "settings"
 	Settings       Settings // current panel settings (for the settings form + mask/tech rendering)
 	TechStacksText string   // Settings.TechStacks rendered as "key=Label" lines
+	SummaryText    string   // one-line status summary for the incidents-page share buttons
 	Error          string
 	Token          string // embedded in the form when non-empty
 }
@@ -1107,7 +1112,28 @@ func (s *Server) buildStatusView() statusView {
 	} else if view.Server.DiskPct >= 80 {
 		view.Alerts = append(view.Alerts, Alert{Level: "warn", Text: fmt.Sprintf("Disk %d%% full", view.Server.DiskPct)})
 	}
+	view.SummaryText = incidentSummary(view)
 	return view
+}
+
+// incidentSummary composes the one-line, link-free status blurb the incidents
+// page offers for sharing (X / LinkedIn / Facebook / clipboard). The page URL is
+// appended client-side from the browser's origin.
+func incidentSummary(v statusView) string {
+	if v.OpenIncidents == 0 {
+		return fmt.Sprintf("🟢 All systems operational — %d/%d services up.", v.RunningCount, v.Total)
+	}
+	var parts []string
+	for _, in := range v.Incidents {
+		if in.Open {
+			parts = append(parts, in.Label+" ("+in.Ago+")")
+		}
+	}
+	svc := "service"
+	if v.OpenIncidents != 1 {
+		svc += "s"
+	}
+	return fmt.Sprintf("🔴 Roost: %d %s affected — %s.", v.OpenIncidents, svc, strings.Join(parts, ", "))
 }
 
 // buildAlerts turns the fleet state into banner warnings: stopped apps and
@@ -1466,6 +1492,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .incbanner .ib-list{color:var(--ink);opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  /* incidents page */
  #incidents-page .inc-actions{display:flex;gap:8px;align-items:center}
+ .inc-share{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line2);background:var(--panel2)}
+ .inc-share .csub{font-size:11.5px;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+ .inc-share [data-share]{min-width:34px;justify-content:center}
+ .inc-summary-preview{flex:1;min-width:160px;font-size:12px;color:var(--muted);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .inclist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column}
  .incrow{display:flex;align-items:flex-start;gap:12px;padding:13px 6px;border-top:1px solid var(--line2)}
  .incrow:first-child{border-top:0}
@@ -1781,6 +1811,14 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
       {{if gt .Resolved 0}}<form class="inline" method="post" action="/incidents/clear">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Remove resolved incidents from the history">Clear resolved ({{.Resolved}})</button></form>{{end}}
       <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
      </div>
+    </div>
+    <div class="inc-share" data-summary="{{.SummaryText}}">
+     <span class="csub">Share status</span>
+     <button class="btn btn-sm" data-share="copy" title="Copy the status summary + link">⧉ Copy</button>
+     <button class="btn btn-sm" data-share="x" title="Post to X">𝕏</button>
+     <button class="btn btn-sm" data-share="linkedin" title="Share on LinkedIn">in</button>
+     <button class="btn btn-sm" data-share="facebook" title="Share on Facebook">f</button>
+     <span class="inc-summary-preview">{{.SummaryText}}</span>
     </div>
     {{if .Incidents}}
     <ul class="inclist">
@@ -2246,6 +2284,22 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    .catch(function(){btn.innerHTML="Failed";})
    .finally(function(){setTimeout(function(){btn.disabled=false;btn.innerHTML=orig;btn._busy=0;},2000);});
  },true);
+ // Incidents-page share: compose the status summary + this panel's /status URL
+ // and hand it to X / LinkedIn / Facebook, or the clipboard.
+ document.addEventListener("click",function(e){
+  var b=e.target.closest("[data-share]");if(!b)return;
+  var box=b.closest(".inc-share");var summary=box?box.dataset.summary:"";
+  var pageUrl=location.origin+"/status",enc=encodeURIComponent,text=summary+" "+pageUrl,url;
+  if(b.dataset.share==="copy"){
+   var done=function(){var t=b.innerHTML;b.innerHTML="✓ Copied";setTimeout(function(){b.innerHTML=t;},1200);};
+   if(navigator.clipboard){navigator.clipboard.writeText(text).then(done).catch(function(){});}else{done();}
+   return;
+  }
+  if(b.dataset.share==="x")url="https://twitter.com/intent/tweet?text="+enc(text);
+  else if(b.dataset.share==="linkedin")url="https://www.linkedin.com/sharing/share-offsite/?url="+enc(pageUrl);
+  else if(b.dataset.share==="facebook")url="https://www.facebook.com/sharer/sharer.php?u="+enc(pageUrl)+"&quote="+enc(summary);
+  if(url)window.open(url,"_blank","noopener,noreferrer,width=600,height=520");
+ });
  // After Cloudflare Access clears the session, return to the app root so the
  // login page shows again (instead of the generic "logged out" page). Built
  // from the current origin so it works on any host.
@@ -2349,6 +2403,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 var publicTmpl = template.Must(template.New("public").Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Status · roost</title>
+<meta http-equiv="refresh" content="120"><!-- auto-refresh every 2 min so a fresh outage surfaces without a manual reload -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSI+PHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiByeD0iMTEiIGZpbGw9InVybCgjcmcpIi8+PHBhdGggZD0iTTEwLjUgMTkuMiBMMjAgMTEgTDI5LjUgMTkuMiIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEzLjQgMTguNCBWMjguNiBIMjYuNiBWMTguNCIgc3Ryb2tlPSIjZmZmIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTE3LjQgMjguNiBWMjQgYTIuNiAyLjYgMCAwIDEgNS4yIDAgVjI4LjYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIyLjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxkZWZzPjxsaW5lYXJHcmFkaWVudCBpZD0icmciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBzdG9wLWNvbG9yPSIjOGI4M2Y3Ii8+PHN0b3Agb2Zmc2V0PSIuNTUiIHN0b3AtY29sb3I9IiM1YjU0ZTYiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiM0MzM4Y2EiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48L3N2Zz4K">
 <style>
  :root{--bg:#f6f7f9;--panel:#fff;--line:#e6e8ee;--ink:#12141c;--muted:#5f6675;--ok:#12a150;--bad:#e5484d;--font:'Google Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
