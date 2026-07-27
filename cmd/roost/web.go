@@ -127,7 +127,7 @@ func probeURL(client *http.Client, url string) reachResult {
 		}
 		return reachResult{code: "error", ok: false}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	ok := resp.StatusCode != http.StatusBadGateway &&
 		resp.StatusCode != http.StatusServiceUnavailable &&
 		resp.StatusCode != http.StatusGatewayTimeout
