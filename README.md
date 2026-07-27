@@ -382,11 +382,21 @@ it does:
 - **Health & incidents** — real HTTP **reachability chips** (`live · 200` vs a
   `502` that a green "container up" would hide), a red **active-incident banner**,
   and a dedicated **Incidents page** (sidebar → Monitoring → Incidents) with the
-  full open/resolved history, durations, and a **Clear resolved** button. Optional
-  **email alerts** (SMTP; the password comes from `$ROOST_SMTP_PASSWORD`, never
-  config); the sidebar keeps a **Test alert** button. Click any app for a **detail
-  drawer** — image, restarts, env **key names**, that app's own **incident
-  history**, and a recent-log tail.
+  full open/resolved history, durations, a **Clear resolved** button, and
+  **share** buttons (copy / X / LinkedIn / Facebook) that post a one-line status
+  summary. A background monitor re-checks every app on a configurable interval
+  (**default 2 min**) and opens an incident — with details — even with no browser
+  open. Optional **email alerts** (SMTP; the password comes from
+  `$ROOST_SMTP_PASSWORD`, never config); the sidebar keeps a **Test alert**
+  button. Click any app for a **detail drawer** — image, restarts, env **key
+  names**, that app's own **incident history**, and a recent-log tail. The public
+  **`/status` page** shows open incidents with detail and auto-refreshes every 2 min.
+- **Settings** (sidebar → Manage → Settings, saved to `~/.roost/panel.json`) —
+  set the **email recipients / SMTP host / template** (`{app} {status} {detail}
+  {url} {time}` placeholders; password stays in `$ROOST_SMTP_PASSWORD`), the
+  **default view & theme**, a **mask mode** that hides IP / SSH / host / tunnel
+  ids on the private cards (screen-share safe), the **incident check interval**,
+  and **tech-stack label overrides** (`rails=Ruby on Rails`).
 - **Comfort** — a **Material Design 3** interface (tonal surfaces, ripples,
   elevated cards) in light / **dark**; search, **filter chips** with a friendly
   empty state, **list / grid** views, a **⌘K command palette**, and fully

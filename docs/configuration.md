@@ -45,11 +45,27 @@ apps: [...]                # see below
   (image, restarts, env keys, recent logs), an activity timeline, and a ⌘K
   command palette. It auto-refreshes every 5s.
   - **Public status page** — the panel also serves a controls-free, secret-free
-    board at **`/status`** (app name + operational/degraded/down + uptime),
-    safe to share. Because it lives on the same host, it sits behind Access by
-    default; to make it truly public, add a **Cloudflare Access bypass policy**
-    for the `/status` path (Zero Trust → Access → your app → add a policy with
-    action *Bypass* scoped to that path). Everything else stays gated.
+    board at **`/status`** (app name + operational/degraded/down + uptime + open
+    incident detail), safe to share. It **auto-refreshes every 2 min** so a fresh
+    outage surfaces on its own. Because it lives on the same host, it sits behind
+    Access by default; to make it truly public, add a **Cloudflare Access bypass
+    policy** for the `/status` path (Zero Trust → Access → your app → add a policy
+    with action *Bypass* scoped to that path). Everything else stays gated.
+  - **Settings page** — sidebar → Manage → **Settings**, persisted to
+    **`~/.roost/panel.json`** (0600). From here you set the incident-email
+    recipients / SMTP host / **subject+body templates** (placeholders `{app}`
+    `{status}` `{detail}` `{url}` `{time}` — the **password is never stored**,
+    only `$ROOST_SMTP_PASSWORD`), the **default view** (list/grid) and **theme**
+    (light/dark/system), a **mask mode** that hides IP / SSH / host / tunnel ids
+    on the private cards (safe screen-sharing), the **incident check interval**
+    (minutes; the background monitor re-reads it live, default **2 min**), and
+    **tech-stack label overrides** (one `key=Label` per line, e.g.
+    `rails=Ruby on Rails`). Saving rebuilds email delivery in place — no restart.
+    `config.yml`'s `notify:` block still works as a fallback when the settings
+    page hasn't set an SMTP host.
+  - **Share status** — the Incidents page has copy / X / LinkedIn / Facebook
+    buttons that post a one-line summary of the current status plus the `/status`
+    link.
 - **`remote:`** — run the whole stack on a **remote Docker host** (a cheap VPS)
   instead of this machine, driven by this same config. Accepts any Docker
   endpoint: `ssh://user@host`, `tcp://host:2375`, or `unix://…`. roost still
