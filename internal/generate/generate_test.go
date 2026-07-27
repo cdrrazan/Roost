@@ -529,7 +529,7 @@ func TestRenderPostgresInit(t *testing.T) {
 }
 
 func TestDBPasswordDeterministicAndDistinct(t *testing.T) {
-	if dbPassword("crm") != dbPassword("crm") {
+	if first, again := dbPassword("crm"), dbPassword("crm"); first != again {
 		t.Error("dbPassword must be stable for the same app across regenerations")
 	}
 	if dbPassword("crm") == dbPassword("shop") {
