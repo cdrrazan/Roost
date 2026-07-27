@@ -2,5 +2,10 @@
 /dist/
 *.test
 
+# Editor / tooling local state — never belongs in the repo.
+.claude/
+.ruby-lsp/
+.playwright-mcp/
+
 # Fleet Pro — COMMERCIAL, delivered separately (private repo / Gumroad). Never in this public repo.
 fleet-pro/
