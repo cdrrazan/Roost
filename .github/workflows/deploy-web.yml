@@ -23,13 +23,13 @@ name: 🚀 Deploy — Web Control Panel
 # Trigger it by hand anytime from the Actions tab (workflow_dispatch).
 
 on:
+  # Every merge to main deploys. No paths filter on purpose: the binary
+  # embeds internal/generate/templates/*.tmpl (and other embed assets), so a
+  # non-.go change can still change what ships — a paths filter would skip
+  # those and leave a stale binary on the box. A rebuild is cheap and the
+  # concurrency group below serializes runs, so redeploying is always safe.
   push:
     branches: [main]
-    paths:
-      - "**.go"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 
 permissions:
