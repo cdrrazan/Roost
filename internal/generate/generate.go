@@ -106,7 +106,7 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			BuildEnv:       r.BuildEnv,
 			Memory:         firstNonEmpty(r.Memory, cfg.Defaults.Memory, "512m"),
 			Profile:        firstNonEmpty(r.Profile, cfg.Defaults.Profile),
-			StaticBuild:    strings.Contains(d.Signal, "vite"),
+			StaticBuild:    strings.Contains(d.Signal, "vite") || strings.Contains(d.Signal, "astro"),
 			Redis:          d.Redis,
 			Worker:         r.Worker,
 			Category:       r.Category,
@@ -472,8 +472,8 @@ func RenderDockerfile(app App) ([]byte, error) {
 		name = "ruby.Dockerfile.tmpl"
 	case "next", "node":
 		name = "node.Dockerfile.tmpl"
-	case "django":
-		name = "django.Dockerfile.tmpl"
+	case "django", "flask":
+		name = "python.Dockerfile.tmpl"
 	case "static":
 		name = "static.Dockerfile.tmpl"
 	default:

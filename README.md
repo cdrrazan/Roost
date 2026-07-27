@@ -212,9 +212,12 @@ flowchart TD
     S -->|"Gemfile + config/application.rb"| R["rails · :3000"]
     S -->|"Gemfile + config.ru + sinatra"| SI["sinatra · :4567"]
     S -->|"package.json · next"| N["next · :3000"]
+    S -->|"package.json · @sveltejs/kit"| SK["node · :3000 (node build)"]
+    S -->|"package.json · astro"| AS["static · :80 (built)"]
     S -->|"package.json · vite"| V["static · :80 (built)"]
     S -->|"package.json · express"| NO["node · :3000"]
     S -->|"manage.py + requirements"| D["django · :8000"]
+    S -->|"requirements/pyproject · Flask"| FL["flask · :8000"]
     S -->|"index.html, no manifest"| ST["static · :80"]
     S -->|"nothing recognized"| E["❌ error: set framework:"]
 ```
@@ -224,9 +227,12 @@ flowchart TD
 | `Gemfile` + `config/application.rb` | rails | 3000 | puma, bound to `0.0.0.0` |
 | `Gemfile` + `config.ru` + sinatra | sinatra | 4567 | rackup |
 | `package.json` with `next` | next | 3000 | `npm run start` |
+| `package.json` with `@sveltejs/kit` | node | 3000 | `node build` (adapter-node) |
+| `package.json` with `astro` | static | 80 | built, served by Caddy |
 | `package.json` with `vite` | static | 80 | built, served by Caddy |
 | `package.json` with `express` | node | 3000 | `npm run start` |
 | `manage.py` + requirements/pyproject | django | 8000 | gunicorn |
+| requirements/pyproject with `Flask` | flask | 8000 | `gunicorn … app:app` |
 | `index.html`, no manifest | static | 80 | served by Caddy |
 
 Also inferred: **runtime version** (`.ruby-version`, `engines`, …), **database

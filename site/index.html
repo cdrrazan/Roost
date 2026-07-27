@@ -251,9 +251,12 @@
     <tr><td><code>Gemfile</code> + <code>config/application.rb</code></td><td>rails</td><td>3000</td><td>puma, bound to 0.0.0.0</td></tr>
     <tr><td><code>Gemfile</code> + <code>config.ru</code> + sinatra</td><td>sinatra</td><td>4567</td><td>rackup</td></tr>
     <tr><td><code>package.json</code> with <code>next</code></td><td>next</td><td>3000</td><td>npm run start</td></tr>
+    <tr><td><code>package.json</code> with <code>@sveltejs/kit</code></td><td>node</td><td>3000</td><td>node build (adapter-node)</td></tr>
+    <tr><td><code>package.json</code> with <code>astro</code></td><td>static</td><td>80</td><td>built, served by Caddy</td></tr>
     <tr><td><code>package.json</code> with <code>vite</code></td><td>static</td><td>80</td><td>built, served by Caddy</td></tr>
     <tr><td><code>package.json</code> with <code>express</code></td><td>node</td><td>3000</td><td>npm run start</td></tr>
     <tr><td><code>manage.py</code> + requirements/pyproject</td><td>django</td><td>8000</td><td>gunicorn</td></tr>
+    <tr><td>requirements/pyproject with <code>Flask</code></td><td>flask</td><td>8000</td><td>gunicorn … app:app</td></tr>
     <tr><td><code>index.html</code>, no manifest</td><td>static</td><td>80</td><td>served by Caddy</td></tr>
   </table>
   </div>

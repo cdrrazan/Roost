@@ -16,7 +16,9 @@ import (
 
 // Detection is the result of inspecting one app directory.
 type Detection struct {
-	// Framework is one of: rails, sinatra, next, node, django, static.
+	// Framework is one of: rails, sinatra, next, node, django, flask,
+	// static. (Astro resolves to static, SvelteKit to node — the build tool
+	// is detected but the runtime category is what roost builds against.)
 	Framework string
 	// Signal is the human-readable rule that triggered the detection,
 	// e.g. "Gemfile + config/application.rb".
@@ -72,6 +74,8 @@ func Defaults(framework string) (Detection, bool) {
 		return Detection{Framework: "node", Port: 3000, StartCommand: "npm run start"}, true
 	case "django":
 		return Detection{Framework: "django", Port: 8000, StartCommand: "gunicorn -b 0.0.0.0:8000"}, true
+	case "flask":
+		return Detection{Framework: "flask", Port: 8000, StartCommand: "gunicorn -b 0.0.0.0:8000 app:app"}, true
 	case "static":
 		return Detection{Framework: "static", Port: 80}, true
 	default:
@@ -145,6 +149,30 @@ func Detect(dir string) (Detection, error) {
 			RuntimeVersion: nodeVersion(read, pkg),
 		}, nil
 
+	case pkg.hasDep("@sveltejs/kit"):
+		// SvelteKit self-hosts via adapter-node: `npm run build` emits a
+		// server in build/ that `node build` runs. Reuses the node image.
+		return Detection{
+			Framework:      "node",
+			Signal:         "package.json with @sveltejs/kit dependency",
+			Port:           3000,
+			StartCommand:   "node build",
+			Database:       detectDatabase(dir, read),
+			RuntimeVersion: nodeVersion(read, pkg),
+		}, nil
+
+	case pkg.hasDep("astro"):
+		// Astro's default build is a static site in dist/ — served by Caddy
+		// like Vite. (SSR Astro would need a node server; set framework:
+		// node explicitly for that.) Checked before vite: Astro pulls vite in.
+		return Detection{
+			Framework:      "static",
+			Signal:         "package.json with astro dependency",
+			Port:           80,
+			Database:       detectDatabase(dir, read),
+			RuntimeVersion: nodeVersion(read, pkg),
+		}, nil
+
 	case pkg.hasDep("vite"):
 		return Detection{
 			Framework:      "static",
@@ -174,6 +202,23 @@ func Detect(dir string) (Detection, error) {
 			Signal:       signal,
 			Port:         8000,
 			StartCommand: "gunicorn -b 0.0.0.0:8000",
+			Database:     detectDatabase(dir, read),
+			Redis:        detectRedis(read),
+		}, nil
+
+	case (has("requirements.txt") || has("pyproject.toml")) && mentionsFlask(read):
+		// Flask (no manage.py, so it falls through the Django rule above).
+		// Served by gunicorn against the conventional app:app callable; apps
+		// with a different entrypoint override it with command:.
+		signal := "requirements.txt with Flask"
+		if !has("requirements.txt") {
+			signal = "pyproject.toml with Flask"
+		}
+		return Detection{
+			Framework:    "flask",
+			Signal:       signal,
+			Port:         8000,
+			StartCommand: "gunicorn -b 0.0.0.0:8000 app:app",
 			Database:     detectDatabase(dir, read),
 			Redis:        detectRedis(read),
 		}, nil
@@ -216,6 +261,17 @@ func detectDatabase(dir string, read func(string) string) string {
 		}
 	}
 	return ""
+}
+
+// mentionsFlask reports whether a Python dependency manifest names Flask.
+func mentionsFlask(read func(string) string) bool {
+	for _, f := range []string{"requirements.txt", "pyproject.toml"} {
+		c := read(f)
+		if strings.Contains(c, "Flask") || strings.Contains(c, "flask") {
+			return true
+		}
+	}
+	return false
 }
 
 // detectRedis reports whether an app needs a Redis broker, from a
