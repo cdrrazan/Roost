@@ -226,19 +226,24 @@ func newStatusCmd(flags *rootFlags) *cobra.Command {
 	}
 }
 
-// newLogsCmd streams one app's container logs, optionally following.
+// newLogsCmd streams container logs, optionally following. With an app it
+// tails that one; with no app it multiplexes every app's logs.
 func newLogsCmd(flags *rootFlags) *cobra.Command {
 	var follow bool
 	cmd := &cobra.Command{
-		Use:   "logs <app>",
-		Short: "Show an app's container logs",
-		Args:  cobra.ExactArgs(1),
+		Use:   "logs [app]",
+		Short: "Show container logs (all apps if none named)",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, err := newRunner()
 			if err != nil {
 				return err
 			}
-			return r.Logs(args[0], follow)
+			app := ""
+			if len(args) == 1 {
+				app = args[0]
+			}
+			return r.Logs(app, follow)
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow log output")

@@ -258,12 +258,17 @@ func (r *Runner) Restart(app string) error {
 }
 
 // Logs streams an app's logs to the terminal.
+// Logs streams container logs. A non-empty app tails just that service;
+// an empty app omits the service argument so compose multiplexes every
+// service's logs — `roost logs` with no app = all apps.
 func (r *Runner) Logs(app string, follow bool) error {
 	args := []string{"logs"}
 	if follow {
 		args = append(args, "--follow")
 	}
-	args = append(args, app)
+	if app != "" {
+		args = append(args, app)
+	}
 	return r.Shell.Stream("docker", r.compose(args...)...)
 }
 

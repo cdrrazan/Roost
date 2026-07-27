@@ -17,7 +17,7 @@ project serving side projects.
       records recorded in `state.json`.
 - [ ] Framework detection: Laravel, Flask, Astro, SvelteKit.
 - [x] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
-- [ ] `roost logs` multiplexing (`roost logs` with no app = all apps).
+- [x] `roost logs` multiplexing (`roost logs` with no app = all apps).
 
 ## v2 — considered, not committed
 

@@ -315,6 +315,25 @@ func TestLogs(t *testing.T) {
 	}
 }
 
+func TestLogsAllApps(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Logs("", false); err != nil {
+		t.Fatal(err)
+	}
+	last := fake.Calls[len(fake.Calls)-1].Args
+	// No app given: `docker compose logs` with no service arg tails every
+	// service. The command must end at "logs" and never pass an empty arg.
+	if last[len(last)-1] != "logs" {
+		t.Errorf("all-apps logs should end at \"logs\" with no service arg, got: %v", last)
+	}
+	for _, a := range last {
+		if a == "" {
+			t.Errorf("empty service arg leaked into logs call: %v", last)
+		}
+	}
+}
+
 func TestStatus(t *testing.T) {
 	fake := &shell.Fake{
 		RunFunc: func(name string, args ...string) (shell.Result, error) {
