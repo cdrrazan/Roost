@@ -85,8 +85,41 @@ func TestEnableLinux(t *testing.T) {
 	}
 }
 
+func TestEnableWindows(t *testing.T) {
+	m, fake := newManager(t, "windows")
+	path, notes, err := m.Enable()
+	if err != nil {
+		t.Fatalf("Enable: %v", err)
+	}
+	if !strings.Contains(path, "roost") {
+		t.Errorf("path = %q, want the task name", path)
+	}
+	calls := allCalls(fake)
+	for _, want := range []string{"schtasks", "/Create", "ONLOGON", "/usr/local/bin/roost up"} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("Enable should register the logon task (%q):\n%s", want, calls)
+		}
+	}
+	if len(notes) == 0 {
+		t.Error("Windows enable should explain the task it created")
+	}
+}
+
+func TestDisableWindows(t *testing.T) {
+	m, fake := newManager(t, "windows")
+	if _, _, err := m.Enable(); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Disable(); err != nil {
+		t.Fatalf("Disable: %v", err)
+	}
+	if !strings.Contains(allCalls(fake), "/Delete") {
+		t.Errorf("Disable should delete the scheduled task:\n%s", allCalls(fake))
+	}
+}
+
 func TestEnableUnsupportedPlatform(t *testing.T) {
-	m, _ := newManager(t, "windows")
+	m, _ := newManager(t, "freebsd")
 	path, notes, err := m.Enable()
 	if err != nil {
 		t.Fatalf("Enable on unsupported platform should not fail: %v", err)

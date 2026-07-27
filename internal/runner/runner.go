@@ -181,6 +181,14 @@ func (r *Runner) Prepare(apps []generate.App, profiles []string, shouldSeed func
 	return nil
 }
 
+// ReloadProxy reloads Caddy against the generated Caddyfile, surfacing any
+// error. It's the exported path used by `roost share` after writing a
+// temporary route; internal callers use reloadProxy (best-effort).
+func (r *Runner) ReloadProxy() error {
+	_, err := r.run(r.compose("exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile")...)
+	return err
+}
+
 // reloadProxy reloads Caddy so it rebuilds its reverse-proxy connection
 // pools. Apps may have been recreated with new container IPs, and Caddy —
 // started earlier as infra — can otherwise hold stale upstream keep-alives to
@@ -258,13 +266,90 @@ func (r *Runner) Restart(app string) error {
 }
 
 // Logs streams an app's logs to the terminal.
+// Logs streams container logs. A non-empty app tails just that service;
+// an empty app omits the service argument so compose multiplexes every
+// service's logs — `roost logs` with no app = all apps.
 func (r *Runner) Logs(app string, follow bool) error {
 	args := []string{"logs"}
 	if follow {
 		args = append(args, "--follow")
 	}
-	args = append(args, app)
+	if app != "" {
+		args = append(args, app)
+	}
 	return r.Shell.Stream("docker", r.compose(args...)...)
+}
+
+// TunnelHealth is an advisory classification of the cloudflared connector.
+type TunnelHealth string
+
+const (
+	TunnelConnected    TunnelHealth = "connected"
+	TunnelReconnecting TunnelHealth = "reconnecting"
+	TunnelDown         TunnelHealth = "down"
+	TunnelUnknown      TunnelHealth = "unknown"
+)
+
+// TunnelStatus classifies the cloudflared connector so `roost status` can
+// tell "the edge is reconnecting after a wake (~5-10s, apps may 502 briefly)"
+// apart from "an app is actually down". It is advisory: the only in-band
+// signal is cloudflared's own log tail — the container stays "running" while
+// it retries — so the result is heuristic, not authoritative.
+func (r *Runner) TunnelStatus() TunnelHealth {
+	psOut, err := r.run(r.compose("ps", "--format", "json", "cloudflared")...)
+	if err != nil {
+		return TunnelUnknown
+	}
+	running := false
+	for _, line := range strings.Split(psOut.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var p psLine
+		if json.Unmarshal([]byte(line), &p) == nil && p.State == "running" {
+			running = true
+		}
+	}
+	if !running {
+		return TunnelDown
+	}
+	logs, err := r.LogTail("cloudflared", 50)
+	if err != nil {
+		return TunnelUnknown
+	}
+	return classifyTunnelLog(logs)
+}
+
+// classifyTunnelLog reads cloudflared's recent log tail and reports whether
+// its last connection event was a (re)connect or a loss. The marker strings
+// are cloudflared's own; matching is deliberately conservative — only a
+// clear loss occurring after the last connect reads as reconnecting,
+// otherwise a connector with any connect marker reads as connected.
+func classifyTunnelLog(logs string) TunnelHealth {
+	connect := []string{"Registered tunnel connection", "Connection registered", "registered connIndex"}
+	lost := []string{"Unregistered tunnel connection", "Lost connection with the edge", "Retrying connection", "Serve tunnel error", "Connection terminated"}
+	lastConnect, lastLost := -1, -1
+	for i, line := range strings.Split(logs, "\n") {
+		for _, m := range connect {
+			if strings.Contains(line, m) {
+				lastConnect = i
+			}
+		}
+		for _, m := range lost {
+			if strings.Contains(line, m) {
+				lastLost = i
+			}
+		}
+	}
+	switch {
+	case lastConnect == -1 && lastLost == -1:
+		return TunnelUnknown
+	case lastLost > lastConnect:
+		return TunnelReconnecting
+	default:
+		return TunnelConnected
+	}
 }
 
 // LogTail captures the last n lines of an app's logs (for the panel drawer).

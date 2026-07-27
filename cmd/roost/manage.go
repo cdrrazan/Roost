@@ -85,7 +85,7 @@ func newLifecycleManager() (*lifecycle.Manager, error) {
 func newEnableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable",
-		Short: "Run roost up at login (launchd on macOS, systemd --user on Linux)",
+		Short: "Run roost up at login (launchd on macOS, systemd --user on Linux, Task Scheduler on Windows)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			m, err := newLifecycleManager()

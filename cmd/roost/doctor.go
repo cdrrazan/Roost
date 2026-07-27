@@ -18,13 +18,30 @@ import (
 // hard failure would break `roost up`. Each failure prints a specific
 // remedy — never a stack trace.
 func newDoctorCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var fix bool
+	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Preflight checks: every failure comes with a specific remedy",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			findings := runDoctor(flags, shell.Exec{})
 			cmd.Print(doctor.Summary(findings))
+
+			if fix {
+				results := doctor.ApplyFixes(findings, fixClient())
+				if len(results) == 0 {
+					cmd.Println("nothing to fix automatically")
+					return nil
+				}
+				cmd.Println("applying fixes:")
+				cmd.Print(doctor.Summary(results))
+				cmd.Println("re-run `roost doctor` to confirm")
+				if doctor.HasFailures(results) {
+					return fmt.Errorf("some fixes failed")
+				}
+				return nil
+			}
+
 			if doctor.HasFailures(findings) {
 				return fmt.Errorf("doctor found problems that will break roost up")
 			}
@@ -32,6 +49,26 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&fix, "fix", false, "apply the safe automatic remediations (proxy/create DNS, chmod credentials)")
+	return cmd
+}
+
+// fixClient builds a Cloudflare client for --fix, or nil when no usable
+// token is available — the credentials chmod fix still applies without one.
+func fixClient() *tunnel.Client {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	token, err := tunnel.LoadToken(home)
+	if err != nil {
+		return nil
+	}
+	client := tunnel.NewClient(token)
+	if base := os.Getenv("ROOST_CF_API_BASE"); base != "" {
+		client.BaseURL = base
+	}
+	return client
 }
 
 // runDoctor executes every check it has the prerequisites for,
@@ -87,6 +124,7 @@ func runDoctor(flags *rootFlags, sh shell.Runner) []doctor.Finding {
 	if err != nil {
 		return findings
 	}
+	add(doctor.CheckCredentials(home))
 	token, err := tunnel.LoadToken(home)
 	if err != nil {
 		add(doctor.Finding{Check: "cloudflare", Level: doctor.Warn,

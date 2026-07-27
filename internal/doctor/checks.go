@@ -3,6 +3,7 @@ package doctor
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -121,6 +122,26 @@ func readTotalRAM() (uint64, error) {
 // CheckCloudflare runs the API-backed checks: token validity, zone
 // resolution per hostname (four distinct outcomes), tunnel name vs
 // state, DNS record presence, wildcard shadowing, and SSL depth.
+// CheckCredentials verifies the API token file isn't group/world readable.
+// A wrong-perms file blocks LoadToken entirely, so this runs before the
+// Cloudflare checks and carries a chmod fix for --fix. Absent file is fine —
+// the token may come from $CLOUDFLARE_API_TOKEN.
+func CheckCredentials(home string) Finding {
+	path := filepath.Join(home, ".roost", "credentials")
+	info, err := os.Stat(path)
+	if err != nil {
+		return ok("credentials", "no credentials file (token may come from $CLOUDFLARE_API_TOKEN)")
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		f := fail("credentials",
+			fmt.Sprintf("%s is mode %04o; it holds an API token and must be 0600", path, perm),
+			"chmod 600 "+path+" (or `roost doctor --fix`)")
+		f.Fix = &Fix{Kind: FixCredPerms, Path: path}
+		return f
+	}
+	return ok("credentials", path+" is 0600")
+}
+
 func CheckCloudflare(client *tunnel.Client, st *state.State, tunnelName string, hostnames []string) []Finding {
 	var findings []Finding
 	add := func(f Finding) { findings = append(findings, f) }
@@ -211,18 +232,32 @@ func CheckCloudflare(client *tunnel.Client, st *state.State, tunnelName string, 
 			add(warn("dns:"+rec.Name, err.Error(), "the token needs Zone:DNS:Edit"))
 			continue
 		}
-		found := false
-		for _, e := range existing {
-			if e.Name == rec.Name && e.Content == content {
-				found = true
+		var match *tunnel.DNSRecord
+		for i := range existing {
+			if existing[i].Name == rec.Name {
+				match = &existing[i]
 				break
 			}
 		}
-		if found {
+		switch {
+		case match == nil:
+			f := fail("dns:"+rec.Name, "record missing or not pointing at the tunnel",
+				"run `roost tunnel setup` (or `roost doctor --fix`)")
+			f.Fix = &Fix{Kind: FixCreateDNS, ZoneID: rec.Zone.ID, Name: rec.Name, Content: content}
+			add(f)
+		case match.Content != content:
+			// Points somewhere roost didn't set — never auto-repointed.
+			add(fail("dns:"+rec.Name,
+				fmt.Sprintf("points at %s, not the tunnel", match.Content),
+				"run `roost tunnel setup`, or delete/repoint the record"))
+		case !match.Proxied:
+			f := warn("dns:"+rec.Name,
+				"points at the tunnel but is not proxied (grey-cloud) — the tunnel only serves proxied records",
+				"run `roost doctor --fix` to flip it to proxied")
+			f.Fix = &Fix{Kind: FixProxyDNS, ZoneID: rec.Zone.ID, RecordID: match.ID, Name: rec.Name}
+			add(f)
+		default:
 			add(ok("dns:"+rec.Name, "points at the tunnel"))
-		} else {
-			add(fail("dns:"+rec.Name, "record missing or not pointing at the tunnel",
-				"run `roost tunnel setup`"))
 		}
 		if rec.Wildcard {
 			for _, shadow := range tunnel.FindShadowing(existing, rec.Name, rec.Covers, content) {

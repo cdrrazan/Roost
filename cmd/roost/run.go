@@ -11,6 +11,7 @@ import (
 	"github.com/cdrrazan/roost/internal/generate"
 	"github.com/cdrrazan/roost/internal/runner"
 	"github.com/cdrrazan/roost/internal/state"
+	"github.com/cdrrazan/roost/internal/tunnel"
 )
 
 // loadPlanned loads config, resolves hostnames, and plans generation,
@@ -175,10 +176,12 @@ func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, prof
 	return r.Prepare(apps, profiles, shouldSeed, onSeeded)
 }
 
-// newDownCmd stops and removes the whole stack (containers only; DNS
-// and the tunnel stay for the next up).
+// newDownCmd stops and removes the whole stack. By default DNS and the
+// tunnel stay for the next up; --remove-dns also deletes the DNS records
+// roost created (from state.json).
 func newDownCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var removeDNS bool
+	cmd := &cobra.Command{
 		Use:   "down",
 		Short: "Stop and remove the whole roost stack",
 		Args:  cobra.NoArgs,
@@ -187,9 +190,27 @@ func newDownCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return r.Down()
+			if err := r.Down(); err != nil {
+				return err
+			}
+			if !removeDNS {
+				return nil
+			}
+			client, st, statePath, err := loadRemoteState()
+			if err != nil {
+				return err
+			}
+			before := len(st.Records)
+			tErr := tunnel.Teardown(client, st, false)
+			if err := st.Save(statePath); err != nil {
+				return err
+			}
+			cmd.Printf("removed %d DNS record(s)\n", before-len(st.Records))
+			return tErr
 		},
 	}
+	cmd.Flags().BoolVar(&removeDNS, "remove-dns", false, "also delete the DNS records roost created (recorded in state.json)")
+	return cmd
 }
 
 // newStatusCmd reports per-app container state, health, memory used
@@ -221,24 +242,43 @@ func newStatusCmd(flags *rootFlags) *cobra.Command {
 			for _, s := range statuses {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", s.Name, s.State, s.Health, s.Memory, s.URL)
 			}
-			return w.Flush()
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			// Advisory edge line: separates "the tunnel is reconnecting after
+			// a wake" from "an app is down" so users don't chase a 502 that
+			// resolves itself in seconds.
+			switch r.TunnelStatus() {
+			case runner.TunnelReconnecting:
+				cmd.Println("\nedge: reconnecting — cloudflared is re-establishing after a wake; apps may 502 for ~5-10s (not an app fault)")
+			case runner.TunnelDown:
+				cmd.Println("\nedge: cloudflared is not running — run `roost up`")
+			case runner.TunnelConnected:
+				cmd.Println("\nedge: connected")
+			}
+			return nil
 		},
 	}
 }
 
-// newLogsCmd streams one app's container logs, optionally following.
+// newLogsCmd streams container logs, optionally following. With an app it
+// tails that one; with no app it multiplexes every app's logs.
 func newLogsCmd(flags *rootFlags) *cobra.Command {
 	var follow bool
 	cmd := &cobra.Command{
-		Use:   "logs <app>",
-		Short: "Show an app's container logs",
-		Args:  cobra.ExactArgs(1),
+		Use:   "logs [app]",
+		Short: "Show container logs (all apps if none named)",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r, err := newRunner()
 			if err != nil {
 				return err
 			}
-			return r.Logs(args[0], follow)
+			app := ""
+			if len(args) == 1 {
+				app = args[0]
+			}
+			return r.Logs(app, follow)
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "follow log output")

@@ -212,9 +212,13 @@ flowchart TD
     S -->|"Gemfile + config/application.rb"| R["rails · :3000"]
     S -->|"Gemfile + config.ru + sinatra"| SI["sinatra · :4567"]
     S -->|"package.json · next"| N["next · :3000"]
+    S -->|"package.json · @sveltejs/kit"| SK["node · :3000 (node build)"]
+    S -->|"package.json · astro"| AS["static · :80 (built)"]
     S -->|"package.json · vite"| V["static · :80 (built)"]
     S -->|"package.json · express"| NO["node · :3000"]
     S -->|"manage.py + requirements"| D["django · :8000"]
+    S -->|"requirements/pyproject · Flask"| FL["flask · :8000"]
+    S -->|"artisan + composer.json"| LV["laravel · :8000"]
     S -->|"index.html, no manifest"| ST["static · :80"]
     S -->|"nothing recognized"| E["❌ error: set framework:"]
 ```
@@ -224,9 +228,13 @@ flowchart TD
 | `Gemfile` + `config/application.rb` | rails | 3000 | puma, bound to `0.0.0.0` |
 | `Gemfile` + `config.ru` + sinatra | sinatra | 4567 | rackup |
 | `package.json` with `next` | next | 3000 | `npm run start` |
+| `package.json` with `@sveltejs/kit` | node | 3000 | `node build` (adapter-node) |
+| `package.json` with `astro` | static | 80 | built, served by Caddy |
 | `package.json` with `vite` | static | 80 | built, served by Caddy |
 | `package.json` with `express` | node | 3000 | `npm run start` |
 | `manage.py` + requirements/pyproject | django | 8000 | gunicorn |
+| requirements/pyproject with `Flask` | flask | 8000 | `gunicorn … app:app` |
+| `artisan` + `composer.json` | laravel | 8000 | `php artisan serve` |
 | `index.html`, no manifest | static | 80 | served by Caddy |
 
 Also inferred: **runtime version** (`.ruby-version`, `engines`, …), **database
@@ -246,10 +254,17 @@ set `framework:` yourself. Every inferred value is overridable per app.
   internal network only.
 - **`WEB_CONCURRENCY=1`** — single-user local Rails workloads don't need a worker
   pool.
+- **Per-app health checks** — every HTTP app gets a generated compose
+  `healthcheck` that TCP-probes its own port with a runtime binary the image
+  already has (no curl/wget assumption), so `roost status` shows real
+  `healthy`/`starting`/`unhealthy` instead of just "container up".
 - **Staggered starts** — six apps don't spike your CPU at once on first build.
 - **Multi-database Rails** — a per-app database user so apps that connect as their
   own username and use Solid Cache/Queue/Cable (sibling `<app>_*` databases) just
   work.
+- **Per-app Postgres credentials** — each Postgres app owns its database under its
+  own role (name-derived password), so one app's `DATABASE_URL` can't read
+  another's data; `CREATEDB` still lets Rails multi-db make its sibling databases.
 - **Compiled vs interpreted** — Rails/Django/Sinatra source is bind-mounted so a
   `restart` picks up edits; next/node/static build into the image (mounting the
   host source would shadow the build).
@@ -361,6 +376,8 @@ it does:
 - **At a glance** — donut gauges for fleet + memory and a per-app memory bar
   chart up top; a right rail with an Overview, a **Server** card (disk, host, OS,
   CPU/RAM, uptime, and the IP + a copyable SSH login from the `server:` block),
+  an **Edge** card with a live connection chip (**connected** / **reconnecting**
+  after a wake / **down**, so a brief 502 reads as the tunnel, not your apps),
   recent activity, and the removed-apps list.
 - **Health & incidents** — real HTTP **reachability chips** (`live · 200` vs a
   `502` that a green "container up" would hide), an **incident** banner + timeline
@@ -397,22 +414,24 @@ mechanism as `roost enable`), and front it with Access. See the
 |---|---|
 | `roost init` | interactive setup; writes `~/.roost/config.yml` with explicit hostnames |
 | `roost auth login` | store the API token (`~/.roost/credentials`, `0600`) |
-| `roost doctor` | preflight: every failure comes with a specific fix |
+| `roost doctor [--fix]` | preflight: every failure comes with a specific fix. `--fix` applies the safe subset — chmod the credentials file, create a missing tunnel DNS record, flip a grey-cloud record to proxied |
 | `roost tunnel setup [--adopt] [--force]` | tunnel + all DNS records via API |
 | `roost tunnel access` | Cloudflare Access policy across every suffix |
 
 **Everyday**
 | Command | What it does |
 |---|---|
-| `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
+| `roost up [--profile p] [--reseed] [--no-seed]` / `down [--remove-dns]` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed`. `down --remove-dns` also deletes the DNS records roost created |
+| `roost uninstall` | stop the stack and delete the DNS records **and** the tunnel roost created (only what `state.json` records — never foreign records or tunnels). Config and build artifacts stay |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
 | `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add/remove apps with a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
-| `roost status` / `logs <app> [-f]` | state, health, memory, URLs / container logs |
+| `roost share <app> [--as sub]` | expose one running app at a temporary hostname on your own domain until Ctrl-C — a nicer `cloudflared tunnel --url`. Adds a Caddy route only (the wildcard already covers DNS/ingress/SSL), so nothing is left at the edge if it's killed |
+| `roost status` / `logs [app] [-f]` | state, health, memory, URLs + an advisory **edge** line (tunnel connected / reconnecting-after-wake / down, so a brief 502 isn't mistaken for an app fault) / container logs (all apps if no app named) |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
 | `roost generate` | write `~/.roost/build/*` without starting anything |
-| `roost enable` / `disable` | boot-on-login via launchd / systemd `--user` |
+| `roost enable` / `disable` | boot-on-login via launchd (macOS) / systemd `--user` (Linux) / Task Scheduler (Windows) |
 
 ---
 
@@ -634,6 +653,16 @@ Cloudflare finds it by the tunnel token, not its IP. Run `cloudflared` from **on
 machine at a time** — two connectors sharing the same tunnel token split traffic
 between them.
 
+There's also a lighter option that **keeps roost on your laptop** and only runs
+the containers on the VPS: set `remote: ssh://user@vps` in `config.yml`. roost
+generates locally and points Docker at the remote daemon over SSH — no roost
+install on the box, just Docker. Because the VPS has no copy of your source,
+remote mode builds every app into its image instead of bind-mounting source (so
+a code change needs a rebuild, not just `restart`). An explicit `$DOCKER_HOST`
+overrides it; omit `remote:` and everything stays local. This must not
+compromise the local-first core — and it doesn't: local is the default, and
+`remote:` only changes *where containers run*.
+
 Moving to a *new* box is scripted: **[`scripts/roost-box-bootstrap.sh`](scripts/)**
 fetches and decrypts the latest backup, restores `~/.roost` + the systemd units,
 installs the binary, clones the app repos, then brings the stack up and restores
@@ -666,7 +695,8 @@ failed deploy rather than a silent bad merge.
 <summary><b>How do I keep it running after a reboot, with no one logged in?</b></summary>
 
 `roost enable` installs a boot unit — launchd on macOS, a systemd `--user` unit
-on Linux — that runs `roost up` at login. On a headless Linux box, also run
+on Linux, a Task Scheduler logon task on Windows — that runs `roost up` at
+login. On a headless Linux box, also run
 `loginctl enable-linger <user>` so the user's units start at boot without an
 interactive login. Docker itself must start on boot too (it does by default on a
 server install); roost has no daemon — Docker's `restart: unless-stopped` policy

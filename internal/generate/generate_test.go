@@ -60,6 +60,73 @@ func sampleApps() []App {
 	}
 }
 
+func TestPlanRemoteDisablesSourceMount(t *testing.T) {
+	fixtures, err := filepath.Abs(filepath.Join("..", "detect", "testdata"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Rails normally bind-mounts its source; remote mode must not.
+	resolved := []config.ResolvedApp{{
+		App: config.App{Path: filepath.Join(fixtures, "rails-app")}, Name: "blog", FQDN: "blog.example.com",
+	}}
+	apps, err := Plan(&config.Config{Remote: "ssh://ubuntu@box"}, resolved)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if !apps[0].NoSourceMount {
+		t.Error("remote mode should set NoSourceMount on a rails app")
+	}
+	out, err := RenderCompose("/build", apps, "")
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	if strings.Contains(string(out), ":/app:ro") {
+		t.Errorf("remote compose must not bind-mount source:\n%s", out)
+	}
+}
+
+func TestHealthCommand(t *testing.T) {
+	cases := []struct{ fw, want string }{
+		{"rails", "ruby -rsocket"}, {"sinatra", "ruby -rsocket"},
+		{"node", "require(\"net\")"}, {"next", "require(\"net\")"},
+		{"django", "socket"}, {"flask", "socket"},
+		{"laravel", "fsockopen"}, {"static", "wget"},
+	}
+	for _, c := range cases {
+		got := healthCommand(c.fw, 3000)
+		if got == "" || !strings.Contains(got, c.want) || !strings.Contains(got, "3000") {
+			t.Errorf("healthCommand(%q,3000) = %q, want it to contain %q and the port", c.fw, got, c.want)
+		}
+	}
+	if got := healthCommand("mystery", 3000); got != "" {
+		t.Errorf("unknown framework should have no healthcheck, got %q", got)
+	}
+}
+
+func TestRenderComposeHealthcheck(t *testing.T) {
+	apps := []App{
+		{Name: "web", FQDN: "web.example.com", Path: "/apps/web", Framework: "rails", Port: 3000, Memory: "512m", HealthCheck: `ruby -rsocket -e 'TCPSocket.new("127.0.0.1",3000).close'`},
+		{Name: "worker", Path: "/apps/web", Framework: "rails", Memory: "512m", Worker: true, Command: "bundle exec sidekiq"},
+	}
+	out, err := RenderCompose("/build", apps, "")
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("not valid YAML: %v\n%s", err, out)
+	}
+	services := doc["services"].(map[string]any)
+	web := services["web"].(map[string]any)
+	if _, ok := web["healthcheck"]; !ok {
+		t.Errorf("web service missing healthcheck:\n%s", out)
+	}
+	worker := services["worker"].(map[string]any)
+	if _, ok := worker["healthcheck"]; ok {
+		t.Errorf("worker must have no healthcheck (no HTTP port):\n%s", out)
+	}
+}
+
 func TestRenderCompose(t *testing.T) {
 	out, err := RenderCompose("/home/u/.roost/build", sampleApps(), "")
 	if err != nil {
@@ -447,11 +514,45 @@ func TestRenderPostgresInit(t *testing.T) {
 		t.Fatalf("RenderPostgresInit: %v", err)
 	}
 	s := string(out)
-	if !strings.Contains(s, `CREATE DATABASE "crm"`) {
-		t.Errorf("postgres-init.sql missing crm database:\n%s", s)
+	if !strings.Contains(s, `CREATE ROLE crm LOGIN CREATEDB PASSWORD '`) {
+		t.Errorf("postgres-init.sql missing per-app crm role:\n%s", s)
+	}
+	if !strings.Contains(s, `CREATE DATABASE "crm" OWNER crm`) {
+		t.Errorf("postgres-init.sql: crm database should be owned by the crm role:\n%s", s)
+	}
+	if strings.Contains(s, "OWNER roost") {
+		t.Errorf("postgres-init.sql must not fall back to the shared roost owner:\n%s", s)
 	}
 	if strings.Contains(s, "blog") {
 		t.Errorf("postgres-init.sql must not include the mysql app blog:\n%s", s)
+	}
+}
+
+func TestDBPasswordDeterministicAndDistinct(t *testing.T) {
+	if dbPassword("crm") != dbPassword("crm") {
+		t.Error("dbPassword must be stable for the same app across regenerations")
+	}
+	if dbPassword("crm") == dbPassword("shop") {
+		t.Error("dbPassword must differ per app")
+	}
+	if dbPassword("crm") == "roost" {
+		t.Error("dbPassword must not be the shared roost credential")
+	}
+}
+
+func TestAppEnvPostgresUsesPerAppCreds(t *testing.T) {
+	app := App{Name: "crm", Framework: "django", Port: 8000, Database: "postgres"}
+	env := map[string]string{}
+	for _, p := range appEnv(app, nil) {
+		env[p.Key] = p.Value
+	}
+	got := env["DATABASE_URL"]
+	want := "postgres://crm:" + dbPassword("crm") + "@postgres:5432/crm"
+	if got != want {
+		t.Errorf("DATABASE_URL = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "roost:roost") {
+		t.Errorf("DATABASE_URL still uses the shared roost credential: %q", got)
 	}
 }
 
@@ -499,6 +600,44 @@ func TestRenderDockerfile(t *testing.T) {
 		for _, want := range []string{"FROM node:", "USER", "npm run start"} {
 			if !strings.Contains(s, want) {
 				t.Errorf("node Dockerfile missing %q:\n%s", want, s)
+			}
+		}
+	})
+
+	t.Run("runtime tags default to the current matrix (ruby 3.4, node 24)", func(t *testing.T) {
+		ruby := apps["blog"]
+		ruby.RuntimeVersion = "" // no declared version -> fall back to the default
+		rout, err := RenderDockerfile(ruby)
+		if err != nil {
+			t.Fatalf("RenderDockerfile ruby: %v", err)
+		}
+		if !strings.Contains(string(rout), "ruby:3.4-slim") {
+			t.Errorf("default ruby tag: want ruby:3.4-slim in:\n%s", rout)
+		}
+
+		node := apps["api"]
+		node.RuntimeVersion = ""
+		nout, err := RenderDockerfile(node)
+		if err != nil {
+			t.Fatalf("RenderDockerfile node: %v", err)
+		}
+		if !strings.Contains(string(nout), "node:24-slim") {
+			t.Errorf("default node tag: want node:24-slim in:\n%s", nout)
+		}
+	})
+
+	t.Run("laravel builds via the php image with artisan serve", func(t *testing.T) {
+		out, err := RenderDockerfile(App{
+			Name: "shop", Framework: "laravel", Port: 8000,
+			StartCommand: "php artisan serve --host=0.0.0.0 --port=8000",
+		})
+		if err != nil {
+			t.Fatalf("RenderDockerfile: %v", err)
+		}
+		s := string(out)
+		for _, want := range []string{"FROM composer", "FROM php:8.3-cli", "docker-php-ext-install", "php artisan serve"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("laravel Dockerfile missing %q:\n%s", want, s)
 			}
 		}
 	})

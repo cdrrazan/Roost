@@ -210,6 +210,7 @@
   - <span class="str">~/code/shop</span>       <span class="cm"># → shop.rajan.dev</span></pre>
     <pre class="code"><span class="cm"># …or with every knob</span>
 <span class="key">control_host:</span> <span class="str">control.rajan.dev</span>  <span class="cm"># route this host to the web panel</span>
+<span class="key">remote:</span> <span class="str">ssh://ubuntu@vps</span>       <span class="cm"># run the stack on a VPS, same config</span>
 <span class="key">tunnel:</span>
   <span class="key">name:</span> <span class="str">roost</span>
   <span class="key">access:</span>
@@ -251,9 +252,13 @@
     <tr><td><code>Gemfile</code> + <code>config/application.rb</code></td><td>rails</td><td>3000</td><td>puma, bound to 0.0.0.0</td></tr>
     <tr><td><code>Gemfile</code> + <code>config.ru</code> + sinatra</td><td>sinatra</td><td>4567</td><td>rackup</td></tr>
     <tr><td><code>package.json</code> with <code>next</code></td><td>next</td><td>3000</td><td>npm run start</td></tr>
+    <tr><td><code>package.json</code> with <code>@sveltejs/kit</code></td><td>node</td><td>3000</td><td>node build (adapter-node)</td></tr>
+    <tr><td><code>package.json</code> with <code>astro</code></td><td>static</td><td>80</td><td>built, served by Caddy</td></tr>
     <tr><td><code>package.json</code> with <code>vite</code></td><td>static</td><td>80</td><td>built, served by Caddy</td></tr>
     <tr><td><code>package.json</code> with <code>express</code></td><td>node</td><td>3000</td><td>npm run start</td></tr>
     <tr><td><code>manage.py</code> + requirements/pyproject</td><td>django</td><td>8000</td><td>gunicorn</td></tr>
+    <tr><td>requirements/pyproject with <code>Flask</code></td><td>flask</td><td>8000</td><td>gunicorn … app:app</td></tr>
+    <tr><td><code>artisan</code> + <code>composer.json</code></td><td>laravel</td><td>8000</td><td>php artisan serve</td></tr>
     <tr><td><code>index.html</code>, no manifest</td><td>static</td><td>80</td><td>served by Caddy</td></tr>
   </table>
   </div>
@@ -377,14 +382,17 @@
     <tr><td><code>roost add</code> / <code>remove</code></td><td>edit the app list — your config comments are preserved</td></tr>
     <tr><td><code>roost list</code> / <code>detect</code></td><td>resolved apps and URLs; detection with the signal that triggered it</td></tr>
     <tr><td><code>roost generate</code></td><td>write <code>~/.roost/build/*</code> without starting anything</td></tr>
-    <tr><td><code>roost up [--profile] [--reseed] [--no-seed]</code> / <code>down</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps (<code>--no-seed</code> skips seeding for a clean start) / stop it</td></tr>
+    <tr><td><code>roost up [--profile] [--reseed] [--no-seed]</code> / <code>down [--remove-dns]</code></td><td>start the whole stack (staggered, memory-capped), migrate + seed DB apps (<code>--no-seed</code> skips seeding for a clean start) / stop it (<code>--remove-dns</code> also deletes the DNS records roost created)</td></tr>
+    <tr><td><code>roost uninstall</code></td><td>stop the stack and delete the DNS records <b>and</b> tunnel roost created — only what <code>state.json</code> records, never foreign ones</td></tr>
     <tr><td><code>roost start</code> / <code>stop</code> / <code>restart</code></td><td>bring one app up, take it down, or bounce it — without touching the rest of the stack</td></tr>
-    <tr><td><code>roost status</code> / <code>logs</code></td><td>state, health, memory vs cap, public URL; tail one app's logs</td></tr>
-    <tr><td><code>roost doctor</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth — with a fix per failure</td></tr>
+    <tr><td><code>roost share &lt;app&gt;</code></td><td>expose one running app at a temporary hostname on your own domain until Ctrl-C — a nicer <code>cloudflared tunnel --url</code></td></tr>
+    <tr><td><code>roost status</code> / <code>logs [app]</code></td><td>state, health, memory vs cap, public URL + an advisory edge line (tunnel reconnecting vs app down); tail one app's logs, or all apps when none named</td></tr>
+    <tr><td><code>roost web</code></td><td>serve the Material 3 browser control panel (host process outside the stack; front it with Cloudflare Access)</td></tr>
+    <tr><td><code>roost doctor [--fix]</code></td><td>preflight everything — Docker, token scopes, zones, DNS shadowing, SSL depth, credential perms — with a fix per failure; <code>--fix</code> applies the safe subset (chmod creds, create/proxy DNS)</td></tr>
     <tr><td><code>roost tunnel setup</code></td><td>create the tunnel + every DNS record via API; idempotent, refuses to clobber records it didn't create</td></tr>
     <tr><td><code>roost tunnel access</code></td><td>apply the Cloudflare Access policy across every suffix</td></tr>
     <tr><td><code>roost auth login</code></td><td>verify and store the API token (<code>~/.roost/credentials</code>, 0600)</td></tr>
-    <tr><td><code>roost enable</code> / <code>disable</code></td><td>run at login via launchd (macOS) / systemd --user (Linux); fully removable</td></tr>
+    <tr><td><code>roost enable</code> / <code>disable</code></td><td>run at login via launchd (macOS) / systemd --user (Linux) / Task Scheduler (Windows); fully removable</td></tr>
   </table>
   </div>
   <p class="sub" style="margin-top:14px">Full schema and hostname rules:
@@ -401,9 +409,10 @@
     <div class="card"><h3>No Rails redirect loops</h3><p>Cloudflare terminates TLS and forwards plain HTTP; roost sets <span class="k">RAILS_ASSUME_SSL</span> so <span class="k">force_ssl</span> apps don't redirect forever.</p></div>
     <div class="card"><h3>The SSL depth trap</h3><p>Free Universal SSL covers <b>one</b> subdomain level. Doctor flags hostnames nested deeper — before you hit an unexplainable browser TLS error.</p></div>
     <div class="card"><h3>No shadowed wildcards</h3><p>An exact DNS record silently beats a wildcard. roost pre-flights every record and names the collision and both ways out.</p></div>
-    <div class="card"><h3>No leaked databases</h3><p>Databases and apps never publish host ports; everything rides the internal network. One shared MySQL/Postgres, one database per app.</p></div>
+    <div class="card"><h3>No leaked databases</h3><p>Databases and apps never publish host ports; everything rides the internal network. One shared MySQL/Postgres, one database per app — and Postgres apps each own their database under their own role, so one app's credentials can't read another's.</p></div>
     <div class="card"><h3>Access before exposure</h3><p>Hostnames leak via Certificate Transparency within hours. Set <span class="k">access.emails</span> and every suffix gets an auth wall before first <span class="k">up</span>.</p></div>
     <div class="card"><h3>Laptop-friendly</h3><p>Memory caps per app, single-worker Rails defaults, staggered starts so six apps don't spike your CPU at once.</p></div>
+    <div class="card"><h3>Real health checks</h3><p>Every HTTP app gets a generated compose <span class="k">healthcheck</span> that TCP-probes its own port with a runtime binary the image already has — so <span class="k">status</span> shows <span class="k">healthy</span>, not just "up".</p></div>
     <div class="card"><h3>Multi-database Rails</h3><p>A per-app database user so apps that connect as their own username and use Solid Cache/Queue/Cable (sibling <span class="k">&lt;app&gt;_*</span> databases) just work.</p></div>
     <div class="card"><h3>Never a stale route</h3><p>After (re)starting containers Caddy is reloaded and cloudflared refreshed on new routes — no empty responses from a dead upstream, no 404 on a just-added zone.</p></div>
     <div class="card"><h3>DB ready on <span class="k">up</span></h3><p>Database apps are migrated every <span class="k">up</span>; add <span class="k">seed: true</span> (or a command) and they seed once — tracked in <span class="k">state.json</span>, <span class="k">--reseed</span> to repeat, <span class="k">--no-seed</span> to skip for a clean start. No manual <span class="k">db:prepare</span> after a fresh start.</p></div>

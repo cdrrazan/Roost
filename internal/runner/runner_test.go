@@ -315,6 +315,81 @@ func TestLogs(t *testing.T) {
 	}
 }
 
+func TestLogsAllApps(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	if err := r.Logs("", false); err != nil {
+		t.Fatal(err)
+	}
+	last := fake.Calls[len(fake.Calls)-1].Args
+	// No app given: `docker compose logs` with no service arg tails every
+	// service. The command must end at "logs" and never pass an empty arg.
+	if last[len(last)-1] != "logs" {
+		t.Errorf("all-apps logs should end at \"logs\" with no service arg, got: %v", last)
+	}
+	for _, a := range last {
+		if a == "" {
+			t.Errorf("empty service arg leaked into logs call: %v", last)
+		}
+	}
+}
+
+func TestClassifyTunnelLog(t *testing.T) {
+	cases := []struct {
+		name string
+		logs string
+		want TunnelHealth
+	}{
+		{"reconnecting: loss after connect",
+			"INF Registered tunnel connection connIndex=0\nWRN Lost connection with the edge\nINF Retrying connection to edge",
+			TunnelReconnecting},
+		{"connected: recovered after a loss",
+			"WRN Lost connection with the edge\nINF Retrying connection to edge\nINF Registered tunnel connection connIndex=0",
+			TunnelConnected},
+		{"connected: only connect markers",
+			"INF Registered tunnel connection connIndex=0\nINF Registered tunnel connection connIndex=1",
+			TunnelConnected},
+		{"unknown: no markers", "INF Starting tunnel\nINF Version 2024.1", TunnelUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyTunnelLog(tc.logs); got != tc.want {
+				t.Errorf("classifyTunnelLog = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestTunnelStatus(t *testing.T) {
+	t.Run("running + reconnecting logs", func(t *testing.T) {
+		fake := &shell.Fake{RunFunc: func(_ string, args ...string) (shell.Result, error) {
+			joined := strings.Join(args, " ")
+			if strings.Contains(joined, "ps") {
+				return shell.Result{Stdout: `{"Service":"cloudflared","State":"running","Status":"Up 1 min"}`}, nil
+			}
+			// logs tail
+			return shell.Result{Stdout: "INF Registered tunnel connection\nWRN Lost connection with the edge"}, nil
+		}}
+		r, _ := newTestRunner(fake)
+		if got := r.TunnelStatus(); got != TunnelReconnecting {
+			t.Errorf("TunnelStatus = %q, want reconnecting", got)
+		}
+	})
+
+	t.Run("not running is down", func(t *testing.T) {
+		fake := &shell.Fake{RunFunc: func(_ string, args ...string) (shell.Result, error) {
+			if strings.Contains(strings.Join(args, " "), "ps") {
+				return shell.Result{Stdout: `{"Service":"cloudflared","State":"exited","Status":"Exited (0)"}`}, nil
+			}
+			return shell.Result{}, nil
+		}}
+		r, _ := newTestRunner(fake)
+		if got := r.TunnelStatus(); got != TunnelDown {
+			t.Errorf("TunnelStatus = %q, want down", got)
+		}
+	})
+}
+
 func TestStatus(t *testing.T) {
 	fake := &shell.Fake{
 		RunFunc: func(name string, args ...string) (shell.Result, error) {

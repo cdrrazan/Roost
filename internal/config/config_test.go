@@ -132,6 +132,29 @@ apps:
 	}
 }
 
+func TestLoadRemote(t *testing.T) {
+	dir := t.TempDir()
+	mkApps(t, dir, "app1")
+	base := "domain: demo.example.com\napps:\n  - " + filepath.Join(dir, "app1") + "\n"
+
+	t.Run("valid ssh endpoint", func(t *testing.T) {
+		cfg, err := Load(writeConfig(t, t.TempDir(), "remote: ssh://ubuntu@1.2.3.4\n"+base))
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Remote != "ssh://ubuntu@1.2.3.4" {
+			t.Errorf("Remote = %q", cfg.Remote)
+		}
+	})
+
+	t.Run("bogus endpoint is rejected", func(t *testing.T) {
+		_, err := Load(writeConfig(t, t.TempDir(), "remote: 1.2.3.4\n"+base))
+		if err == nil || !strings.Contains(err.Error(), "Docker endpoint") {
+			t.Errorf("want an endpoint-scheme error, got %v", err)
+		}
+	})
+}
+
 func TestLoadNotifyBlock(t *testing.T) {
 	dir := t.TempDir()
 	mkApps(t, dir, "app1")

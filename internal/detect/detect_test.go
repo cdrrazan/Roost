@@ -79,6 +79,42 @@ func TestDetectFixtures(t *testing.T) {
 				Port:      80,
 			},
 		},
+		{
+			// Has vite too; the @sveltejs/kit rule must win over vite.
+			fixture: "sveltekit-app",
+			want: Detection{
+				Framework:    "node",
+				Signal:       "package.json with @sveltejs/kit dependency",
+				Port:         3000,
+				StartCommand: "node build",
+			},
+		},
+		{
+			fixture: "astro-app",
+			want: Detection{
+				Framework: "static",
+				Signal:    "package.json with astro dependency",
+				Port:      80,
+			},
+		},
+		{
+			fixture: "flask-app",
+			want: Detection{
+				Framework:    "flask",
+				Signal:       "requirements.txt with Flask",
+				Port:         8000,
+				StartCommand: "gunicorn -b 0.0.0.0:8000 app:app",
+			},
+		},
+		{
+			fixture: "laravel-app",
+			want: Detection{
+				Framework:    "laravel",
+				Signal:       "artisan + composer.json",
+				Port:         8000,
+				StartCommand: "php artisan serve --host=0.0.0.0 --port=8000",
+			},
+		},
 	}
 
 	for _, tt := range tests {

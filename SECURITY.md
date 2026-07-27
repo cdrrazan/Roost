@@ -32,7 +32,9 @@ to make the sharp edges hard to cut yourself on:
   bind-mounted read-only.
 - **No destructive remote changes.** roost refuses to overwrite DNS records
   it did not create (requires `--force`) and refuses to adopt tunnels it did
-  not create (requires `--adopt`).
+  not create (requires `--adopt`). Teardown (`down --remove-dns`,
+  `uninstall`) deletes **only** the DNS records and tunnel recorded in
+  `state.json` — never a record or tunnel roost didn't make.
 - **The `roost web` control panel is loopback by default** (`127.0.0.1:4600`).
   It can start, stop, add, and remove apps, so it is only reachable remotely
   when you set `control_host:` to route it through the tunnel — and that route
@@ -43,9 +45,11 @@ to make the sharp edges hard to cut yourself on:
 
 ## Known trade-offs (not vulnerabilities)
 
-- Database credentials inside the Compose network are shared and simple
-  (`roost`/`roost`); the network is not reachable externally. Hardening is on
-  the [roadmap](ROADMAP.md).
+- Postgres apps each get their **own** login role (name-derived password)
+  that owns only its database, so one app's `DATABASE_URL` can't reach
+  another's data. MySQL apps still connect as `root` within the Compose
+  network; that network is never reachable externally, so the remaining
+  shared-credential surface is co-tenant isolation, not outside exposure.
 - roost shells out to `docker` and `cloudflared`; it trusts the binaries on
   your PATH.
 - Apps you expose are your own code — roost cannot make an insecure app safe.

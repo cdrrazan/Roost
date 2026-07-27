@@ -6,7 +6,9 @@ package generate
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,6 +72,15 @@ type App struct {
 	// demo seeds execute — to seed demo data. It runs once per app
 	// (tracked in state) unless reseeding is forced. Empty disables it.
 	SeedCommand string
+	// HealthCheck is the container healthcheck command (a TCP probe of the
+	// app's own port using a runtime binary the image is guaranteed to
+	// have). Empty for workers, own-Dockerfile apps, and frameworks with no
+	// known probe — Docker then reports no health, as before.
+	HealthCheck string
+	// NoSourceMount forces the source bind-mount off even for interpreted
+	// frameworks. Set in remote mode: the remote Docker host has no copy of
+	// the local source, so the app must build everything into its image.
+	NoSourceMount bool
 }
 
 // Plan merges each resolved app with its framework detection (or the
@@ -106,7 +117,7 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			BuildEnv:       r.BuildEnv,
 			Memory:         firstNonEmpty(r.Memory, cfg.Defaults.Memory, "512m"),
 			Profile:        firstNonEmpty(r.Profile, cfg.Defaults.Profile),
-			StaticBuild:    strings.Contains(d.Signal, "vite"),
+			StaticBuild:    strings.Contains(d.Signal, "vite") || strings.Contains(d.Signal, "astro"),
 			Redis:          d.Redis,
 			Worker:         r.Worker,
 			Category:       r.Category,
@@ -162,6 +173,16 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			}
 			app.SeedCommand = cmd
 		}
+		// A worker has no HTTP port; an own-Dockerfile app's runtime binaries
+		// are unknown to us — neither gets a generated healthcheck.
+		if !app.Worker && !app.HasOwnDockerfile {
+			app.HealthCheck = healthCommand(app.Framework, app.Port)
+		}
+		// Remote mode: the remote Docker host has no local source to mount,
+		// so every app builds into its image instead.
+		if cfg.Remote != "" {
+			app.NoSourceMount = true
+		}
 		apps = append(apps, app)
 	}
 	return apps, nil
@@ -170,12 +191,35 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 // dbSetupCommand is the idempotent database prepare/migrate command for a
 // framework, run in the app container before seeding. Empty when roost
 // knows no migration command for the framework.
+// healthCommand returns a container healthcheck that TCP-connects to the
+// app's own port using a runtime binary the image is guaranteed to have —
+// curl/wget aren't present in slim images, but the language runtime is.
+// Empty for frameworks with no known probe.
+func healthCommand(framework string, port int) string {
+	p := strconv.Itoa(port)
+	switch framework {
+	case "rails", "sinatra":
+		return `ruby -rsocket -e 'TCPSocket.new("127.0.0.1",` + p + `).close'`
+	case "next", "node":
+		return `node -e 'require("net").connect(` + p + `,"127.0.0.1").on("connect",()=>process.exit(0)).on("error",()=>process.exit(1))'`
+	case "django", "flask":
+		return `python -c "import socket,sys; sys.exit(0 if socket.socket().connect_ex(('127.0.0.1',` + p + `))==0 else 1)"`
+	case "laravel":
+		return `php -r 'exit(@fsockopen("127.0.0.1",` + p + `)?0:1);'`
+	case "static":
+		return `wget -q --spider http://127.0.0.1:` + p + `/`
+	}
+	return ""
+}
+
 func dbSetupCommand(framework string) string {
 	switch framework {
 	case "rails":
 		return "bin/rails db:prepare"
 	case "django":
 		return "python manage.py migrate --noinput"
+	case "laravel":
+		return "php artisan migrate --force"
 	}
 	return ""
 }
@@ -184,8 +228,11 @@ func dbSetupCommand(framework string) string {
 // without an explicit command. Only frameworks with a conventional seed
 // task have one; others must supply a command string.
 func defaultSeedCommand(framework string) string {
-	if framework == "rails" {
+	switch framework {
+	case "rails":
 		return "bin/rails db:seed"
+	case "laravel":
+		return "php artisan db:seed --force"
 	}
 	return ""
 }
@@ -212,7 +259,9 @@ func fileExists(path string) bool {
 // the host source over /app would shadow the build and break startup.
 func mountsSource(framework string) bool {
 	switch framework {
-	case "static", "next", "node":
+	case "static", "next", "node", "laravel":
+		// laravel installs vendor/ into /app during build; a bind mount would
+		// shadow it.
 		return false
 	}
 	return true
@@ -307,7 +356,7 @@ func appEnv(app App, seed map[string]string) []envPair {
 		}
 		env["DATABASE_URL"] = scheme + "://root:roost@mysql:3306/" + db
 	case "postgres":
-		env["DATABASE_URL"] = "postgres://roost:roost@postgres:5432/" + db
+		env["DATABASE_URL"] = fmt.Sprintf("postgres://%s:%s@postgres:5432/%s", dbUser(app.Name), dbPassword(app.Name), db)
 	}
 	if app.Redis {
 		// Database 0 of the shared Redis; apps reach it by service name.
@@ -330,6 +379,24 @@ func dbName(app string) string {
 	return strings.ReplaceAll(app, "-", "_")
 }
 
+// dbUser is the app's own Postgres role name (same slug as its database).
+func dbUser(app string) string {
+	return dbName(app)
+}
+
+// dbPassword is the app's Postgres password. It is derived deterministically
+// from the app name so it stays stable across regenerations — the init
+// script only runs once (on first volume boot), but appEnv rebuilds
+// DATABASE_URL on every up, and the two must always agree. The database is
+// never reachable off the Compose network, so the point of a per-app
+// password is blast-radius isolation between co-tenant apps, not secrecy
+// from the outside; a name-derived value gives each app a distinct
+// credential without any state to persist.
+func dbPassword(app string) string {
+	sum := sha256.Sum256([]byte("roost-pg:" + app))
+	return "rp_" + hex.EncodeToString(sum[:])[:24]
+}
+
 type composeApp struct {
 	Name        string
 	Path        string
@@ -340,6 +407,7 @@ type composeApp struct {
 	Redis       bool
 	Command     string
 	MountSource bool
+	HealthCheck string
 	Env         []envPair
 }
 
@@ -376,7 +444,8 @@ func RenderCompose(buildDir string, apps []App, controlHost string) ([]byte, err
 			Database:    app.Database,
 			Redis:       app.Redis,
 			Command:     app.Command,
-			MountSource: mountsSource(app.Framework),
+			MountSource: mountsSource(app.Framework) && !app.NoSourceMount,
+			HealthCheck: app.HealthCheck,
 			Env:         appEnv(app, seed),
 		})
 	}
@@ -430,8 +499,11 @@ func RenderMySQLInit(apps []App) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// RenderPostgresInit renders postgres-init.sql: one database per
-// postgres app owned by the shared roost user.
+// RenderPostgresInit renders postgres-init.sql: each postgres app gets its
+// own login role (with a name-derived password) that owns its database, so
+// one app's credentials can't reach another's data. CREATEDB lets an app
+// create the sibling <app>_* databases Rails multi-db (Solid Queue/Cache/
+// Cable) needs, while still being unable to read databases it doesn't own.
 func RenderPostgresInit(apps []App) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString("-- Generated by roost — do not edit; runs once on first database boot.\n")
@@ -439,7 +511,9 @@ func RenderPostgresInit(apps []App) ([]byte, error) {
 		if app.Database != "postgres" {
 			continue
 		}
-		fmt.Fprintf(&b, "CREATE DATABASE %q OWNER roost;\n", dbName(app.Name))
+		user := dbUser(app.Name)
+		fmt.Fprintf(&b, "CREATE ROLE %s LOGIN CREATEDB PASSWORD '%s';\n", user, dbPassword(app.Name))
+		fmt.Fprintf(&b, "CREATE DATABASE %q OWNER %s;\n", dbName(app.Name), user)
 	}
 	return b.Bytes(), nil
 }
@@ -450,6 +524,7 @@ type dockerfileData struct {
 	RubyTag     string
 	NodeTag     string
 	PythonTag   string
+	PhpTag      string
 	RailsAssets bool
 	// BuildEnvPairs is app.BuildEnv sorted for a deterministic Dockerfile;
 	// templates range over it to emit build-stage ENV lines.
@@ -460,9 +535,10 @@ type dockerfileData struct {
 func RenderDockerfile(app App) ([]byte, error) {
 	data := dockerfileData{
 		App:           app,
-		RubyTag:       versionTag(app.RuntimeVersion, "3.3"),
+		RubyTag:       versionTag(app.RuntimeVersion, "3.4"),
 		NodeTag:       nodeTag(app.RuntimeVersion),
 		PythonTag:     "3.12-slim",
+		PhpTag:        "8.3-cli",
 		RailsAssets:   app.Framework == "rails",
 		BuildEnvPairs: sortedPairs(app.BuildEnv),
 	}
@@ -472,8 +548,10 @@ func RenderDockerfile(app App) ([]byte, error) {
 		name = "ruby.Dockerfile.tmpl"
 	case "next", "node":
 		name = "node.Dockerfile.tmpl"
-	case "django":
-		name = "django.Dockerfile.tmpl"
+	case "django", "flask":
+		name = "python.Dockerfile.tmpl"
+	case "laravel":
+		name = "php.Dockerfile.tmpl"
 	case "static":
 		name = "static.Dockerfile.tmpl"
 	default:
@@ -500,7 +578,7 @@ func nodeTag(version string) string {
 		major, _, _ := strings.Cut(v, ".")
 		return major + "-slim"
 	}
-	return "22-slim"
+	return "24-slim"
 }
 
 // exactVersion extracts the leading dotted-number version out of a

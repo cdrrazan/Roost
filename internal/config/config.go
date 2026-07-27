@@ -33,6 +33,14 @@ type Config struct {
 	// the host (outside the stack). Empty means no panel route is generated.
 	ControlHost string `yaml:"control_host"`
 
+	// Remote, when set, points roost at a remote Docker daemon (an ssh://,
+	// tcp://, or unix:// endpoint) instead of the local one, so the same
+	// config runs the stack on a VPS. Empty = local, the default. It only
+	// changes WHERE containers run — roost still generates artifacts locally
+	// under ~/.roost/build — and source is not bind-mounted in remote mode
+	// (the remote host has no copy of it), so apps build into their image.
+	Remote string `yaml:"remote"`
+
 	// Server is optional display metadata for the web panel's Server card
 	// (the box's public IP + SSH login). It has no effect on how roost runs.
 	Server Server `yaml:"server"`
@@ -296,6 +304,16 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("resolve config path %s: %w", path, err)
 	}
 	cfg.Dir = filepath.Dir(abs)
+
+	if cfg.Remote != "" {
+		switch {
+		case strings.HasPrefix(cfg.Remote, "ssh://"),
+			strings.HasPrefix(cfg.Remote, "tcp://"),
+			strings.HasPrefix(cfg.Remote, "unix://"):
+		default:
+			return nil, fmt.Errorf("remote %q must be an ssh://, tcp://, or unix:// Docker endpoint", cfg.Remote)
+		}
+	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {

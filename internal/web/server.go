@@ -249,6 +249,10 @@ type EdgeInfo struct {
 	Account    string   // short form
 	Hosts      []string // DNS records / routing suffixes roost created
 	Protected  bool     // Cloudflare Access is configured in front
+	// TunnelState is the live connector health: "connected",
+	// "reconnecting" (re-establishing after a wake — transient), "down", or
+	// "" when unknown/not running. Refreshed with the rail every 5s.
+	TunnelState string
 }
 
 // Alert is one dashboard warning surfaced in the banner.
@@ -1209,6 +1213,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .rchip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 22%,transparent)}
  .rchip.up{background:var(--teal-bg);color:var(--teal-ink)}
  .rchip.down{background:var(--red-bg);color:var(--danger)}
+ .rchip.warn{background:var(--amber-bg);color:var(--amber-ink)}
  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
  .tag{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:6px;letter-spacing:.01em;line-height:1.5;border:1px solid transparent}
  .tag.fw{background:var(--indigo-bg);color:var(--indigo-ink)}
@@ -1639,6 +1644,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <div class="card-h"><h2>Edge</h2><span class="csub">Cloudflare tunnel</span></div>
     <div class="ov">
      <div class="ov-row"><span class="k">Tunnel</span><span class="v">{{.Edge.TunnelName}} <span class="rchip up" style="margin-left:6px">outbound</span></span></div>
+     {{if .Edge.TunnelState}}<div class="ov-row"><span class="k">Connection</span><span class="v">{{if eq .Edge.TunnelState "connected"}}<span class="rchip up">connected</span>{{else if eq .Edge.TunnelState "reconnecting"}}<span class="rchip warn">reconnecting…</span>{{else if eq .Edge.TunnelState "down"}}<span class="rchip down">down</span>{{else}}<span class="rchip">unknown</span>{{end}}</span></div>
+     {{if eq .Edge.TunnelState "reconnecting"}}<div class="csub" style="margin-top:2px">cloudflared is re-establishing after a wake — brief 502s here are the edge, not your apps (~5–10s).</div>{{end}}{{end}}
      {{if .Edge.TunnelID}}<div class="ov-row"><span class="k">Tunnel ID</span><span class="v mono">{{.Edge.TunnelID}}</span></div>{{end}}
      {{if .Edge.Account}}<div class="ov-row"><span class="k">Account</span><span class="v mono">{{.Edge.Account}}</span></div>{{end}}
      <div class="ov-row"><span class="k">Access</span><span class="v">{{if .Edge.Protected}}<span class="tag fw">protected</span>{{else}}<span class="tag worker">public</span>{{end}}</span></div>

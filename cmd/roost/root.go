@@ -1,7 +1,11 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
+
+	"github.com/cdrrazan/roost/internal/config"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -26,6 +30,14 @@ HTTPS-accessible apps on your own domain. You supply paths and hostnames;
 roost infers everything else.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// Point Docker at the configured remote daemon before any command
+		// runs, so the whole stack lands on a VPS with the same config. An
+		// explicit $DOCKER_HOST always wins; config problems are ignored here
+		// (commands that need config surface their own errors).
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			applyRemote(flags)
+			return nil
+		},
 	}
 
 	root.PersistentFlags().StringVar(&flags.configPath, "config", "", "path to config file (default: $ROOST_CONFIG, ./roost.yml, then ~/.roost/config.yml)")
@@ -38,6 +50,8 @@ roost infers everything else.`,
 		newGenerateCmd(flags),
 		newUpCmd(flags),
 		newDownCmd(flags),
+		newUninstallCmd(flags),
+		newShareCmd(flags),
 		newStatusCmd(flags),
 		newLogsCmd(flags),
 		newStartCmd(flags),
@@ -55,6 +69,24 @@ roost infers everything else.`,
 	)
 
 	return root
+}
+
+// applyRemote sets DOCKER_HOST from the config's remote: endpoint so every
+// docker subprocess targets the remote daemon. It's best-effort: an explicit
+// $DOCKER_HOST wins, and an unreadable/local config is simply left alone.
+func applyRemote(flags *rootFlags) {
+	if os.Getenv("DOCKER_HOST") != "" {
+		return
+	}
+	path, err := config.FindConfig(flags.configPath)
+	if err != nil {
+		return
+	}
+	cfg, err := config.Load(path)
+	if err != nil || cfg.Remote == "" {
+		return
+	}
+	_ = os.Setenv("DOCKER_HOST", cfg.Remote)
 }
 
 // newVersionCmd prints the build version (stamped by GoReleaser).

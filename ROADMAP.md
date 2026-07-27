@@ -2,34 +2,36 @@
 
 roost v1 is complete: config → detection → generation → runner → tunnel →
 doctor → distribution — plus a **Material Design 3 browser control panel**
-(`roost web`) and push-to-`main` auto-deploy. This file tracks where it goes
-next. Items are ordered by likely value, not by promise — this is a side
-project serving side projects.
+(`roost web`) and push-to-`main` auto-deploy. The **v1.x polish** and **v2**
+lists below are now shipped too; what remains are the explicit non-goals
+(boundaries, not backlog). Items are ordered by likely value, not by
+promise — this is a side project serving side projects.
 
 ## v1.x — polish
 
-- [ ] `roost status` tunnel awareness: distinguish "cloudflared reconnecting
+- [x] `roost status` tunnel awareness: distinguish "cloudflared reconnecting
       after wake" (resolves itself in ~5–10s) from "app down" so users don't
       chase a non-problem.
-- [ ] `roost doctor --fix` for the safe subset: PATCH `proxied:true`,
+- [x] `roost doctor --fix` for the safe subset: PATCH `proxied:true`,
       create missing DNS records, chmod credentials.
-- [ ] `roost down --remove-dns` / `roost uninstall`: clean up only the
+- [x] `roost down --remove-dns` / `roost uninstall`: clean up only the
       records recorded in `state.json`.
-- [ ] Framework detection: Laravel, Flask, Astro, SvelteKit.
-- [ ] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
-- [ ] `roost logs` multiplexing (`roost logs` with no app = all apps).
+- [x] Framework detection: Laravel, Flask, Astro, SvelteKit.
+- [x] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
+- [x] `roost logs` multiplexing (`roost logs` with no app = all apps).
 
-## v2 — considered, not committed
+## v2
 
-- **Per-app health checks** in generated compose, surfaced in `status`.
-- **Postgres per-app credentials** instead of the shared roost user.
-- **`roost share`**: a one-shot temporary hostname for a single app —
+- [x] **Per-app health checks** in generated compose, surfaced in `status`.
+- [x] **Postgres per-app credentials** instead of the shared roost user.
+- [x] **`roost share`**: a one-shot temporary hostname for a single app —
   spiritually a nicer `cloudflared tunnel --url`, but with your domain.
-- **Windows lifecycle** (Task Scheduler unit) — detection/generation already
-  work; only `enable` is macOS/Linux.
-- **Remote roost**: the same config driving a cheap VPS instead of a laptop,
-  for the day a side project needs to survive a closed lid. This must not
-  compromise the local-first core.
+- [x] **Windows lifecycle** (Task Scheduler unit) — `roost enable`/`disable`
+  now register a logon task via `schtasks`.
+- [x] **Remote roost**: the same config driving a cheap VPS instead of a
+  laptop (`remote: ssh://…` → roost points Docker at the remote daemon;
+  source builds into the image since the remote has no copy). Local-first
+  stays the default — `remote:` only changes where containers run.
 
 ## Explicit non-goals (unchanged from the design)
 

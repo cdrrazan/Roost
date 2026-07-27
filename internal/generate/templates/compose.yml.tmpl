@@ -12,6 +12,14 @@ services:
 {{- if .Command}}
     command: {{.Command}}
 {{- end}}
+{{- if .HealthCheck}}
+    healthcheck:
+      test: ["CMD-SHELL", {{printf "%q" .HealthCheck}}]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 40s
+{{- end}}
 {{- if .Env}}
     environment:
 {{- range .Env}}
