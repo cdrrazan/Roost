@@ -17,6 +17,8 @@ Live metrics · real reachability · incidents & share · settings · command pa
 
 ![Fleet dashboard — light](docs/screenshots/dashboard-light.png)
 
+![Fleet incidents — share, mark-as-read, and per-app history](docs/screenshots/incidents.png)
+
 <div align="center">
 
 | Dark | Components |
