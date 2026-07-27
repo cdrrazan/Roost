@@ -429,7 +429,7 @@ mechanism as `roost enable`), and front it with Access. See the
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
 | `roost generate` | write `~/.roost/build/*` without starting anything |
-| `roost enable` / `disable` | boot-on-login via launchd / systemd `--user` |
+| `roost enable` / `disable` | boot-on-login via launchd (macOS) / systemd `--user` (Linux) / Task Scheduler (Windows) |
 
 ---
 
@@ -683,7 +683,8 @@ failed deploy rather than a silent bad merge.
 <summary><b>How do I keep it running after a reboot, with no one logged in?</b></summary>
 
 `roost enable` installs a boot unit — launchd on macOS, a systemd `--user` unit
-on Linux — that runs `roost up` at login. On a headless Linux box, also run
+on Linux, a Task Scheduler logon task on Windows — that runs `roost up` at
+login. On a headless Linux box, also run
 `loginctl enable-linger <user>` so the user's units start at boot without an
 interactive login. Docker itself must start on boot too (it does by default on a
 server install); roost has no daemon — Docker's `restart: unless-stopped` policy

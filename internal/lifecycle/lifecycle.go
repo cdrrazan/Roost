@@ -1,6 +1,6 @@
-// Package lifecycle installs and removes the boot-on-login unit:
-// launchd on macOS, a systemd user unit on Linux. Both run `roost up`
-// at login; Docker's restart policy handles everything after that.
+// Package lifecycle installs and removes the boot-on-login unit: launchd on
+// macOS, a systemd user unit on Linux, a Task Scheduler task on Windows. All
+// run `roost up` at login; Docker's restart policy handles everything after.
 package lifecycle
 
 import (
@@ -70,9 +70,22 @@ func (m *Manager) logPath(name string) string {
 	return filepath.Join(m.Home, ".roost", "logs", name)
 }
 
+// windowsTask is the Task Scheduler task name.
+const windowsTask = "roost"
+
 // Enable writes the platform unit and activates it. On unsupported
 // platforms it returns manual instructions instead of failing.
 func (m *Manager) Enable() (path string, notes []string, err error) {
+	if m.GOOS == "windows" {
+		// Windows has no unit file: schtasks registers a logon task directly.
+		// /SC ONLOGON runs at each logon; /F overwrites a prior task.
+		if _, err := m.Shell.Run("schtasks", "/Create", "/SC", "ONLOGON", "/TN", windowsTask, "/TR", m.Exec+" up", "/F"); err != nil {
+			return "", nil, fmt.Errorf("create scheduled task: %w", err)
+		}
+		return `Task Scheduler\` + windowsTask, []string{
+			`Registered the Task Scheduler task "` + windowsTask + `" — runs "` + m.Exec + ` up" at each logon.`,
+		}, nil
+	}
 	path = m.unitPath()
 	if path == "" {
 		return "", []string{
@@ -122,6 +135,12 @@ func (m *Manager) Enable() (path string, notes []string, err error) {
 // Disable deactivates and removes the unit, leaving nothing behind.
 // It is a no-op when nothing was installed.
 func (m *Manager) Disable() error {
+	if m.GOOS == "windows" {
+		// /F suppresses the confirm prompt; a missing task is not an error we
+		// want to surface (Disable is a no-op when nothing was installed).
+		_, _ = m.Shell.Run("schtasks", "/Delete", "/TN", windowsTask, "/F")
+		return nil
+	}
 	path := m.unitPath()
 	if path == "" {
 		return nil

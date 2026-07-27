@@ -25,8 +25,8 @@ project serving side projects.
 - [x] **Postgres per-app credentials** instead of the shared roost user.
 - [x] **`roost share`**: a one-shot temporary hostname for a single app —
   spiritually a nicer `cloudflared tunnel --url`, but with your domain.
-- **Windows lifecycle** (Task Scheduler unit) — detection/generation already
-  work; only `enable` is macOS/Linux.
+- [x] **Windows lifecycle** (Task Scheduler unit) — `roost enable`/`disable`
+  now register a logon task via `schtasks`.
 - **Remote roost**: the same config driving a cheap VPS instead of a laptop,
   for the day a side project needs to survive a closed lid. This must not
   compromise the local-first core.
