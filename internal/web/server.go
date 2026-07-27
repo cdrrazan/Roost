@@ -345,6 +345,7 @@ type Incident struct {
 	Detail   string
 	Since    time.Time
 	Resolved time.Time
+	Read     bool // acknowledged on the incidents page (history is kept, just dimmed)
 }
 
 // incidentsCap bounds the retained incident history.
@@ -596,7 +597,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
 	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
 	mux.HandleFunc("GET /incidents", s.handleIncidentsPage)
-	mux.HandleFunc("POST /incidents/clear", s.guard(s.handleClearIncidents))
+	mux.HandleFunc("POST /incidents/read", s.guard(s.handleMarkRead))
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
 	mux.HandleFunc("POST /settings", s.guard(s.handleSaveSettings))
 	mux.HandleFunc("GET /api/app", s.handleAppDetail)
@@ -689,18 +690,14 @@ func (s *Server) handleTestAlert(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleClearIncidents drops resolved incidents from the history, leaving open
-// ones untouched (you can't dismiss a live outage). Guarded — it mutates panel
-// state — and redirects back to the incidents page.
-func (s *Server) handleClearIncidents(w http.ResponseWriter, r *http.Request) {
+// handleMarkRead acknowledges incidents without deleting them: the full history
+// is kept (open and resolved alike), each entry just flagged read so it renders
+// dimmed. Guarded — it mutates panel state — and redirects to the incidents page.
+func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	kept := s.incidents[:0]
-	for _, in := range s.incidents {
-		if in.Resolved.IsZero() {
-			kept = append(kept, in)
-		}
+	for i := range s.incidents {
+		s.incidents[i].Read = true
 	}
-	s.incidents = kept
 	s.mu.Unlock()
 	http.Redirect(w, r, "/incidents", http.StatusSeeOther)
 }
@@ -986,7 +983,8 @@ type statusView struct {
 	Events         []eventView    // activity timeline (newest first)
 	Incidents      []incidentView // detected outages (open first)
 	OpenIncidents  int
-	Resolved       int      // count of resolved (clearable) incidents
+	Resolved       int      // count of resolved incidents
+	Unread         int      // count of unacknowledged incidents (drives "Mark all read")
 	Page           string   // "dashboard" (default), "incidents", or "settings"
 	Settings       Settings // current panel settings (for the settings form + mask/tech rendering)
 	TechStacksText string   // Settings.TechStacks rendered as "key=Label" lines
@@ -1009,6 +1007,7 @@ type incidentView struct {
 	Since  string // clock time it opened
 	Ago    string // "down 6m" / "resolved after 3m"
 	Open   bool
+	Read   bool // acknowledged — rendered dimmed
 }
 
 // humanBytes formats a byte count in docker-style IEC units.
@@ -1059,13 +1058,16 @@ func (s *Server) buildStatusView() statusView {
 		if in.App != "" {
 			label = humanize(in.App)
 		}
-		iv := incidentView{Label: label, Detail: in.Detail, Since: in.Since.Format("Jan 2 15:04"), Open: in.Resolved.IsZero()}
+		iv := incidentView{Label: label, Detail: in.Detail, Since: in.Since.Format("Jan 2 15:04"), Open: in.Resolved.IsZero(), Read: in.Read}
 		if iv.Open {
 			iv.Ago = "down " + compactDur(now.Sub(in.Since))
 			view.OpenIncidents++
 		} else {
 			iv.Ago = "resolved after " + compactDur(in.Resolved.Sub(in.Since))
 			view.Resolved++
+		}
+		if !in.Read {
+			view.Unread++
 		}
 		view.Incidents = append(view.Incidents, iv)
 	}
@@ -1506,6 +1508,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .incrow .inctop b{font-weight:650;font-size:14px}
  .incrow .incago{font-size:12px;color:var(--muted)}
  .incrow .incsub{font-size:12.5px;color:var(--faint);margin-top:2px}
+ .incrow.read{opacity:.55}
+ .incrow.read .incdot{animation:none}
+ .incnew{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:999px;background:var(--indigo-bg);color:var(--indigo-ink)}
  .incrow .incbadge{margin-left:auto;flex:none;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px}
  .incrow .incbadge.bad{background:var(--red-bg);color:var(--danger)}
  .incrow .incbadge.ok{background:var(--teal-bg);color:var(--teal-ink)}
@@ -1808,7 +1813,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <div class="card-h">
      <h2>🔔 Incidents <span class="csub">{{if .OpenIncidents}}{{.OpenIncidents}} active now{{else}}all clear{{end}}</span></h2>
      <div class="inc-actions">
-      {{if gt .Resolved 0}}<form class="inline" method="post" action="/incidents/clear">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Remove resolved incidents from the history">Clear resolved ({{.Resolved}})</button></form>{{end}}
+      {{if gt .Unread 0}}<form class="inline" method="post" action="/incidents/read">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Acknowledge incidents — kept in history, just dimmed">Mark all read ({{.Unread}})</button></form>{{end}}
       <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
      </div>
     </div>
@@ -1823,10 +1828,10 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     {{if .Incidents}}
     <ul class="inclist">
      {{range .Incidents}}
-     <li class="incrow {{if .Open}}open{{else}}resolved{{end}}">
+     <li class="incrow {{if .Open}}open{{else}}resolved{{end}}{{if .Read}} read{{else}} unread{{end}}">
       <span class="incdot"></span>
       <div class="incmain">
-       <div class="inctop"><b>{{.Label}}</b> <span class="incago">{{.Ago}}</span></div>
+       <div class="inctop"><b>{{.Label}}</b> <span class="incago">{{.Ago}}</span>{{if not .Read}}<span class="incnew">new</span>{{end}}</div>
        <div class="incsub">{{.Detail}} · since {{.Since}}</div>
       </div>
       <span class="incbadge {{if .Open}}bad{{else}}ok{{end}}">{{if .Open}}open{{else}}resolved{{end}}</span>

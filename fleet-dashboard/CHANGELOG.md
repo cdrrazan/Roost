@@ -2,6 +2,13 @@
 
 All notable changes to Fleet are documented here. Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.4.0] — 2026-07-27
+
+### Changed
+- Incidents page: **Clear resolved** → **Mark all read**. Incidents are no longer
+  deleted — the full history is kept and acknowledged entries render dimmed
+  (unread ones carry a `new` badge). The button shows the unread count.
+
 ## [1.3.0] — 2026-07-27
 
 ### Added

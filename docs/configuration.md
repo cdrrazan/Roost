@@ -113,7 +113,8 @@ notify:
 - Incidents also surface in the panel: a red **active-incidents banner**, a
   dedicated **Incidents page** (sidebar → Monitoring → Incidents) that keeps the
   same left/right sidebar and lists the full open/resolved history + durations
-  with a **Clear resolved** button, per-app incident history inside each app's
+  with a **Mark all read** button (nothing is deleted — acknowledged entries just
+  dim, keeping the history intact), per-app incident history inside each app's
   **detail drawer**, and an open-incident list on the public `/status` page. The
   sidebar itself carries only the **Test alert** button (no live incident list).
 

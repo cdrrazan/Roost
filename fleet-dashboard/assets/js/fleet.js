@@ -172,14 +172,14 @@
 
   function renderIncidents(d) {
     var host = $("#incPage"); if (!host) return;
-    var resolved = F.incidents.filter(function (i) { return !i.open; }).length;
+    var unread = F.incidents.filter(function (i) { return !i.read; }).length;
     var actions =
-      (resolved ? '<form class="inline" data-clearincidents><button class="btn btn-sm" title="Remove resolved incidents from the history">Clear resolved (' + resolved + ")</button></form>" : "") +
+      (unread ? '<form class="inline" data-markread><button class="btn btn-sm" title="Acknowledge incidents — kept in history, just dimmed">Mark all read (' + unread + ")</button></form>" : "") +
       '<form class="inline" data-testalert><button class="btn btn-sm" title="Send a test alert">Test alert</button></form>';
     var body = F.incidents.length
       ? '<ul class="inclist">' + F.incidents.map(function (i) {
-          return '<li class="incrow ' + (i.open ? "open" : "resolved") + '"><span class="incdot"></span>' +
-            '<div class="incmain"><div class="inctop"><b>' + esc(i.label) + '</b> <span class="incago">' + esc(i.ago) + "</span></div>" +
+          return '<li class="incrow ' + (i.open ? "open" : "resolved") + (i.read ? " read" : " unread") + '"><span class="incdot"></span>' +
+            '<div class="incmain"><div class="inctop"><b>' + esc(i.label) + '</b> <span class="incago">' + esc(i.ago) + "</span>" + (i.read ? "" : '<span class="incnew">new</span>') + "</div>" +
             '<div class="incsub">' + esc(i.detail) + " · since " + esc(i.since) + "</div></div>" +
             '<span class="incbadge ' + (i.open ? "bad" : "ok") + '">' + (i.open ? "open" : "resolved") + "</span></li>";
         }).join("") + "</ul>"
@@ -313,11 +313,11 @@
     setTimeout(function () { btn.innerHTML = "✓ Sent (demo)"; setTimeout(function () { btn.disabled = false; btn.innerHTML = orig; btn._b = 0; }, 1800); }, 900);
   }, true);
 
-  /* ---------- clear resolved incidents ---------- */
+  /* ---------- mark incidents read (history is kept, just dimmed) ---------- */
   document.addEventListener("submit", function (e) {
-    var f = e.target; if (!f || !f.hasAttribute("data-clearincidents")) return;
+    var f = e.target; if (!f || !f.hasAttribute("data-markread")) return;
     e.preventDefault();
-    F.incidents = F.incidents.filter(function (i) { return i.open; });
+    F.incidents.forEach(function (i) { i.read = true; });
     renderAll();
   }, true);
 

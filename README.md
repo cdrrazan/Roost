@@ -382,7 +382,8 @@ it does:
 - **Health & incidents** — real HTTP **reachability chips** (`live · 200` vs a
   `502` that a green "container up" would hide), a red **active-incident banner**,
   and a dedicated **Incidents page** (sidebar → Monitoring → Incidents) with the
-  full open/resolved history, durations, a **Clear resolved** button, and
+  full open/resolved history, durations, a **Mark all read** button (history is
+  kept — read entries just dim), and
   **share** buttons (copy / X / LinkedIn / Facebook) that post a one-line status
   summary. A background monitor re-checks every app on a configurable interval
   (**default 2 min**) and opens an incident — with details — even with no browser
