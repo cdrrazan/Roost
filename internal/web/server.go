@@ -1135,8 +1135,6 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
  .sideinc .si-list li.bad::before{background:var(--danger)}
  .sideinc .si-list li b{color:var(--ink);font-weight:600}
- .sideinc .si-link{display:block;font-size:12px;color:var(--muted);text-decoration:none;padding:2px 0 4px}
- .sideinc .si-link:hover{color:var(--ink);text-decoration:underline}
  .nav .navpip{margin-left:auto;font-size:11px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;display:inline-flex;align-items:center;justify-content:center}
  .sidesys{padding:10px 11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
  .sidesys .navlabel{padding:0 0 7px}
@@ -1555,9 +1553,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   </nav>
   <div class="grow"></div>
   <div class="sideinc" id="incidents">
-   <div class="si-h"><span class="navlabel" style="padding:0">Alerts</span>{{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
-   <a class="si-link" href="/incidents">View incidents{{if .OpenIncidents}} · {{.OpenIncidents}} active{{end}} →</a>
-   <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:8px" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
+   <div class="si-h"><span class="navlabel" style="padding:0">Alerts</span></div>
+   <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" style="width:100%;justify-content:center" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
   </div>
   {{if .System.Images}}
   <div class="sidesys">
