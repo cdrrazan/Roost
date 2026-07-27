@@ -70,6 +70,11 @@ type App struct {
 	// demo seeds execute — to seed demo data. It runs once per app
 	// (tracked in state) unless reseeding is forced. Empty disables it.
 	SeedCommand string
+	// HealthCheck is the container healthcheck command (a TCP probe of the
+	// app's own port using a runtime binary the image is guaranteed to
+	// have). Empty for workers, own-Dockerfile apps, and frameworks with no
+	// known probe — Docker then reports no health, as before.
+	HealthCheck string
 }
 
 // Plan merges each resolved app with its framework detection (or the
@@ -162,6 +167,11 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			}
 			app.SeedCommand = cmd
 		}
+		// A worker has no HTTP port; an own-Dockerfile app's runtime binaries
+		// are unknown to us — neither gets a generated healthcheck.
+		if !app.Worker && !app.HasOwnDockerfile {
+			app.HealthCheck = healthCommand(app.Framework, app.Port)
+		}
 		apps = append(apps, app)
 	}
 	return apps, nil
@@ -170,6 +180,27 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 // dbSetupCommand is the idempotent database prepare/migrate command for a
 // framework, run in the app container before seeding. Empty when roost
 // knows no migration command for the framework.
+// healthCommand returns a container healthcheck that TCP-connects to the
+// app's own port using a runtime binary the image is guaranteed to have —
+// curl/wget aren't present in slim images, but the language runtime is.
+// Empty for frameworks with no known probe.
+func healthCommand(framework string, port int) string {
+	p := strconv.Itoa(port)
+	switch framework {
+	case "rails", "sinatra":
+		return `ruby -rsocket -e 'TCPSocket.new("127.0.0.1",` + p + `).close'`
+	case "next", "node":
+		return `node -e 'require("net").connect(` + p + `,"127.0.0.1").on("connect",()=>process.exit(0)).on("error",()=>process.exit(1))'`
+	case "django", "flask":
+		return `python -c "import socket,sys; sys.exit(0 if socket.socket().connect_ex(('127.0.0.1',` + p + `))==0 else 1)"`
+	case "laravel":
+		return `php -r 'exit(@fsockopen("127.0.0.1",` + p + `)?0:1);'`
+	case "static":
+		return `wget -q --spider http://127.0.0.1:` + p + `/`
+	}
+	return ""
+}
+
 func dbSetupCommand(framework string) string {
 	switch framework {
 	case "rails":
@@ -347,6 +378,7 @@ type composeApp struct {
 	Redis       bool
 	Command     string
 	MountSource bool
+	HealthCheck string
 	Env         []envPair
 }
 
@@ -384,6 +416,7 @@ func RenderCompose(buildDir string, apps []App, controlHost string) ([]byte, err
 			Redis:       app.Redis,
 			Command:     app.Command,
 			MountSource: mountsSource(app.Framework),
+			HealthCheck: app.HealthCheck,
 			Env:         appEnv(app, seed),
 		})
 	}

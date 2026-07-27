@@ -60,6 +60,48 @@ func sampleApps() []App {
 	}
 }
 
+func TestHealthCommand(t *testing.T) {
+	cases := []struct{ fw, want string }{
+		{"rails", "ruby -rsocket"}, {"sinatra", "ruby -rsocket"},
+		{"node", "require(\"net\")"}, {"next", "require(\"net\")"},
+		{"django", "socket"}, {"flask", "socket"},
+		{"laravel", "fsockopen"}, {"static", "wget"},
+	}
+	for _, c := range cases {
+		got := healthCommand(c.fw, 3000)
+		if got == "" || !strings.Contains(got, c.want) || !strings.Contains(got, "3000") {
+			t.Errorf("healthCommand(%q,3000) = %q, want it to contain %q and the port", c.fw, got, c.want)
+		}
+	}
+	if got := healthCommand("mystery", 3000); got != "" {
+		t.Errorf("unknown framework should have no healthcheck, got %q", got)
+	}
+}
+
+func TestRenderComposeHealthcheck(t *testing.T) {
+	apps := []App{
+		{Name: "web", FQDN: "web.example.com", Path: "/apps/web", Framework: "rails", Port: 3000, Memory: "512m", HealthCheck: `ruby -rsocket -e 'TCPSocket.new("127.0.0.1",3000).close'`},
+		{Name: "worker", Path: "/apps/web", Framework: "rails", Memory: "512m", Worker: true, Command: "bundle exec sidekiq"},
+	}
+	out, err := RenderCompose("/build", apps, "")
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("not valid YAML: %v\n%s", err, out)
+	}
+	services := doc["services"].(map[string]any)
+	web := services["web"].(map[string]any)
+	if _, ok := web["healthcheck"]; !ok {
+		t.Errorf("web service missing healthcheck:\n%s", out)
+	}
+	worker := services["worker"].(map[string]any)
+	if _, ok := worker["healthcheck"]; ok {
+		t.Errorf("worker must have no healthcheck (no HTTP port):\n%s", out)
+	}
+}
+
 func TestRenderCompose(t *testing.T) {
 	out, err := RenderCompose("/home/u/.roost/build", sampleApps(), "")
 	if err != nil {

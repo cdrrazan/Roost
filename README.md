@@ -254,6 +254,10 @@ set `framework:` yourself. Every inferred value is overridable per app.
   internal network only.
 - **`WEB_CONCURRENCY=1`** — single-user local Rails workloads don't need a worker
   pool.
+- **Per-app health checks** — every HTTP app gets a generated compose
+  `healthcheck` that TCP-probes its own port with a runtime binary the image
+  already has (no curl/wget assumption), so `roost status` shows real
+  `healthy`/`starting`/`unhealthy` instead of just "container up".
 - **Staggered starts** — six apps don't spike your CPU at once on first build.
 - **Multi-database Rails** — a per-app database user so apps that connect as their
   own username and use Solid Cache/Queue/Cable (sibling `<app>_*` databases) just
