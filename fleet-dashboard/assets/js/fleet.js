@@ -177,15 +177,29 @@
     document.querySelectorAll("[data-view]").forEach(function (b) { b.classList.toggle("active", b.dataset.view === view); });
   }
   function applyFilter() {
-    var q = ($("#q") ? $("#q").value : "").toLowerCase(), sf = $("#statusfilter") ? $("#statusfilter").value : "all";
+    var sfEl = document.querySelector("#statusfilter .chip-btn.on");
+    var q = ($("#q") ? $("#q").value : "").toLowerCase(), sf = sfEl ? sfEl.dataset.val : "all";
+    var anyVisible = false;
     document.querySelectorAll(".group").forEach(function (g) {
       var catOk = !cat || g.dataset.cat === cat, any = false;
       g.querySelectorAll(".srv").forEach(function (r) {
         var show = catOk && r.dataset.name.toLowerCase().indexOf(q) > -1 && (sf === "all" || r.dataset.state === sf);
-        r.classList.toggle("hide", !show); if (show) any = true;
+        r.classList.toggle("hide", !show); if (show) { any = true; anyVisible = true; }
       });
       g.classList.toggle("hide", !(catOk && any));
     });
+    var fe = document.getElementById("filterEmpty");
+    if (fe) {
+      fe.classList.toggle("hide", anyVisible);
+      if (!anyVisible) {
+        var msg = q ? 'No apps match “' + q + '”'
+          : sf === "running" ? "No running apps"
+          : sf === "stopped" ? "No stopped apps"
+          : "No apps to show";
+        fe.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>' +
+          '<div><b>' + msg + '</b><span>Try a different filter or search.</span></div>';
+      }
+    }
   }
   function attachSpark() {
     var spark = $(".spark"); if (!spark || spark._s) return; spark._s = 1;
@@ -275,7 +289,15 @@
 
   /* ---------- static-chrome interactions (bound once) ---------- */
   document.querySelectorAll("[data-view]").forEach(function (b) { b.addEventListener("click", function () { view = b.dataset.view; localStorage.setItem("fleet-view", view); applyView(); }); });
-  (function () { var q = $("#q"), sf = $("#statusfilter"); if (q) q.addEventListener("input", applyFilter); if (sf) sf.addEventListener("change", applyFilter); })();
+  (function () {
+    var q = $("#q"), sf = $("#statusfilter");
+    if (q) q.addEventListener("input", applyFilter);
+    if (sf) sf.addEventListener("click", function (e) {
+      var c = e.target.closest(".chip-btn"); if (!c) return;
+      sf.querySelectorAll(".chip-btn").forEach(function (x) { x.classList.toggle("on", x === c); });
+      applyFilter();
+    });
+  })();
   document.querySelectorAll(".navf").forEach(function (a) { a.addEventListener("click", function (e) { e.preventDefault(); cat = a.dataset.cat; document.querySelectorAll(".navf").forEach(function (x) { x.classList.toggle("active", x === a); }); applyFilter(); document.body.classList.remove("nav-open"); }); });
   document.addEventListener("click", function (e) { document.querySelectorAll("details.menu[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); }); });
   (function () { var tb = $("#themebtn"); if (tb) tb.addEventListener("click", function () { var dk = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = dk; try { localStorage.setItem("fleet-theme", dk); } catch (e) {} }); })();

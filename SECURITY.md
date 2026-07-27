@@ -33,6 +33,13 @@ to make the sharp edges hard to cut yourself on:
 - **No destructive remote changes.** roost refuses to overwrite DNS records
   it did not create (requires `--force`) and refuses to adopt tunnels it did
   not create (requires `--adopt`).
+- **The `roost web` control panel is loopback by default** (`127.0.0.1:4600`).
+  It can start, stop, add, and remove apps, so it is only reachable remotely
+  when you set `control_host:` to route it through the tunnel — and that route
+  is meant to sit behind **Cloudflare Access**. A `--token` / `$ROOST_WEB_TOKEN`
+  bearer check gates the mutating actions as defense-in-depth. The panel shows
+  env **key names only**, never values, and the incident-email SMTP password
+  is read only from `$ROOST_SMTP_PASSWORD`, never from `config.yml`.
 
 ## Known trade-offs (not vulnerabilities)
 
@@ -43,3 +50,7 @@ to make the sharp edges hard to cut yourself on:
   your PATH.
 - Apps you expose are your own code — roost cannot make an insecure app safe.
   Access policies are the mitigation.
+- Exposing `control_host:` **without Cloudflare Access** means anyone who
+  reaches the URL can stop/start your stack and build whatever Dockerfile
+  lives at a path they add. Access (or keeping the panel loopback-only) is the
+  mitigation; the `--token` check alone is not a substitute for edge auth.
