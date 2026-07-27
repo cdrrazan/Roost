@@ -412,7 +412,8 @@ mechanism as `roost enable`), and front it with Access. See the
 **Everyday**
 | Command | What it does |
 |---|---|
-| `roost up [--profile p] [--reseed] [--no-seed]` / `down` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed` |
+| `roost up [--profile p] [--reseed] [--no-seed]` / `down [--remove-dns]` | start (staggered), migrate + seed DB apps / stop the whole stack. `--no-seed` migrates but skips all seeding this run (clean start, no demo data); mutually exclusive with `--reseed`. `down --remove-dns` also deletes the DNS records roost created |
+| `roost uninstall` | stop the stack and delete the DNS records **and** the tunnel roost created (only what `state.json` records — never foreign records or tunnels). Config and build artifacts stay |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
 | `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add/remove apps with a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |

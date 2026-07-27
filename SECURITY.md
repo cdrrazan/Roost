@@ -32,7 +32,9 @@ to make the sharp edges hard to cut yourself on:
   bind-mounted read-only.
 - **No destructive remote changes.** roost refuses to overwrite DNS records
   it did not create (requires `--force`) and refuses to adopt tunnels it did
-  not create (requires `--adopt`).
+  not create (requires `--adopt`). Teardown (`down --remove-dns`,
+  `uninstall`) deletes **only** the DNS records and tunnel recorded in
+  `state.json` — never a record or tunnel roost didn't make.
 - **The `roost web` control panel is loopback by default** (`127.0.0.1:4600`).
   It can start, stop, add, and remove apps, so it is only reachable remotely
   when you set `control_host:` to route it through the tunnel — and that route

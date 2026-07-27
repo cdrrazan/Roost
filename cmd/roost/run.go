@@ -11,6 +11,7 @@ import (
 	"github.com/cdrrazan/roost/internal/generate"
 	"github.com/cdrrazan/roost/internal/runner"
 	"github.com/cdrrazan/roost/internal/state"
+	"github.com/cdrrazan/roost/internal/tunnel"
 )
 
 // loadPlanned loads config, resolves hostnames, and plans generation,
@@ -175,10 +176,12 @@ func prepareApps(cmd *cobra.Command, r *runner.Runner, apps []generate.App, prof
 	return r.Prepare(apps, profiles, shouldSeed, onSeeded)
 }
 
-// newDownCmd stops and removes the whole stack (containers only; DNS
-// and the tunnel stay for the next up).
+// newDownCmd stops and removes the whole stack. By default DNS and the
+// tunnel stay for the next up; --remove-dns also deletes the DNS records
+// roost created (from state.json).
 func newDownCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var removeDNS bool
+	cmd := &cobra.Command{
 		Use:   "down",
 		Short: "Stop and remove the whole roost stack",
 		Args:  cobra.NoArgs,
@@ -187,9 +190,27 @@ func newDownCmd(flags *rootFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return r.Down()
+			if err := r.Down(); err != nil {
+				return err
+			}
+			if !removeDNS {
+				return nil
+			}
+			client, st, statePath, err := loadRemoteState()
+			if err != nil {
+				return err
+			}
+			before := len(st.Records)
+			tErr := tunnel.Teardown(client, st, false)
+			if err := st.Save(statePath); err != nil {
+				return err
+			}
+			cmd.Printf("removed %d DNS record(s)\n", before-len(st.Records))
+			return tErr
 		},
 	}
+	cmd.Flags().BoolVar(&removeDNS, "remove-dns", false, "also delete the DNS records roost created (recorded in state.json)")
+	return cmd
 }
 
 // newStatusCmd reports per-app container state, health, memory used

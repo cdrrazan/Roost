@@ -135,6 +135,30 @@ func loadTunnelContext(cmd *cobra.Command, flags *rootFlags, accountFlag string)
 	}, nil
 }
 
+// loadRemoteState loads the Cloudflare client and roost state for teardown
+// operations (down --remove-dns, uninstall), which clean up only what
+// state.json records and so need neither config nor resolved hostnames.
+func loadRemoteState() (*tunnel.Client, *state.State, string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, nil, "", err
+	}
+	token, err := tunnel.LoadToken(home)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	client := tunnel.NewClient(token)
+	if base := os.Getenv("ROOST_CF_API_BASE"); base != "" {
+		client.BaseURL = base
+	}
+	statePath := state.Path(home)
+	st, err := state.Load(statePath)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return client, st, statePath, nil
+}
+
 // refreshConnector restarts the cloudflared container so it re-reads a
 // freshly pushed ingress. A remotely-managed connector doesn't always pick up
 // new hostnames on its own, so a just-added zone can 404 until it refreshes.

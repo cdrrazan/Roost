@@ -233,3 +233,13 @@ func (c *Client) CertificateSANs(zoneID string) ([]string, error) {
 func (c *Client) PatchDNSProxied(zoneID, recordID string) error {
 	return c.do(http.MethodPatch, "/zones/"+zoneID+"/dns_records/"+recordID, map[string]bool{"proxied": true}, nil)
 }
+
+// DeleteDNS removes a record from a zone.
+func (c *Client) DeleteDNS(zoneID, recordID string) error {
+	return c.do(http.MethodDelete, "/zones/"+zoneID+"/dns_records/"+recordID, nil, nil)
+}
+
+// DeleteTunnel removes a tunnel from an account.
+func (c *Client) DeleteTunnel(accountID, tunnelID string) error {
+	return c.do(http.MethodDelete, "/accounts/"+accountID+"/cfd_tunnel/"+tunnelID, nil, nil)
+}

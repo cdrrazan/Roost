@@ -13,7 +13,7 @@ project serving side projects.
       chase a non-problem.
 - [ ] `roost doctor --fix` for the safe subset: PATCH `proxied:true`,
       create missing DNS records, chmod credentials.
-- [ ] `roost down --remove-dns` / `roost uninstall`: clean up only the
+- [x] `roost down --remove-dns` / `roost uninstall`: clean up only the
       records recorded in `state.json`.
 - [x] Framework detection: Laravel, Flask, Astro, SvelteKit.
 - [x] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
