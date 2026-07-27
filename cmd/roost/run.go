@@ -242,7 +242,21 @@ func newStatusCmd(flags *rootFlags) *cobra.Command {
 			for _, s := range statuses {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", s.Name, s.State, s.Health, s.Memory, s.URL)
 			}
-			return w.Flush()
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			// Advisory edge line: separates "the tunnel is reconnecting after
+			// a wake" from "an app is down" so users don't chase a 502 that
+			// resolves itself in seconds.
+			switch r.TunnelStatus() {
+			case runner.TunnelReconnecting:
+				cmd.Println("\nedge: reconnecting — cloudflared is re-establishing after a wake; apps may 502 for ~5-10s (not an app fault)")
+			case runner.TunnelDown:
+				cmd.Println("\nedge: cloudflared is not running — run `roost up`")
+			case runner.TunnelConnected:
+				cmd.Println("\nedge: connected")
+			}
+			return nil
 		},
 	}
 }

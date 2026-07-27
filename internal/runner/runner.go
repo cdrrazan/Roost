@@ -272,6 +272,78 @@ func (r *Runner) Logs(app string, follow bool) error {
 	return r.Shell.Stream("docker", r.compose(args...)...)
 }
 
+// TunnelHealth is an advisory classification of the cloudflared connector.
+type TunnelHealth string
+
+const (
+	TunnelConnected    TunnelHealth = "connected"
+	TunnelReconnecting TunnelHealth = "reconnecting"
+	TunnelDown         TunnelHealth = "down"
+	TunnelUnknown      TunnelHealth = "unknown"
+)
+
+// TunnelStatus classifies the cloudflared connector so `roost status` can
+// tell "the edge is reconnecting after a wake (~5-10s, apps may 502 briefly)"
+// apart from "an app is actually down". It is advisory: the only in-band
+// signal is cloudflared's own log tail — the container stays "running" while
+// it retries — so the result is heuristic, not authoritative.
+func (r *Runner) TunnelStatus() TunnelHealth {
+	psOut, err := r.run(r.compose("ps", "--format", "json", "cloudflared")...)
+	if err != nil {
+		return TunnelUnknown
+	}
+	running := false
+	for _, line := range strings.Split(psOut.Stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var p psLine
+		if json.Unmarshal([]byte(line), &p) == nil && p.State == "running" {
+			running = true
+		}
+	}
+	if !running {
+		return TunnelDown
+	}
+	logs, err := r.LogTail("cloudflared", 50)
+	if err != nil {
+		return TunnelUnknown
+	}
+	return classifyTunnelLog(logs)
+}
+
+// classifyTunnelLog reads cloudflared's recent log tail and reports whether
+// its last connection event was a (re)connect or a loss. The marker strings
+// are cloudflared's own; matching is deliberately conservative — only a
+// clear loss occurring after the last connect reads as reconnecting,
+// otherwise a connector with any connect marker reads as connected.
+func classifyTunnelLog(logs string) TunnelHealth {
+	connect := []string{"Registered tunnel connection", "Connection registered", "registered connIndex"}
+	lost := []string{"Unregistered tunnel connection", "Lost connection with the edge", "Retrying connection", "Serve tunnel error", "Connection terminated"}
+	lastConnect, lastLost := -1, -1
+	for i, line := range strings.Split(logs, "\n") {
+		for _, m := range connect {
+			if strings.Contains(line, m) {
+				lastConnect = i
+			}
+		}
+		for _, m := range lost {
+			if strings.Contains(line, m) {
+				lastLost = i
+			}
+		}
+	}
+	switch {
+	case lastConnect == -1 && lastLost == -1:
+		return TunnelUnknown
+	case lastLost > lastConnect:
+		return TunnelReconnecting
+	default:
+		return TunnelConnected
+	}
+}
+
 // LogTail captures the last n lines of an app's logs (for the panel drawer).
 func (r *Runner) LogTail(app string, n int) (string, error) {
 	out, err := r.run(r.compose("logs", "--no-color", "--tail", fmt.Sprintf("%d", n), app)...)

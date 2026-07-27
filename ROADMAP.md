@@ -8,7 +8,7 @@ project serving side projects.
 
 ## v1.x — polish
 
-- [ ] `roost status` tunnel awareness: distinguish "cloudflared reconnecting
+- [x] `roost status` tunnel awareness: distinguish "cloudflared reconnecting
       after wake" (resolves itself in ~5–10s) from "app down" so users don't
       chase a non-problem.
 - [x] `roost doctor --fix` for the safe subset: PATCH `proxied:true`,

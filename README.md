@@ -417,7 +417,7 @@ mechanism as `roost enable`), and front it with Access. See the
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
 | `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add/remove apps with a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
-| `roost status` / `logs [app] [-f]` | state, health, memory, URLs / container logs (all apps if no app named) |
+| `roost status` / `logs [app] [-f]` | state, health, memory, URLs + an advisory **edge** line (tunnel connected / reconnecting-after-wake / down, so a brief 502 isn't mistaken for an app fault) / container logs (all apps if no app named) |
 | `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
 | `roost generate` | write `~/.roost/build/*` without starting anything |
