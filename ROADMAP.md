@@ -16,7 +16,7 @@ project serving side projects.
 - [ ] `roost down --remove-dns` / `roost uninstall`: clean up only the
       records recorded in `state.json`.
 - [ ] Framework detection: Laravel, Flask, Astro, SvelteKit.
-- [ ] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
+- [x] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
 - [ ] `roost logs` multiplexing (`roost logs` with no app = all apps).
 
 ## v2 — considered, not committed

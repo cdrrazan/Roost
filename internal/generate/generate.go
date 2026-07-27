@@ -460,7 +460,7 @@ type dockerfileData struct {
 func RenderDockerfile(app App) ([]byte, error) {
 	data := dockerfileData{
 		App:           app,
-		RubyTag:       versionTag(app.RuntimeVersion, "3.3"),
+		RubyTag:       versionTag(app.RuntimeVersion, "3.4"),
 		NodeTag:       nodeTag(app.RuntimeVersion),
 		PythonTag:     "3.12-slim",
 		RailsAssets:   app.Framework == "rails",
@@ -500,7 +500,7 @@ func nodeTag(version string) string {
 		major, _, _ := strings.Cut(v, ".")
 		return major + "-slim"
 	}
-	return "22-slim"
+	return "24-slim"
 }
 
 // exactVersion extracts the leading dotted-number version out of a

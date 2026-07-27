@@ -503,6 +503,28 @@ func TestRenderDockerfile(t *testing.T) {
 		}
 	})
 
+	t.Run("runtime tags default to the current matrix (ruby 3.4, node 24)", func(t *testing.T) {
+		ruby := apps["blog"]
+		ruby.RuntimeVersion = "" // no declared version -> fall back to the default
+		rout, err := RenderDockerfile(ruby)
+		if err != nil {
+			t.Fatalf("RenderDockerfile ruby: %v", err)
+		}
+		if !strings.Contains(string(rout), "ruby:3.4-slim") {
+			t.Errorf("default ruby tag: want ruby:3.4-slim in:\n%s", rout)
+		}
+
+		node := apps["api"]
+		node.RuntimeVersion = ""
+		nout, err := RenderDockerfile(node)
+		if err != nil {
+			t.Fatalf("RenderDockerfile node: %v", err)
+		}
+		if !strings.Contains(string(nout), "node:24-slim") {
+			t.Errorf("default node tag: want node:24-slim in:\n%s", nout)
+		}
+	})
+
 	t.Run("build_env is injected into the builder stage, sorted", func(t *testing.T) {
 		app := apps["api"]
 		app.BuildEnv = map[string]string{
