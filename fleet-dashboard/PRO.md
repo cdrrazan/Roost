@@ -6,8 +6,8 @@ more looks, framework ports, integration recipes, and support.
 
 ## What's in the box (free, MIT)
 
-✅ All 6 pages — dashboard, status, login, settings, components, 404
-✅ Live-updating metrics, reachability chips, incidents, command palette, detail drawer
+✅ All 7 pages — dashboard, incidents, status, login, settings, components, 404
+✅ Live-updating metrics, reachability chips, incidents + share, functional settings (mask / templates / tech stacks), command palette, detail drawer
 ✅ Light + dark, fully responsive, one-file theming
 ✅ Zero build, vanilla HTML/CSS/JS — yours to use in any project, commercial included
 

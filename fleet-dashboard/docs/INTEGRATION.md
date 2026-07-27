@@ -59,8 +59,17 @@ the same structures server-side and lets the JS handle interactions.
 | `worker` | bool | renders under Workers, no route |
 
 ### `server`, `system`, `edge`, `incidents`
-See `mock.js`. `incidents[]` items: `{ label, ago, open }` — `open:true` drives
-the active-incident banner and the sidebar/status indicators.
+See `mock.js`. `incidents[]` items: `{ app, label, kind, detail, since, ago, open }`
+— `open:true` drives the active-incident banner and marks the row live on the
+**incidents page**. A `read` flag (set by **Mark all read**) dims acknowledged
+rows without deleting them; `app` links an incident to its card's detail drawer.
+The share buttons on the incidents page compose a one-line summary from this list.
+
+### Settings (`localStorage`)
+The settings page persists to `localStorage`: `fleet-theme` / `fleet-view`, and a
+`fleet-settings` JSON `{ mask, recipient, emailSubject, emailBody, tech:{} }`.
+`fleet.js` reads it to mask IP / SSH / host / tunnel ids on the cards and to apply
+tech-stack label overrides. Swap this for your own backend settings if you like.
 
 ## Wiring the actions
 
