@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cdrrazan/roost/internal/runner"
@@ -124,6 +125,27 @@ func TestDashboardMaskAndTechOverride(t *testing.T) {
 	}
 	if !strings.Contains(body, "Ruby on Rails") {
 		t.Error("tech-stack override label should render on the card")
+	}
+}
+
+func TestDashboardDataIsCachedAcrossPages(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "a", State: "running", URL: "https://a", HTTP: "200", Reachable: true}}}
+	s := NewServer(f, "")
+
+	// Three rapid renders (dashboard → incidents → settings) must shell the
+	// controller only once — the slow docker reads are cached.
+	serve(s, "GET", "/", nil)
+	serve(s, "GET", "/incidents", nil)
+	serve(s, "GET", "/settings", nil)
+	if n := atomic.LoadInt32(&f.statusCalls); n != 1 {
+		t.Fatalf("expected 1 cached Status() call across 3 pages, got %d", n)
+	}
+
+	// Invalidating (as a mutating action does) forces a fresh read.
+	s.invalidateSnap()
+	serve(s, "GET", "/", nil)
+	if n := atomic.LoadInt32(&f.statusCalls); n != 2 {
+		t.Fatalf("expected a fresh Status() after invalidate, got %d total", n)
 	}
 }
 

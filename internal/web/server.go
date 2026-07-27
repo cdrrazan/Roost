@@ -329,6 +329,58 @@ type Server struct {
 	store         SettingsStore
 	settings      Settings
 	mailerFactory func(Settings) Notifier
+
+	// Dashboard-data cache. buildStatusView's controller reads (docker
+	// status + reachability probes, `docker system df`, cloudflared log tail,
+	// server metadata) are the panel's slow part; caching them for a short
+	// TTL means navigating to /incidents or /settings reuses the dashboard's
+	// fresh snapshot instead of re-shelling docker, and concurrent requests
+	// (the 5s poll racing a click) collapse onto one refresh.
+	snapMu sync.Mutex
+	snap   *dashSnapshot
+}
+
+// dashSnapshot is one cached read of the expensive controller data.
+type dashSnapshot struct {
+	apps      []runner.AppStatus
+	statusErr error
+	removed   []RemovedApp
+	server    ServerInfo
+	system    SystemInfo
+	edge      EdgeInfo
+	at        time.Time
+}
+
+// snapTTL bounds how stale the cached dashboard data may be. Kept just under
+// the 5s auto-refresh poll so each poll still refreshes, while back-to-back
+// navigations reuse the snapshot.
+const snapTTL = 4 * time.Second
+
+// dashData returns the cached controller reads, refreshing (under the lock, so
+// a stampede collapses to one refresh) when the snapshot is missing or stale.
+func (s *Server) dashData() *dashSnapshot {
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
+	if s.snap != nil && time.Since(s.snap.at) < snapTTL {
+		return s.snap
+	}
+	apps, err := s.ctrl.Status()
+	d := &dashSnapshot{apps: apps, statusErr: err, at: time.Now()}
+	if removed, rerr := s.ctrl.RemovedApps(); rerr == nil {
+		d.removed = removed
+	}
+	d.server = s.ctrl.ServerInfo()
+	d.system = s.ctrl.SystemInfo()
+	d.edge = s.ctrl.EdgeInfo()
+	s.snap = d
+	return d
+}
+
+// invalidateSnap forces the next dashData call to re-read the controller.
+func (s *Server) invalidateSnap() {
+	s.snapMu.Lock()
+	s.snap = nil
+	s.snapMu.Unlock()
 }
 
 // Notifier delivers an incident alert (e.g. by email). A nil notifier disables
@@ -954,6 +1006,9 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, verb string, 
 		}
 		s.busy = ""
 		s.mu.Unlock()
+		// The action changed container state; drop the cached snapshot so the
+		// next render re-reads docker instead of showing up to snapTTL of stale.
+		s.invalidateSnap()
 	}()
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -1073,9 +1128,11 @@ func (s *Server) buildStatusView() statusView {
 	}
 	s.mu.Unlock()
 
-	if apps, err := s.ctrl.Status(); err != nil {
-		view.Error = err.Error()
+	data := s.dashData()
+	if data.statusErr != nil {
+		view.Error = data.statusErr.Error()
 	} else {
+		apps := data.apps
 		view.DockerOK = true
 		view.Apps = apps
 		view.Groups = groupApps(apps)
@@ -1103,12 +1160,10 @@ func (s *Server) buildStatusView() statusView {
 		view.Alerts = buildAlerts(apps)
 		view.Sparks = s.recordAndRenderTrends(apps)
 	}
-	if removed, err := s.ctrl.RemovedApps(); err == nil {
-		view.Removed = removed
-	}
-	view.Server = s.ctrl.ServerInfo()
-	view.System = s.ctrl.SystemInfo()
-	view.Edge = s.ctrl.EdgeInfo()
+	view.Removed = data.removed
+	view.Server = data.server
+	view.System = data.system
+	view.Edge = data.edge
 	if view.Server.DiskPct >= 90 {
 		view.Alerts = append(view.Alerts, Alert{Level: "bad", Text: fmt.Sprintf("Disk %d%% full on %s", view.Server.DiskPct, view.Server.Host)})
 	} else if view.Server.DiskPct >= 80 {

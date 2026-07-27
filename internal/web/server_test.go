@@ -18,6 +18,7 @@ import (
 type fakeController struct {
 	statuses       []runner.AppStatus
 	statusErr      error
+	statusCalls    int32
 	up, down       int32
 	upErr, downErr error
 	release        chan struct{}
@@ -38,7 +39,10 @@ type fakeController struct {
 	emitLines          []string // lines AddApp/RemoveApp emit when called
 }
 
-func (f *fakeController) Status() ([]runner.AppStatus, error) { return f.statuses, f.statusErr }
+func (f *fakeController) Status() ([]runner.AppStatus, error) {
+	atomic.AddInt32(&f.statusCalls, 1)
+	return f.statuses, f.statusErr
+}
 
 func (f *fakeController) Up() error {
 	atomic.AddInt32(&f.up, 1)
