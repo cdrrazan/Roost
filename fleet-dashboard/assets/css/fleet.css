@@ -41,8 +41,8 @@ button,summary{-webkit-tap-highlight-color:transparent}
 .side .grow{display:none}
 .sideinc,.sidesys{flex:none}
 .side .user{flex:none}
-.sideinc{padding:11px;margin:12px 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
-.sideinc .si-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.sideinc{padding:7px 9px;margin:10px 0 6px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.sideinc .si-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:0}
 .sideinc .si-list{list-style:none;margin:0 0 2px;padding:0;display:flex;flex-direction:column;gap:6px}
 .sideinc .si-list li{font-size:11.5px;color:var(--muted);padding-left:13px;position:relative;line-height:1.4}
 .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
@@ -84,6 +84,7 @@ select.filter{font:inherit;font-size:13px;padding:9px 11px;border-radius:10px;bo
 .btn:hover{transform:translateY(-1px);box-shadow:var(--shadow)} .btn:active{transform:translateY(0) scale(.97)}
 .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
 .btn-sm{padding:6px 10px;font-size:12px;border-radius:9px}
+.btn-xs{padding:3px 9px;font-size:11px;border-radius:8px;font-weight:600}
 .btn-primary{background:var(--grad-brand);border-color:transparent;color:var(--brand-ink);box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 18px -8px color-mix(in srgb,var(--brand) 70%,transparent)}
 .btn-primary:hover{box-shadow:0 2px 4px rgba(0,0,0,.14),0 12px 24px -8px color-mix(in srgb,var(--brand) 78%,transparent)}
 .btn-ok{background:var(--teal-bg);border-color:transparent;color:var(--teal-ink)}
@@ -482,6 +483,7 @@ dialog::backdrop{animation:fade .2s var(--ease)}
 .btn:hover{transform:none;box-shadow:none}
 .btn:active{transform:none}
 .btn-sm{padding:7px 14px}
+.btn.btn-xs{padding:3px 11px;font-size:11px}
 .btn-primary{background:var(--md-primary);color:var(--md-on-primary);border-color:transparent;box-shadow:none}
 .btn-primary:hover{box-shadow:var(--elev-1)}
 .btn-ok{background:var(--ok);color:#fff;border-color:transparent}
