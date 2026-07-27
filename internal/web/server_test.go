@@ -322,7 +322,7 @@ func TestIncidentDetectionAndNotify(t *testing.T) {
 	}
 }
 
-func TestIncidentsPageAndClear(t *testing.T) {
+func TestIncidentsPageAndMarkRead(t *testing.T) {
 	f := &fakeController{}
 	s := NewServer(f, "")
 
@@ -342,28 +342,41 @@ func TestIncidentsPageAndClear(t *testing.T) {
 	s.checkIncidents() // sure recovers → resolved
 
 	// The dedicated page renders both, keeps the shell (nav + rail), and
-	// offers a clear-resolved control.
+	// offers a mark-all-read control.
 	rr := serve(s, "GET", "/incidents", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("GET /incidents = %d, want 200", rr.Code)
 	}
 	body := rr.Body.String()
-	for _, want := range []string{"Keeparu", "Sure", "Clear resolved", "class=\"rail\"", "inclist"} {
+	for _, want := range []string{"Keeparu", "Sure", "Mark all read", "class=\"rail\"", "inclist"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("incidents page missing %q", want)
 		}
 	}
 
-	// Clear resolved drops the resolved one, keeps the open one.
-	if rr := serve(s, "POST", "/incidents/clear", nil); rr.Code != http.StatusSeeOther {
-		t.Fatalf("POST /incidents/clear = %d, want 303", rr.Code)
+	// Mark all read keeps every incident (history is not deleted) and flags
+	// them read.
+	if rr := serve(s, "POST", "/incidents/read", nil); rr.Code != http.StatusSeeOther {
+		t.Fatalf("POST /incidents/read = %d, want 303", rr.Code)
 	}
 	s.mu.Lock()
 	n := len(s.incidents)
-	open := s.incidents[0].Resolved.IsZero()
+	allRead := true
+	for _, in := range s.incidents {
+		if !in.Read {
+			allRead = false
+		}
+	}
 	s.mu.Unlock()
-	if n != 1 || !open {
-		t.Fatalf("after clear: want 1 remaining open incident, got %d (open=%v)", n, open)
+	if n != 2 {
+		t.Fatalf("mark-read must keep the full history, got %d incidents", n)
+	}
+	if !allRead {
+		t.Error("all incidents should be flagged read after /incidents/read")
+	}
+	// The button is gone once nothing is unread.
+	if strings.Contains(serve(s, "GET", "/incidents", nil).Body.String(), "Mark all read") {
+		t.Error("Mark all read button should vanish when nothing is unread")
 	}
 }
 

@@ -14,7 +14,11 @@
   function esc(s) { return String(s).replace(/[&<>"]/g, function (m) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]; }); }
   function humanize(n) { return n.split(/[-_ ]/).map(function (w) { return w ? w[0].toUpperCase() + w.slice(1) : w; }).join(" "); }
   var TECH = { rails: "Rails", django: "Django", next: "Next.js", node: "Node", sinatra: "Sinatra", static: "Static", mysql: "MySQL", postgres: "Postgres" };
-  function tech(s) { return TECH[s] || (s ? s[0].toUpperCase() + s.slice(1) : ""); }
+  // Panel settings persist in localStorage (the static demo's stand-in for
+  // ~/.roost/panel.json): mask mode + tech-stack label overrides.
+  function FS() { try { return JSON.parse(localStorage.getItem("fleet-settings") || "{}"); } catch (e) { return {}; } }
+  function maskv(v) { return FS().mask ? "•• hidden ••" : v; }
+  function tech(s) { var o = FS().tech || {}; if (o[s]) return o[s]; return TECH[s] || (s ? s[0].toUpperCase() + s.slice(1) : ""); }
   function pctOf(a) { return a.cap ? Math.round(a.mem / a.cap * 100) : 0; }
   function memColor(p) { return p >= 90 ? "bad" : p >= 70 ? "warn" : "ok"; }
   function memStr(a) { return a.cap ? (a.mem + "MiB / " + a.cap + "MiB") : ""; }
@@ -136,18 +140,19 @@
       '<div class="ov-bar"><div class="mlabel">Uptime <b>' + d.runningPct + '%</b></div><div class="bar"><span class="fill teal" style="width:' + d.runningPct + '%"></span></div></div>' +
       '<div class="ov-bar"><div class="mlabel">Memory <b>' + d.memPct + '%</b></div><div class="bar"><span class="fill amber" style="width:' + d.memPct + '%"></span></div></div>' +
       row("Docker", "connected") + row("Total apps", d.total) + row("Running", d.running) + row("Stopped", d.stopped) + row("Memory", d.memUsed + " / " + d.memCap);
-    var s = F.server;
+    var s = F.server, mask = FS().mask;
     $("#serverBody").innerHTML =
       '<div class="ov-bar"><div class="mlabel">Disk <b>' + s.diskPct + '%</b></div><div class="bar"><span class="fill ' + (s.diskPct >= 90 ? "bad" : s.diskPct >= 70 ? "warn" : "ok") + '" style="width:' + s.diskPct + '%"></span></div></div>' +
-      row("IP address", s.ip, true) + row("Host", s.host) + row("OS", s.os) + row("CPU / RAM", s.cores + " vCPU · " + s.ram) + row("Uptime", s.uptime) + row("Disk", s.diskUsed + " / " + s.diskCap) +
-      '<div class="sshbox"><code>ssh ' + esc(s.ssh) + '</code><button class="btn btn-sm" data-copy="ssh ' + esc(s.ssh) + '">Copy</button></div>';
+      row("IP address", maskv(s.ip), true) + row("Host", maskv(s.host)) + row("OS", s.os) + row("CPU / RAM", s.cores + " vCPU · " + s.ram) + row("Uptime", s.uptime) + row("Disk", s.diskUsed + " / " + s.diskCap) +
+      (mask ? '<div class="sshbox"><code>ssh •• hidden ••</code></div>'
+        : '<div class="sshbox"><code>ssh ' + esc(s.ssh) + '</code><button class="btn btn-sm" data-copy="ssh ' + esc(s.ssh) + '">Copy</button></div>');
     var e = F.edge;
     $("#edgeBody").innerHTML =
       row("Tunnel", e.tunnel + ' <span class="rchip up" style="margin-left:6px">outbound</span>') +
-      row("Tunnel ID", e.tunnelId, true) + row("Account", e.account, true) +
+      row("Tunnel ID", maskv(e.tunnelId), true) + row("Account", maskv(e.account), true) +
       row("Access", e.protected ? '<span class="tag fw">protected</span>' : '<span class="tag worker">public</span>') +
       row("Routes", e.hosts.length + " DNS") +
-      '<div class="edgehosts">' + e.hosts.map(function (h) { return "<code>" + esc(h) + "</code>"; }).join("") + "</div>";
+      (mask ? "" : '<div class="edgehosts">' + e.hosts.map(function (h) { return "<code>" + esc(h) + "</code>"; }).join("") + "</div>");
   }
 
   function renderSidebar() {
@@ -167,21 +172,38 @@
 
   function renderIncidents(d) {
     var host = $("#incPage"); if (!host) return;
-    var resolved = F.incidents.filter(function (i) { return !i.open; }).length;
+    var unread = F.incidents.filter(function (i) { return !i.read; }).length;
     var actions =
-      (resolved ? '<form class="inline" data-clearincidents><button class="btn btn-sm" title="Remove resolved incidents from the history">Clear resolved (' + resolved + ")</button></form>" : "") +
+      (unread ? '<form class="inline" data-markread><button class="btn btn-sm" title="Acknowledge incidents — kept in history, just dimmed">Mark all read (' + unread + ")</button></form>" : "") +
       '<form class="inline" data-testalert><button class="btn btn-sm" title="Send a test alert">Test alert</button></form>';
     var body = F.incidents.length
       ? '<ul class="inclist">' + F.incidents.map(function (i) {
-          return '<li class="incrow ' + (i.open ? "open" : "resolved") + '"><span class="incdot"></span>' +
-            '<div class="incmain"><div class="inctop"><b>' + esc(i.label) + '</b> <span class="incago">' + esc(i.ago) + "</span></div>" +
+          return '<li class="incrow ' + (i.open ? "open" : "resolved") + (i.read ? " read" : " unread") + '"><span class="incdot"></span>' +
+            '<div class="incmain"><div class="inctop"><b>' + esc(i.label) + '</b> <span class="incago">' + esc(i.ago) + "</span>" + (i.read ? "" : '<span class="incnew">new</span>') + "</div>" +
             '<div class="incsub">' + esc(i.detail) + " · since " + esc(i.since) + "</div></div>" +
             '<span class="incbadge ' + (i.open ? "bad" : "ok") + '">' + (i.open ? "open" : "resolved") + "</span></li>";
         }).join("") + "</ul>"
       : '<div class="allclear"><span class="ico">✓</span> No incidents recorded — everything has been healthy.</div>';
+    var share =
+      '<div class="inc-share" data-summary="' + esc(incidentSummary(d)) + '">' +
+      '<span class="csub">Share status</span>' +
+      '<button class="btn btn-sm" data-share="copy" title="Copy the status summary + link">⧉ Copy</button>' +
+      '<button class="btn btn-sm" data-share="x" title="Post to X">𝕏</button>' +
+      '<button class="btn btn-sm" data-share="linkedin" title="Share on LinkedIn">in</button>' +
+      '<button class="btn btn-sm" data-share="facebook" title="Share on Facebook">f</button>' +
+      '<span class="inc-summary-preview">' + esc(incidentSummary(d)) + "</span></div>";
     host.innerHTML =
       '<section class="card"><div class="card-h"><h2>🔔 Incidents <span class="csub">' +
-      (d.open.length ? d.open.length + " active now" : "all clear") + '</span></h2><div class="inc-actions">' + actions + "</div></div>" + body + "</section>";
+      (d.open.length ? d.open.length + " active now" : "all clear") + '</span></h2><div class="inc-actions">' + actions + "</div></div>" + share + body + "</section>";
+  }
+
+  // incidentSummary composes the one-line status blurb the share buttons post.
+  function incidentSummary(d) {
+    if (!d.open.length) {
+      return "🟢 All systems operational — " + d.running + "/" + d.total + " services up.";
+    }
+    var parts = d.open.map(function (i) { return i.label + " (" + i.ago + ")"; });
+    return "🔴 Fleet: " + d.open.length + " service" + (d.open.length === 1 ? "" : "s") + " affected — " + parts.join(", ") + ".";
   }
 
   function renderAll() {
@@ -291,13 +313,30 @@
     setTimeout(function () { btn.innerHTML = "✓ Sent (demo)"; setTimeout(function () { btn.disabled = false; btn.innerHTML = orig; btn._b = 0; }, 1800); }, 900);
   }, true);
 
-  /* ---------- clear resolved incidents ---------- */
+  /* ---------- mark incidents read (history is kept, just dimmed) ---------- */
   document.addEventListener("submit", function (e) {
-    var f = e.target; if (!f || !f.hasAttribute("data-clearincidents")) return;
+    var f = e.target; if (!f || !f.hasAttribute("data-markread")) return;
     e.preventDefault();
-    F.incidents = F.incidents.filter(function (i) { return i.open; });
+    F.incidents.forEach(function (i) { i.read = true; });
     renderAll();
   }, true);
+
+  /* ---------- share status summary ---------- */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-share]"); if (!b) return;
+    var box = b.closest(".inc-share"), summary = box ? box.dataset.summary : "";
+    var pageUrl = location.origin + location.pathname.replace(/[^/]*$/, "") + "status.html";
+    var enc = encodeURIComponent, text = summary + " " + pageUrl, url;
+    if (b.dataset.share === "copy") {
+      var done = function () { var t = b.innerHTML; b.innerHTML = "✓ Copied"; setTimeout(function () { b.innerHTML = t; }, 1200); };
+      if (navigator.clipboard) { navigator.clipboard.writeText(text).then(done).catch(function () {}); } else { done(); }
+      return;
+    }
+    if (b.dataset.share === "x") url = "https://twitter.com/intent/tweet?text=" + enc(text);
+    else if (b.dataset.share === "linkedin") url = "https://www.linkedin.com/sharing/share-offsite/?url=" + enc(pageUrl);
+    else if (b.dataset.share === "facebook") url = "https://www.facebook.com/sharer/sharer.php?u=" + enc(pageUrl) + "&quote=" + enc(summary);
+    if (url) window.open(url, "_blank", "noopener,noreferrer,width=600,height=520");
+  });
 
   /* ---------- command palette ---------- */
   var pal = $("#palette"), palQ = $("#pal-q"), palList = $("#pal-list"), palItems = [], palShown = [], palSel = 0;
