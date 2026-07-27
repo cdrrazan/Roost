@@ -94,9 +94,12 @@ notify:
 - Alerts fire on **transitions** only (down→email, recovered→email), so a
   persistently-down app doesn't spam you. States already broken when the panel
   starts are shown but not emailed (no startup burst).
-- Incidents also surface in the panel: a red **active-incidents banner**, an
-  **Incidents** card with open/resolved history + durations, and an
-  open-incident list on the public `/status` page.
+- Incidents also surface in the panel: a red **active-incidents banner**, a
+  dedicated **Incidents page** (sidebar → Monitoring → Incidents) that keeps the
+  same left/right sidebar and lists the full open/resolved history + durations
+  with a **Clear resolved** button, per-app incident history inside each app's
+  **detail drawer**, and an open-incident list on the public `/status` page. The
+  sidebar itself carries only the **Test alert** button (no live incident list).
 
 Uses only the standard library (`net/smtp`) — no new dependency.
 

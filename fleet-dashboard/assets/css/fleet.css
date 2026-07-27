@@ -48,6 +48,9 @@ button,summary{-webkit-tap-highlight-color:transparent}
 .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .sideinc .si-list li.bad::before{background:var(--danger)}
 .sideinc .si-list li b{color:var(--ink);font-weight:600}
+.sideinc .si-link{display:block;font-size:12px;color:var(--muted);text-decoration:none;padding:2px 0 4px}
+.sideinc .si-link:hover{color:var(--ink);text-decoration:underline}
+.nav .navpip{margin-left:auto;font-size:11px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;display:inline-flex;align-items:center;justify-content:center}
 .sidesys{padding:10px 11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
 .sidesys .navlabel{padding:0 0 7px}
 .sidesys .ss-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding:3px 0}
@@ -229,6 +232,27 @@ main{overflow-y:auto;padding:20px;min-width:0}
 .incbanner{display:flex;align-items:center;gap:10px;padding:13px 16px;border-radius:12px;margin-bottom:14px;background:var(--red-bg);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);font-size:13.5px}
 .incbanner .ib-dot{width:9px;height:9px;border-radius:50%;background:var(--danger);flex:none;box-shadow:0 0 0 0 var(--danger);animation:pulse 1.8s infinite}
 .incbanner .ib-list{color:var(--ink);opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* incidents page */
+#incPage .inc-actions{display:flex;gap:8px;align-items:center}
+.inclist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column}
+.incrow{display:flex;align-items:flex-start;gap:12px;padding:13px 6px;border-top:1px solid var(--line2)}
+.incrow:first-child{border-top:0}
+.incrow .incdot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px;background:var(--ok)}
+.incrow.open .incdot{background:var(--danger);box-shadow:0 0 0 0 var(--danger);animation:pulse 1.8s infinite}
+.incrow .incmain{min-width:0;flex:1}
+.incrow .inctop{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.incrow .inctop b{font-weight:650;font-size:14px}
+.incrow .incago{font-size:12px;color:var(--muted)}
+.incrow .incsub{font-size:12.5px;color:var(--faint);margin-top:2px}
+.incrow .incbadge{margin-left:auto;flex:none;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px}
+.incrow .incbadge.bad{background:var(--red-bg);color:var(--danger)}
+.incrow .incbadge.ok{background:var(--teal-bg);color:var(--teal-ink)}
+/* incidents in the app drawer */
+.dr-incs{margin:4px 0 16px;display:flex;flex-direction:column;gap:7px}
+.dr-inc{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted);padding:9px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
+.dr-inc .d{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ok)}
+.dr-inc.open .d{background:var(--danger)}
+.dr-inc.open{color:var(--ink)}
 .count.bad{background:var(--red-bg);color:var(--danger);border-color:transparent}
 .count.ok{background:var(--teal-bg);color:var(--teal-ink);border-color:transparent}
 .idet{color:var(--faint)}

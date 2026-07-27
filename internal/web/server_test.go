@@ -322,6 +322,72 @@ func TestIncidentDetectionAndNotify(t *testing.T) {
 	}
 }
 
+func TestIncidentsPageAndClear(t *testing.T) {
+	f := &fakeController{}
+	s := NewServer(f, "")
+
+	// One app goes down (open incident), a second goes down then recovers
+	// (resolved incident).
+	f.statuses = []runner.AppStatus{
+		{Name: "keeparu", State: "running", URL: "https://keeparu.example.com", HTTP: "200", Reachable: true},
+		{Name: "sure", State: "running", URL: "https://sure.example.com", HTTP: "200", Reachable: true},
+	}
+	s.checkIncidents() // baseline healthy
+	f.statuses = []runner.AppStatus{
+		{Name: "keeparu", State: "exited", URL: "https://keeparu.example.com"},
+		{Name: "sure", State: "exited", URL: "https://sure.example.com"},
+	}
+	s.checkIncidents() // both down
+	f.statuses[1] = runner.AppStatus{Name: "sure", State: "running", URL: "https://sure.example.com", HTTP: "200", Reachable: true}
+	s.checkIncidents() // sure recovers → resolved
+
+	// The dedicated page renders both, keeps the shell (nav + rail), and
+	// offers a clear-resolved control.
+	rr := serve(s, "GET", "/incidents", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /incidents = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"Keeparu", "Sure", "Clear resolved", "class=\"rail\"", "inclist"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("incidents page missing %q", want)
+		}
+	}
+
+	// Clear resolved drops the resolved one, keeps the open one.
+	if rr := serve(s, "POST", "/incidents/clear", nil); rr.Code != http.StatusSeeOther {
+		t.Fatalf("POST /incidents/clear = %d, want 303", rr.Code)
+	}
+	s.mu.Lock()
+	n := len(s.incidents)
+	open := s.incidents[0].Resolved.IsZero()
+	s.mu.Unlock()
+	if n != 1 || !open {
+		t.Fatalf("after clear: want 1 remaining open incident, got %d (open=%v)", n, open)
+	}
+}
+
+func TestDrawerShowsAppIncidents(t *testing.T) {
+	f := &fakeController{
+		statuses: []runner.AppStatus{{Name: "keeparu", State: "exited", URL: "https://keeparu.example.com"}},
+		details:  map[string]AppDetail{"keeparu": {Name: "keeparu", Image: "roost-keeparu"}},
+	}
+	s := NewServer(f, "")
+	f.statuses[0] = runner.AppStatus{Name: "keeparu", State: "running", URL: "https://keeparu.example.com", HTTP: "200", Reachable: true}
+	s.checkIncidents() // healthy baseline
+	f.statuses[0] = runner.AppStatus{Name: "keeparu", State: "exited", URL: "https://keeparu.example.com"}
+	s.checkIncidents() // down → open incident for keeparu
+
+	rr := serve(s, "GET", "/api/app?name=keeparu", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/app = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "\"incidents\"") || !strings.Contains(body, "\"open\":true") {
+		t.Errorf("app detail missing its incident history: %s", body)
+	}
+}
+
 func TestTestAlertButton(t *testing.T) {
 	// With a notifier: POST /test-alert delivers a message.
 	n := &fakeNotifier{}

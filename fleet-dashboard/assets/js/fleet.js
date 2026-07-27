@@ -151,9 +151,11 @@
   }
 
   function renderSidebar(d) {
+    // The sidebar block is for testing alerts only — the incident list lives
+    // on the dedicated incidents page, not here.
     $("#sideInc").innerHTML =
-      '<div class="si-h"><span class="navlabel" style="padding:0">Incidents</span>' + (d.open.length ? '<span class="count bad">' + d.open.length + " open</span>" : '<span class="count ok">all clear</span>') + "</div>" +
-      (F.incidents.length ? '<ul class="si-list">' + F.incidents.map(function (i) { return '<li class="' + (i.open ? "bad" : "ok") + '"><b>' + esc(i.label) + "</b> · " + esc(i.ago) + "</li>"; }).join("") + "</ul>" : "") +
+      '<div class="si-h"><span class="navlabel" style="padding:0">Alerts</span>' + (d.open.length ? '<span class="count bad">' + d.open.length + " open</span>" : '<span class="count ok">all clear</span>') + "</div>" +
+      '<a class="si-link" href="incidents.html">View incidents' + (d.open.length ? " · " + d.open.length + " active" : "") + ' →</a>' +
       '<form class="inline" data-testalert><button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:8px">Test alert</button></form>';
     var sy = F.system;
     $("#sideSys").innerHTML =
@@ -164,9 +166,33 @@
       '<div class="ss-row"><span>Reclaimable</span><b>' + sy.reclaimable + "</b></div>";
   }
 
+  function renderIncidents(d) {
+    var host = $("#incPage"); if (!host) return;
+    var resolved = F.incidents.filter(function (i) { return !i.open; }).length;
+    var actions =
+      (resolved ? '<form class="inline" data-clearincidents><button class="btn btn-sm" title="Remove resolved incidents from the history">Clear resolved (' + resolved + ")</button></form>" : "") +
+      '<form class="inline" data-testalert><button class="btn btn-sm" title="Send a test alert">Test alert</button></form>';
+    var body = F.incidents.length
+      ? '<ul class="inclist">' + F.incidents.map(function (i) {
+          return '<li class="incrow ' + (i.open ? "open" : "resolved") + '"><span class="incdot"></span>' +
+            '<div class="incmain"><div class="inctop"><b>' + esc(i.label) + '</b> <span class="incago">' + esc(i.ago) + "</span></div>" +
+            '<div class="incsub">' + esc(i.detail) + " · since " + esc(i.since) + "</div></div>" +
+            '<span class="incbadge ' + (i.open ? "bad" : "ok") + '">' + (i.open ? "open" : "resolved") + "</span></li>";
+        }).join("") + "</ul>"
+      : '<div class="allclear"><span class="ico">✓</span> No incidents recorded — everything has been healthy.</div>';
+    host.innerHTML =
+      '<section class="card"><div class="card-h"><h2>🔔 Incidents <span class="csub">' +
+      (d.open.length ? d.open.length + " active now" : "all clear") + '</span></h2><div class="inc-actions">' + actions + "</div></div>" + body + "</section>";
+  }
+
   function renderAll() {
     var d = derive();
-    renderBanners(d); renderGraphs(d); renderApps(d); renderRail(d); renderSidebar(d);
+    if ($("#alertHost")) renderBanners(d);
+    if ($("#graphs")) renderGraphs(d);
+    if ($("#applist")) renderApps(d);
+    if ($("#ovBody")) renderRail(d);
+    if ($("#sideInc")) renderSidebar(d);
+    if ($("#incPage")) renderIncidents(d);
     attachDynamic();
   }
 
@@ -241,6 +267,14 @@
     var cells = [["Status", a.state === "running" ? "Up" : a.state], ["Health", a.health || "—"], ["Image", "fleet-" + a.name], ["Restarts", a.restarts], ["Port", a.framework === "static" ? 80 : 3000], ["Stack", tech(a.framework) + (a.db ? " · " + tech(a.db) : "")]];
     $("#dr-grid").innerHTML = cells.map(function (c) { return '<div class="dr-cell"><div class="kk">' + c[0] + '</div><div class="vv">' + esc(String(c[1])) + "</div></div>"; }).join("");
     $("#dr-env").innerHTML = a.env && a.env.length ? a.env.map(function (k) { return '<span class="tag">' + esc(k) + "</span>"; }).join("") : '<span class="tag">no env keys</span>';
+    var mine = F.incidents.filter(function (i) { return i.app === a.name; });
+    var incH = $("#dr-incs-h"), incB = $("#dr-incs");
+    if (incH && incB) {
+      if (mine.length) {
+        incH.hidden = false;
+        incB.innerHTML = mine.map(function (i) { return '<div class="dr-inc' + (i.open ? " open" : "") + '"><span class="d"></span>' + esc(i.ago) + " · " + esc(i.since) + "</div>"; }).join("");
+      } else { incH.hidden = true; incB.innerHTML = ""; }
+    }
     var logs = a.state === "running"
       ? "fleet-" + a.name + "-1  | Booting " + tech(a.framework) + "…\nfleet-" + a.name + "-1  | Listening on 0.0.0.0:3000\nfleet-" + a.name + "-1  | GET / 200 12ms\nfleet-" + a.name + "-1  | GET /health 200 2ms"
       : "fleet-" + a.name + "-1  | Process exited (code 1)\nfleet-" + a.name + "-1  | Restart attempt " + a.restarts;
@@ -256,6 +290,14 @@
     e.preventDefault(); var btn = f.querySelector("button"); if (!btn || btn._b) return; btn._b = 1;
     var orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="btnspin"></span>Sending…';
     setTimeout(function () { btn.innerHTML = "✓ Sent (demo)"; setTimeout(function () { btn.disabled = false; btn.innerHTML = orig; btn._b = 0; }, 1800); }, 900);
+  }, true);
+
+  /* ---------- clear resolved incidents ---------- */
+  document.addEventListener("submit", function (e) {
+    var f = e.target; if (!f || !f.hasAttribute("data-clearincidents")) return;
+    e.preventDefault();
+    F.incidents = F.incidents.filter(function (i) { return i.open; });
+    renderAll();
   }, true);
 
   /* ---------- command palette ---------- */
@@ -298,7 +340,7 @@
       applyFilter();
     });
   })();
-  document.querySelectorAll(".navf").forEach(function (a) { a.addEventListener("click", function (e) { e.preventDefault(); cat = a.dataset.cat; document.querySelectorAll(".navf").forEach(function (x) { x.classList.toggle("active", x === a); }); applyFilter(); document.body.classList.remove("nav-open"); }); });
+  document.querySelectorAll(".navf").forEach(function (a) { a.addEventListener("click", function (e) { if (!document.querySelector(".group")) return; /* off-dashboard (e.g. incidents page) → follow href home */ e.preventDefault(); cat = a.dataset.cat; document.querySelectorAll(".navf").forEach(function (x) { x.classList.toggle("active", x === a); }); applyFilter(); document.body.classList.remove("nav-open"); }); });
   document.addEventListener("click", function (e) { document.querySelectorAll("details.menu[open]").forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute("open"); }); });
   (function () { var tb = $("#themebtn"); if (tb) tb.addEventListener("click", function () { var dk = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = dk; try { localStorage.setItem("fleet-theme", dk); } catch (e) {} }); })();
   function collapser(id, key, store) { var b = $("#" + id), r = document.documentElement; if (!b) return; var sync = function () { b.classList.toggle("on", r.dataset[key] === "off"); }; sync(); b.addEventListener("click", function () { var off = r.dataset[key] === "off"; if (off) delete r.dataset[key]; else r.dataset[key] = "off"; try { localStorage.setItem(store, off ? "on" : "off"); } catch (e) {} sync(); }); }
