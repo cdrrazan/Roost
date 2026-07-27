@@ -2,9 +2,10 @@
 
 roost v1 is complete: config → detection → generation → runner → tunnel →
 doctor → distribution — plus a **Material Design 3 browser control panel**
-(`roost web`) and push-to-`main` auto-deploy. This file tracks where it goes
-next. Items are ordered by likely value, not by promise — this is a side
-project serving side projects.
+(`roost web`) and push-to-`main` auto-deploy. The **v1.x polish** and **v2**
+lists below are now shipped too; what remains are the explicit non-goals
+(boundaries, not backlog). Items are ordered by likely value, not by
+promise — this is a side project serving side projects.
 
 ## v1.x — polish
 
@@ -27,9 +28,10 @@ project serving side projects.
   spiritually a nicer `cloudflared tunnel --url`, but with your domain.
 - [x] **Windows lifecycle** (Task Scheduler unit) — `roost enable`/`disable`
   now register a logon task via `schtasks`.
-- **Remote roost**: the same config driving a cheap VPS instead of a laptop,
-  for the day a side project needs to survive a closed lid. This must not
-  compromise the local-first core.
+- [x] **Remote roost**: the same config driving a cheap VPS instead of a
+  laptop (`remote: ssh://…` → roost points Docker at the remote daemon;
+  source builds into the image since the remote has no copy). Local-first
+  stays the default — `remote:` only changes where containers run.
 
 ## Explicit non-goals (unchanged from the design)
 

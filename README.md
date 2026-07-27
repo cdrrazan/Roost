@@ -651,6 +651,16 @@ Cloudflare finds it by the tunnel token, not its IP. Run `cloudflared` from **on
 machine at a time** — two connectors sharing the same tunnel token split traffic
 between them.
 
+There's also a lighter option that **keeps roost on your laptop** and only runs
+the containers on the VPS: set `remote: ssh://user@vps` in `config.yml`. roost
+generates locally and points Docker at the remote daemon over SSH — no roost
+install on the box, just Docker. Because the VPS has no copy of your source,
+remote mode builds every app into its image instead of bind-mounting source (so
+a code change needs a rebuild, not just `restart`). An explicit `$DOCKER_HOST`
+overrides it; omit `remote:` and everything stays local. This must not
+compromise the local-first core — and it doesn't: local is the default, and
+`remote:` only changes *where containers run*.
+
 Moving to a *new* box is scripted: **[`scripts/roost-box-bootstrap.sh`](scripts/)**
 fetches and decrypts the latest backup, restores `~/.roost` + the systemd units,
 installs the binary, clones the app repos, then brings the stack up and restores

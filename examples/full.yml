@@ -4,6 +4,14 @@
 # Fallback domain: bare-path apps become <name>.demo.example.com.
 domain: demo.example.com
 
+# Optional: run the whole stack on a remote Docker host (a cheap VPS) instead
+# of this machine, driven by this same config. roost still generates locally
+# under ~/.roost/build; only WHERE containers run changes. In remote mode the
+# app source is NOT bind-mounted (the VPS has no copy), so every app builds
+# into its image. Any ssh://, tcp://, or unix:// Docker endpoint works; an
+# explicit $DOCKER_HOST in your environment overrides this.
+# remote: ssh://ubuntu@your-vps.example.com
+
 # Optional: route this hostname through the tunnel to the `roost web`
 # control panel (start/stop the fleet, add/remove apps from a browser).
 # The panel is a host process outside the stack — run it always-on with

@@ -60,6 +60,31 @@ func sampleApps() []App {
 	}
 }
 
+func TestPlanRemoteDisablesSourceMount(t *testing.T) {
+	fixtures, err := filepath.Abs(filepath.Join("..", "detect", "testdata"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Rails normally bind-mounts its source; remote mode must not.
+	resolved := []config.ResolvedApp{{
+		App: config.App{Path: filepath.Join(fixtures, "rails-app")}, Name: "blog", FQDN: "blog.example.com",
+	}}
+	apps, err := Plan(&config.Config{Remote: "ssh://ubuntu@box"}, resolved)
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	if !apps[0].NoSourceMount {
+		t.Error("remote mode should set NoSourceMount on a rails app")
+	}
+	out, err := RenderCompose("/build", apps, "")
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	if strings.Contains(string(out), ":/app:ro") {
+		t.Errorf("remote compose must not bind-mount source:\n%s", out)
+	}
+}
+
 func TestHealthCommand(t *testing.T) {
 	cases := []struct{ fw, want string }{
 		{"rails", "ruby -rsocket"}, {"sinatra", "ruby -rsocket"},

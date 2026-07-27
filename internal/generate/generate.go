@@ -77,6 +77,10 @@ type App struct {
 	// have). Empty for workers, own-Dockerfile apps, and frameworks with no
 	// known probe — Docker then reports no health, as before.
 	HealthCheck string
+	// NoSourceMount forces the source bind-mount off even for interpreted
+	// frameworks. Set in remote mode: the remote Docker host has no copy of
+	// the local source, so the app must build everything into its image.
+	NoSourceMount bool
 }
 
 // Plan merges each resolved app with its framework detection (or the
@@ -173,6 +177,11 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 		// are unknown to us — neither gets a generated healthcheck.
 		if !app.Worker && !app.HasOwnDockerfile {
 			app.HealthCheck = healthCommand(app.Framework, app.Port)
+		}
+		// Remote mode: the remote Docker host has no local source to mount,
+		// so every app builds into its image instead.
+		if cfg.Remote != "" {
+			app.NoSourceMount = true
 		}
 		apps = append(apps, app)
 	}
@@ -435,7 +444,7 @@ func RenderCompose(buildDir string, apps []App, controlHost string) ([]byte, err
 			Database:    app.Database,
 			Redis:       app.Redis,
 			Command:     app.Command,
-			MountSource: mountsSource(app.Framework),
+			MountSource: mountsSource(app.Framework) && !app.NoSourceMount,
 			HealthCheck: app.HealthCheck,
 			Env:         appEnv(app, seed),
 		})

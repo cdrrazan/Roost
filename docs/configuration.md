@@ -14,6 +14,7 @@ directory and relative paths resolve against the config file's own directory.
 
 ```yaml
 domain: demo.example.com   # OPTIONAL fallback for bare-path apps
+remote: ssh://ubuntu@vps   # OPTIONAL; run the stack on a remote Docker host
 control_host: control.example.com  # OPTIONAL; route this host to `roost web`
 server:                    # OPTIONAL; display-only metadata for the panel
   ip: 203.0.113.10         #   shown on the Server card + used in the ssh command
@@ -48,6 +49,17 @@ apps: [...]                # see below
     default; to make it truly public, add a **Cloudflare Access bypass policy**
     for the `/status` path (Zero Trust → Access → your app → add a policy with
     action *Bypass* scoped to that path). Everything else stays gated.
+- **`remote:`** — run the whole stack on a **remote Docker host** (a cheap VPS)
+  instead of this machine, driven by this same config. Accepts any Docker
+  endpoint: `ssh://user@host`, `tcp://host:2375`, or `unix://…`. roost still
+  generates artifacts locally under `~/.roost/build` and streams the build
+  context to the remote daemon; only *where containers run* changes. Because
+  the remote host has no copy of your source, roost does **not** bind-mount
+  source in remote mode — every app (including Rails/Django) builds into its
+  image, so `roost restart` needs a rebuild to pick up edits. roost sets
+  `DOCKER_HOST` from this value; an explicit `$DOCKER_HOST` in your environment
+  overrides it. The local-first default is unchanged: omit `remote:` and
+  everything runs on this machine.
 - **`server:`** — display-only host metadata for the panel's Server card
   (`ip`, `ssh_user`, `label`). The card also auto-shows disk usage, hostname, OS,
   CPU/RAM, and uptime; this block just supplies the public IP (not auto-detectable)
