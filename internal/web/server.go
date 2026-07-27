@@ -217,17 +217,24 @@ type Controller interface {
 
 // AppDetail is the per-app drawer payload, serialized to JSON.
 type AppDetail struct {
-	Name      string   `json:"name"`
-	URL       string   `json:"url"`
-	Image     string   `json:"image"`
-	Status    string   `json:"status"`
-	Health    string   `json:"health"`
-	Restarts  int      `json:"restarts"`
-	Port      int      `json:"port"`
-	Framework string   `json:"framework"`
-	Database  string   `json:"database"`
-	EnvKeys   []string `json:"envKeys"`
-	Logs      string   `json:"logs"`
+	Name      string        `json:"name"`
+	URL       string        `json:"url"`
+	Image     string        `json:"image"`
+	Status    string        `json:"status"`
+	Health    string        `json:"health"`
+	Restarts  int           `json:"restarts"`
+	Port      int           `json:"port"`
+	Framework string        `json:"framework"`
+	Database  string        `json:"database"`
+	EnvKeys   []string      `json:"envKeys"`
+	Logs      string        `json:"logs"`
+	Incidents []AppIncident `json:"incidents"` // this app's outage history, newest first
+}
+
+// AppIncident is one rendered incident row for the drawer's status section.
+type AppIncident struct {
+	Open bool   `json:"open"`
+	Text string `json:"text"`
 }
 
 // SystemInfo is docker's disk accounting, shown on the System card.
@@ -533,6 +540,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
 	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
+	mux.HandleFunc("GET /incidents", s.handleIncidentsPage)
+	mux.HandleFunc("POST /incidents/clear", s.guard(s.handleClearIncidents))
 	mux.HandleFunc("GET /api/app", s.handleAppDetail)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	return mux
@@ -619,8 +628,26 @@ func (s *Server) handleTestAlert(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleClearIncidents drops resolved incidents from the history, leaving open
+// ones untouched (you can't dismiss a live outage). Guarded — it mutates panel
+// state — and redirects back to the incidents page.
+func (s *Server) handleClearIncidents(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	kept := s.incidents[:0]
+	for _, in := range s.incidents {
+		if in.Resolved.IsZero() {
+			kept = append(kept, in)
+		}
+	}
+	s.incidents = kept
+	s.mu.Unlock()
+	http.Redirect(w, r, "/incidents", http.StatusSeeOther)
+}
+
 // handleAppDetail serves one app's drawer payload as JSON. Read-only, so it
-// needs no token guard; the controller rejects unknown names.
+// needs no token guard; the controller rejects unknown names. The Server folds
+// in that app's own incident history (which lives in panel state, not the
+// controller) so the drawer doubles as the app's status page.
 func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	if name == "" {
@@ -632,8 +659,32 @@ func (s *Server) handleAppDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
+	detail.Incidents = s.appIncidents(name)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(detail)
+}
+
+// appIncidents returns one app's incident history (newest first) as rendered
+// strings for the drawer, e.g. "down 6m · since Jul 27 15:04" or
+// "resolved after 3m · Jul 27 15:10".
+func (s *Server) appIncidents(name string) []AppIncident {
+	now := time.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []AppIncident
+	for _, in := range s.incidents {
+		if in.App != name {
+			continue
+		}
+		if in.Resolved.IsZero() {
+			out = append(out, AppIncident{Open: true,
+				Text: "down " + compactDur(now.Sub(in.Since)) + " · since " + in.Since.Format("Jan 2 15:04")})
+		} else {
+			out = append(out, AppIncident{
+				Text: "resolved after " + compactDur(in.Resolved.Sub(in.Since)) + " · " + in.Resolved.Format("Jan 2 15:04")})
+		}
+	}
+	return out
 }
 
 // guard enforces the shared-secret token on mutating actions when one is set.
@@ -771,6 +822,8 @@ type statusView struct {
 	Events        []eventView    // activity timeline (newest first)
 	Incidents     []incidentView // detected outages (open first)
 	OpenIncidents int
+	Resolved      int    // count of resolved (clearable) incidents
+	Page          string // "dashboard" (default) or "incidents"
 	Error         string
 	Token         string // embedded in the form when non-empty
 }
@@ -805,7 +858,27 @@ func humanBytes(b float64) string {
 	}
 }
 
+// handleStatus renders the dashboard; handleIncidentsPage renders the same
+// shell (both sidebars intact) with the incidents timeline in place of the
+// dashboard body. Both share buildStatusView so the two pages never drift.
 func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
+	s.renderPage(w, "dashboard")
+}
+
+func (s *Server) handleIncidentsPage(w http.ResponseWriter, _ *http.Request) {
+	s.renderPage(w, "incidents")
+}
+
+func (s *Server) renderPage(w http.ResponseWriter, page string) {
+	view := s.buildStatusView()
+	view.Page = page
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := statusTmpl.Execute(w, view); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) buildStatusView() statusView {
 	s.mu.Lock()
 	view := statusView{Busy: s.busy, Last: s.last, Token: s.token,
 		Steps: append([]string(nil), s.steps...)}
@@ -824,6 +897,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 			view.OpenIncidents++
 		} else {
 			iv.Ago = "resolved after " + compactDur(in.Resolved.Sub(in.Since))
+			view.Resolved++
 		}
 		view.Incidents = append(view.Incidents, iv)
 	}
@@ -870,11 +944,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	} else if view.Server.DiskPct >= 80 {
 		view.Alerts = append(view.Alerts, Alert{Level: "warn", Text: fmt.Sprintf("Disk %d%% full", view.Server.DiskPct)})
 	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := statusTmpl.Execute(w, view); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	return view
 }
 
 // buildAlerts turns the fleet state into banner warnings: stopped apps and
@@ -1065,6 +1135,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
  .sideinc .si-list li.bad::before{background:var(--danger)}
  .sideinc .si-list li b{color:var(--ink);font-weight:600}
+ .sideinc .si-link{display:block;font-size:12px;color:var(--muted);text-decoration:none;padding:2px 0 4px}
+ .sideinc .si-link:hover{color:var(--ink);text-decoration:underline}
+ .nav .navpip{margin-left:auto;font-size:11px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;display:inline-flex;align-items:center;justify-content:center}
  .sidesys{padding:10px 11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
  .sidesys .navlabel{padding:0 0 7px}
  .sidesys .ss-row{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted);padding:3px 0}
@@ -1230,6 +1303,27 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .incbanner{display:flex;align-items:center;gap:10px;padding:13px 16px;border-radius:12px;margin-bottom:14px;background:var(--red-bg);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 35%,transparent);font-size:13.5px}
  .incbanner .ib-dot{width:9px;height:9px;border-radius:50%;background:var(--danger);flex:none;box-shadow:0 0 0 0 var(--danger);animation:pulse 1.8s infinite}
  .incbanner .ib-list{color:var(--ink);opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ /* incidents page */
+ #incidents-page .inc-actions{display:flex;gap:8px;align-items:center}
+ .inclist{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column}
+ .incrow{display:flex;align-items:flex-start;gap:12px;padding:13px 6px;border-top:1px solid var(--line2)}
+ .incrow:first-child{border-top:0}
+ .incrow .incdot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:5px;background:var(--ok)}
+ .incrow.open .incdot{background:var(--danger);box-shadow:0 0 0 0 var(--danger);animation:pulse 1.8s infinite}
+ .incrow .incmain{min-width:0;flex:1}
+ .incrow .inctop{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+ .incrow .inctop b{font-weight:650;font-size:14px}
+ .incrow .incago{font-size:12px;color:var(--muted)}
+ .incrow .incsub{font-size:12.5px;color:var(--faint);margin-top:2px}
+ .incrow .incbadge{margin-left:auto;flex:none;font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px}
+ .incrow .incbadge.bad{background:var(--red-bg);color:var(--danger)}
+ .incrow .incbadge.ok{background:var(--teal-bg);color:var(--teal-ink)}
+ /* incidents in the app drawer */
+ .dr-incs{margin:4px 0 16px;display:flex;flex-direction:column;gap:7px}
+ .dr-inc{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--muted);padding:9px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
+ .dr-inc .d{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ok)}
+ .dr-inc.open .d{background:var(--danger)}
+ .dr-inc.open{color:var(--ink)}
  .count.bad{background:var(--red-bg);color:var(--danger);border-color:transparent}
  .count.ok{background:var(--teal-bg);color:var(--teal-ink);border-color:transparent}
  .idet{color:var(--faint)}
@@ -1446,13 +1540,14 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   </div>
   <nav class="nav">
    <div class="navlabel">Resources</div>
-   <a href="#" class="navf active" data-cat=""><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
-   <a href="#" class="navf" data-cat="Main apps"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg></span> Main apps</a>
-   <a href="#" class="navf" data-cat="Utilities"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.3"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.3"/></svg></span> Utilities</a>
-   <a href="#" class="navf" data-cat="Workers"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="M3.3 7 12 12l8.7-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg></span> Workers</a>
+   <a href="/" class="navf{{if ne .Page "incidents"}} active{{end}}" data-cat=""><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
+   <a href="/" class="navf" data-cat="Main apps"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg></span> Main apps</a>
+   <a href="/" class="navf" data-cat="Utilities"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.3"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.3"/></svg></span> Utilities</a>
+   <a href="/" class="navf" data-cat="Workers"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="M3.3 7 12 12l8.7-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg></span> Workers</a>
    <div class="navlabel">Monitoring</div>
-   <a href="#attention" data-scroll="attention"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Attention</a>
-   <a href="#processing" data-scroll="processing"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Activity</a>
+   <a href="/#attention" data-scroll="attention"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span> Attention</a>
+   <a href="/#processing" data-scroll="processing"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> Activity</a>
+   <a href="/incidents"{{if eq .Page "incidents"}} class="active"{{end}}><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span> Incidents{{if .OpenIncidents}} <span class="navpip">{{.OpenIncidents}}</span>{{end}}</a>
    <a href="/status" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></span> Status page ↗</a>
    <div class="navlabel">Manage</div>
    <a href="#removed" data-scroll="removed"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg></span> Removed</a>
@@ -1460,8 +1555,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   </nav>
   <div class="grow"></div>
   <div class="sideinc" id="incidents">
-   <div class="si-h"><span class="navlabel" style="padding:0">Incidents</span>{{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
-   {{if .Incidents}}<ul class="si-list">{{range .Incidents}}<li class="{{if .Open}}bad{{else}}ok{{end}}"><b>{{.Label}}</b> · {{.Ago}}</li>{{end}}</ul>{{end}}
+   <div class="si-h"><span class="navlabel" style="padding:0">Alerts</span>{{if .OpenIncidents}}<span class="count bad">{{.OpenIncidents}} open</span>{{else}}<span class="count ok">all clear</span>{{end}}</div>
+   <a class="si-link" href="/incidents">View incidents{{if .OpenIncidents}} · {{.OpenIncidents}} active{{end}} →</a>
    <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:8px" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
   </div>
   {{if .System.Images}}
@@ -1501,6 +1596,33 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 
   <div class="body">
   <main>
+   {{if eq .Page "incidents"}}
+   <section class="card" id="incidents-page">
+    <div class="card-h">
+     <h2>🔔 Incidents <span class="csub">{{if .OpenIncidents}}{{.OpenIncidents}} active now{{else}}all clear{{end}}</span></h2>
+     <div class="inc-actions">
+      {{if gt .Resolved 0}}<form class="inline" method="post" action="/incidents/clear">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Remove resolved incidents from the history">Clear resolved ({{.Resolved}})</button></form>{{end}}
+      <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
+     </div>
+    </div>
+    {{if .Incidents}}
+    <ul class="inclist">
+     {{range .Incidents}}
+     <li class="incrow {{if .Open}}open{{else}}resolved{{end}}">
+      <span class="incdot"></span>
+      <div class="incmain">
+       <div class="inctop"><b>{{.Label}}</b> <span class="incago">{{.Ago}}</span></div>
+       <div class="incsub">{{.Detail}} · since {{.Since}}</div>
+      </div>
+      <span class="incbadge {{if .Open}}bad{{else}}ok{{end}}">{{if .Open}}open{{else}}resolved{{end}}</span>
+     </li>
+     {{end}}
+    </ul>
+    {{else}}
+    <div class="allclear"><span class="ico">✓</span> No incidents recorded — everything has been healthy.</div>
+    {{end}}
+   </section>
+   {{else}}
    {{if .Error}}
    <div class="card"><div class="result err" style="margin:16px">status error: {{.Error}}</div></div>
    {{else}}
@@ -1608,6 +1730,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     </div>
    </section>
    {{end}}
+   {{end}}
   </main>
 
   <aside class="rail">
@@ -1696,6 +1819,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  <div class="drawer-b">
   <div class="dr-grid" id="dr-grid"></div>
   <div class="dr-env" id="dr-env"></div>
+  <div class="dr-logs-h" id="dr-incs-h" hidden>Incidents</div>
+  <div class="dr-incs" id="dr-incs"></div>
   <div class="dr-logs-h">Recent logs</div>
   <pre class="dr-logs" id="dr-logs">Loading…</pre>
  </div>
@@ -1766,6 +1891,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  // Sidebar category filter (show only that group, no page jump).
  document.querySelectorAll(".navf").forEach(function(a){
   a.addEventListener("click",function(e){
+   // Off the dashboard (e.g. the incidents page) there are no groups to
+   // filter — let the link fall through and navigate home.
+   if(!document.querySelector(".group"))return;
    e.preventDefault();
    cat=a.dataset.cat;
    document.querySelectorAll(".navf").forEach(function(x){x.classList.toggle("active",x===a)});
@@ -1778,9 +1906,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  function flash(el){ el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); setTimeout(function(){el.classList.remove("flash");},1300); }
  document.querySelectorAll("[data-scroll]").forEach(function(a){
   a.addEventListener("click",function(e){
-   e.preventDefault();
    var el=document.getElementById(a.dataset.scroll);
-   if(el){ el.scrollIntoView({behavior:"smooth",block:"nearest"}); flash(el); }
+   // Target missing (e.g. on the incidents page) → follow the href home.
+   if(el){ e.preventDefault(); el.scrollIntoView({behavior:"smooth",block:"nearest"}); flash(el); }
    document.body.classList.remove("nav-open");
   });
  });
@@ -1803,6 +1931,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   document.getElementById("dr-name").textContent=name;
   document.getElementById("dr-grid").innerHTML="";
   document.getElementById("dr-env").innerHTML="";
+  document.getElementById("dr-incs").innerHTML="";
+  document.getElementById("dr-incs-h").hidden=true;
   document.getElementById("dr-logs").textContent="Loading…";
   if(drawer.showModal)drawer.showModal();
   fetch("/api/app?name="+encodeURIComponent(name)).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(d){
@@ -1813,6 +1943,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    document.getElementById("dr-grid").innerHTML=cells.map(function(c){return '<div class="dr-cell"><div class="kk">'+c[0]+'</div><div class="vv">'+esc(String(c[1]))+'</div></div>';}).join("");
    var env=document.getElementById("dr-env");
    env.innerHTML=(d.envKeys&&d.envKeys.length)?d.envKeys.map(function(k){return '<span class="tag">'+esc(k)+'</span>';}).join(""):'<span class="tag">no env keys</span>';
+   var incs=document.getElementById("dr-incs"), incsH=document.getElementById("dr-incs-h");
+   if(d.incidents&&d.incidents.length){
+    incsH.hidden=false;
+    incs.innerHTML=d.incidents.map(function(i){return '<div class="dr-inc'+(i.open?' open':'')+'"><span class="d"></span>'+esc(i.text)+'</div>';}).join("");
+   }else{incsH.hidden=true;incs.innerHTML="";}
    var lg=document.getElementById("dr-logs"); lg.textContent=d.logs||"(no recent logs)"; lg.scrollTop=lg.scrollHeight;
   }).catch(function(){document.getElementById("dr-logs").textContent="Failed to load details.";});
  }

@@ -380,10 +380,13 @@ it does:
   after a wake / **down**, so a brief 502 reads as the tunnel, not your apps),
   recent activity, and the removed-apps list.
 - **Health & incidents** — real HTTP **reachability chips** (`live · 200` vs a
-  `502` that a green "container up" would hide), an **incident** banner + timeline
-  on down/recovered transitions, and optional **email alerts** (SMTP; the password
-  comes from `$ROOST_SMTP_PASSWORD`, never config). Click any app for a **detail
-  drawer** — image, restarts, env **key names**, and a recent-log tail.
+  `502` that a green "container up" would hide), a red **active-incident banner**,
+  and a dedicated **Incidents page** (sidebar → Monitoring → Incidents) with the
+  full open/resolved history, durations, and a **Clear resolved** button. Optional
+  **email alerts** (SMTP; the password comes from `$ROOST_SMTP_PASSWORD`, never
+  config); the sidebar keeps a **Test alert** button. Click any app for a **detail
+  drawer** — image, restarts, env **key names**, that app's own **incident
+  history**, and a recent-log tail.
 - **Comfort** — a **Material Design 3** interface (tonal surfaces, ripples,
   elevated cards) in light / **dark**; search, **filter chips** with a friendly
   empty state, **list / grid** views, a **⌘K command palette**, and fully
