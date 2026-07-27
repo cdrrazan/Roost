@@ -766,11 +766,22 @@ func newWebCmd(flags *rootFlags) *cobra.Command {
 			}
 			ctrl := &stackController{cmd: cmd, flags: flags}
 			panel := web.NewServer(ctrl, token)
-			if m, to := buildMailer(flags); m.Enabled() {
-				panel.SetNotifier(m)
-				cmd.Printf("incident email alerts enabled → %s\n", to)
+			if store, err := newPanelStore(); err == nil {
+				panel.SetSettingsStore(store)
 			}
-			panel.StartMonitor(30 * time.Second)
+			// The notifier is rebuilt from panel settings on every save, so
+			// changing the recipient on the settings page takes effect live.
+			panel.SetMailerFactory(func(s web.Settings) web.Notifier {
+				m := mailerFromSettings(flags, s)
+				if !m.Enabled() {
+					return nil
+				}
+				return m
+			})
+			if m := mailerFromSettings(flags, panelSettings(flags)); m.Enabled() {
+				cmd.Printf("incident email alerts enabled → %s\n", strings.Join(m.To, ", "))
+			}
+			panel.StartMonitor(2 * time.Minute)
 			srv := &http.Server{
 				Addr:              addr,
 				Handler:           panel.Handler(),
@@ -814,4 +825,43 @@ func buildMailer(flags *rootFlags) (notify.Mailer, string) {
 		From: n.From, To: n.Email,
 	}
 	return m, strings.Join(n.Email, ", ")
+}
+
+// panelSettings loads the current panel settings (defaults when none saved).
+func panelSettings(_ *rootFlags) web.Settings {
+	store, err := newPanelStore()
+	if err != nil {
+		return web.DefaultSettings()
+	}
+	s, err := store.Load()
+	if err != nil {
+		return web.DefaultSettings()
+	}
+	return s
+}
+
+// mailerFromSettings builds the incident notifier from panel settings, falling
+// back to the config.yml notify: block when the settings page hasn't set a host
+// (backward compatible). The password always comes from $ROOST_SMTP_PASSWORD —
+// never panel.json, never config.yml.
+func mailerFromSettings(flags *rootFlags, s web.Settings) notify.Mailer {
+	if s.SMTPHost == "" {
+		m, _ := buildMailer(flags)
+		return m
+	}
+	pass := os.Getenv("ROOST_SMTP_PASSWORD")
+	port := s.SMTPPort
+	if port == 0 {
+		port = 587
+	}
+	// An SMTP login with no password would fail auth on every incident; keep
+	// alerts cleanly off until $ROOST_SMTP_PASSWORD is set.
+	if s.SMTPUser != "" && pass == "" {
+		return notify.Mailer{}
+	}
+	return notify.Mailer{
+		Host: s.SMTPHost, Port: port,
+		User: s.SMTPUser, Pass: pass,
+		From: s.SMTPFrom, To: s.EmailTo,
+	}
 }

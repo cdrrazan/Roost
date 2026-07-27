@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -320,6 +321,14 @@ type Server struct {
 	roostDown bool
 	primed    bool
 	incidents []Incident
+
+	// Panel settings (guarded by mu). store persists them to ~/.roost/panel.json;
+	// a nil store means defaults-only, no persistence (the test default).
+	// mailerFactory rebuilds the notifier from settings after a save so an
+	// email change takes effect without restarting the panel.
+	store         SettingsStore
+	settings      Settings
+	mailerFactory func(Settings) Notifier
 }
 
 // Notifier delivers an incident alert (e.g. by email). A nil notifier disables
@@ -344,17 +353,26 @@ const incidentsCap = 40
 // SetNotifier attaches an incident notifier (called before Serve).
 func (s *Server) SetNotifier(n Notifier) { s.notifier = n }
 
-// StartMonitor runs incident detection on an interval in a background
-// goroutine, so outages are caught (and emailed) even with no browser open.
-func (s *Server) StartMonitor(interval time.Duration) {
+// StartMonitor runs incident detection in a background goroutine so outages are
+// caught (and emailed) even with no browser open. The cadence is driven by
+// Settings.MonitorMins (default 2 minutes) and is re-read every pass, so a
+// change on the settings page takes effect on the next tick — no restart. The
+// fallback applies only when settings yield a non-positive interval.
+func (s *Server) StartMonitor(fallback time.Duration) {
 	go func() {
-		s.checkIncidents() // prime immediately
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for range t.C {
+		for {
 			s.checkIncidents()
+			time.Sleep(s.monitorInterval(fallback))
 		}
 	}()
+}
+
+// monitorInterval resolves the live detection cadence from settings.
+func (s *Server) monitorInterval(fallback time.Duration) time.Duration {
+	if m := s.currentSettings().MonitorMins; m >= 1 {
+		return time.Duration(m) * time.Minute
+	}
+	return fallback
 }
 
 // checkIncidents runs one detection pass: it reads status, diffs each app's
@@ -372,6 +390,7 @@ func (s *Server) checkIncidents() {
 		s.health = map[string]bool{}
 	}
 	primed := s.primed
+	st := s.settings // snapshot: email templates for the down alert
 	link := "\n\nPanel: open your roost control panel."
 
 	if err != nil {
@@ -411,8 +430,8 @@ func (s *Server) checkIncidents() {
 			if !seen || prev {
 				s.openIncident(a.Name, kindFor(a), detailFor(a), now)
 				if primed {
-					out = append(out, note{"Roost · " + humanize(a.Name) + " is " + shortState(a),
-						humanize(a.Name) + " is " + detailFor(a) + ".\n\n" + a.URL + "\n" + now.Format(time.RFC1123) + link})
+					subject, body := st.renderEmail(humanize(a.Name), shortState(a), detailFor(a), a.URL, now.Format(time.RFC1123))
+					out = append(out, note{subject, body + link})
 				}
 			}
 		}
@@ -526,7 +545,43 @@ func (s *Server) addEvent(text string, ok bool) {
 // NewServer returns a panel over ctrl. An empty token disables the action
 // guard (rely on edge auth); a non-empty token is required on /up and /down.
 func NewServer(ctrl Controller, token string) *Server {
-	return &Server{ctrl: ctrl, token: token}
+	return &Server{ctrl: ctrl, token: token, settings: DefaultSettings()}
+}
+
+// SetSettingsStore attaches a persistence backend and loads the current
+// settings. Call before Serve. A load error is non-fatal — the panel falls
+// back to defaults rather than refusing to start.
+func (s *Server) SetSettingsStore(store SettingsStore) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.store = store
+	if store != nil {
+		if loaded, err := store.Load(); err == nil {
+			s.settings = loaded.Normalize()
+		}
+	}
+}
+
+// SetMailerFactory supplies a builder that turns settings into a notifier, so
+// saving new email settings rebuilds delivery in place. It also builds the
+// initial notifier from the current settings.
+func (s *Server) SetMailerFactory(f func(Settings) Notifier) {
+	s.mu.Lock()
+	s.mailerFactory = f
+	cur := s.settings
+	s.mu.Unlock()
+	if f != nil {
+		if n := f(cur); n != nil {
+			s.SetNotifier(n)
+		}
+	}
+}
+
+// currentSettings returns a copy of the live settings (defaults if unset).
+func (s *Server) currentSettings() Settings {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.settings
 }
 
 // Handler returns the panel's routes.
@@ -542,6 +597,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
 	mux.HandleFunc("GET /incidents", s.handleIncidentsPage)
 	mux.HandleFunc("POST /incidents/clear", s.guard(s.handleClearIncidents))
+	mux.HandleFunc("GET /settings", s.handleSettingsPage)
+	mux.HandleFunc("POST /settings", s.guard(s.handleSaveSettings))
 	mux.HandleFunc("GET /api/app", s.handleAppDetail)
 	mux.HandleFunc("GET /status", s.handleStatusPage)
 	return mux
@@ -642,6 +699,109 @@ func (s *Server) handleClearIncidents(w http.ResponseWriter, r *http.Request) {
 	s.incidents = kept
 	s.mu.Unlock()
 	http.Redirect(w, r, "/incidents", http.StatusSeeOther)
+}
+
+// handleSettingsPage renders the settings form in the panel shell.
+func (s *Server) handleSettingsPage(w http.ResponseWriter, _ *http.Request) {
+	s.renderPage(w, "settings")
+}
+
+// handleSaveSettings parses the settings form, persists it, and rebuilds the
+// email notifier so an address/host change takes effect immediately. Guarded —
+// it mutates panel state and can redirect delivery. The SMTP password is never
+// read here; it stays in $ROOST_SMTP_PASSWORD.
+func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	port, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("smtpPort")))
+	mins, _ := strconv.Atoi(strings.TrimSpace(r.FormValue("monitorMins")))
+	next := Settings{
+		EmailTo:       splitList(r.FormValue("emailTo")),
+		SMTPHost:      strings.TrimSpace(r.FormValue("smtpHost")),
+		SMTPPort:      port,
+		SMTPUser:      strings.TrimSpace(r.FormValue("smtpUser")),
+		SMTPFrom:      strings.TrimSpace(r.FormValue("smtpFrom")),
+		EmailSubject:  r.FormValue("emailSubject"),
+		EmailBody:     r.FormValue("emailBody"),
+		DefaultView:   r.FormValue("defaultView"),
+		DefaultTheme:  r.FormValue("defaultTheme"),
+		MaskSensitive: r.FormValue("maskSensitive") == "on",
+		TechStacks:    parseTechStacks(r.FormValue("techStacks")),
+		MonitorMins:   mins,
+	}.Normalize()
+
+	s.mu.Lock()
+	s.settings = next
+	store := s.store
+	factory := s.mailerFactory
+	s.mu.Unlock()
+
+	if store != nil {
+		if err := store.Save(next); err != nil {
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if factory != nil {
+		s.SetNotifier(factory(next)) // rebuild delivery from the new settings
+	}
+	s.addEvent("settings saved", true)
+	http.Redirect(w, r, "/settings", http.StatusSeeOther)
+}
+
+// splitList parses a comma/newline-separated address list into trimmed,
+// non-empty entries.
+func splitList(v string) []string {
+	fields := strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == '\n' || r == '\r' })
+	var out []string
+	for _, f := range fields {
+		if t := strings.TrimSpace(f); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// parseTechStacks turns a "key=Label" textarea (one per line) into overrides.
+// Blank lines and lines without '=' are ignored.
+func parseTechStacks(v string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(v, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		k, label, ok := strings.Cut(line, "=")
+		k, label = strings.TrimSpace(k), strings.TrimSpace(label)
+		if !ok || k == "" || label == "" {
+			continue
+		}
+		out[k] = label
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// techStacksText renders the overrides back into the "key=Label" textarea form,
+// sorted for a stable display.
+func techStacksText(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		b.WriteString(k + "=" + m[k] + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // handleAppDetail serves one app's drawer payload as JSON. Read-only, so it
@@ -799,33 +959,35 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, verb string, 
 }
 
 type statusView struct {
-	Apps          []runner.AppStatus
-	Groups        []appGroup         // apps bucketed into Main / Utilities / Workers
-	Attention     []runner.AppStatus // apps not running — surfaced up top
-	Total         int
-	RunningCount  int
-	RunningPct    int
-	StoppedCount  int
-	MemUsed       string // human total used across apps
-	MemCap        string // human total cap across apps
-	MemPct        int    // total used/cap percentage
-	DockerOK      bool   // false when Status() failed (Docker unreachable)
-	Busy          string
-	Last          string
-	Steps         []string     // processing-pane progress lines
-	Removed       []RemovedApp // apps removed via the panel, offered for re-add
-	Server        ServerInfo   // host metadata for the Server card
-	System        SystemInfo   // docker disk usage for the System card
-	Edge          EdgeInfo     // Cloudflare tunnel/DNS facts for the Edge card
-	Alerts        []Alert      // warnings surfaced in the top banner
-	Sparks        map[string]template.HTML
-	Events        []eventView    // activity timeline (newest first)
-	Incidents     []incidentView // detected outages (open first)
-	OpenIncidents int
-	Resolved      int    // count of resolved (clearable) incidents
-	Page          string // "dashboard" (default) or "incidents"
-	Error         string
-	Token         string // embedded in the form when non-empty
+	Apps           []runner.AppStatus
+	Groups         []appGroup         // apps bucketed into Main / Utilities / Workers
+	Attention      []runner.AppStatus // apps not running — surfaced up top
+	Total          int
+	RunningCount   int
+	RunningPct     int
+	StoppedCount   int
+	MemUsed        string // human total used across apps
+	MemCap         string // human total cap across apps
+	MemPct         int    // total used/cap percentage
+	DockerOK       bool   // false when Status() failed (Docker unreachable)
+	Busy           string
+	Last           string
+	Steps          []string     // processing-pane progress lines
+	Removed        []RemovedApp // apps removed via the panel, offered for re-add
+	Server         ServerInfo   // host metadata for the Server card
+	System         SystemInfo   // docker disk usage for the System card
+	Edge           EdgeInfo     // Cloudflare tunnel/DNS facts for the Edge card
+	Alerts         []Alert      // warnings surfaced in the top banner
+	Sparks         map[string]template.HTML
+	Events         []eventView    // activity timeline (newest first)
+	Incidents      []incidentView // detected outages (open first)
+	OpenIncidents  int
+	Resolved       int      // count of resolved (clearable) incidents
+	Page           string   // "dashboard" (default), "incidents", or "settings"
+	Settings       Settings // current panel settings (for the settings form + mask/tech rendering)
+	TechStacksText string   // Settings.TechStacks rendered as "key=Label" lines
+	Error          string
+	Token          string // embedded in the form when non-empty
 }
 
 // eventView is one rendered timeline entry.
@@ -881,7 +1043,8 @@ func (s *Server) renderPage(w http.ResponseWriter, page string) {
 func (s *Server) buildStatusView() statusView {
 	s.mu.Lock()
 	view := statusView{Busy: s.busy, Last: s.last, Token: s.token,
-		Steps: append([]string(nil), s.steps...)}
+		Steps: append([]string(nil), s.steps...), Settings: s.settings}
+	view.TechStacksText = techStacksText(s.settings.TechStacks)
 	for _, e := range s.events {
 		view.Events = append(view.Events, eventView{Time: e.At.Format("15:04:05"), Text: e.Text, OK: e.OK})
 	}
@@ -1038,12 +1201,12 @@ func sparkSVG(h []float64) template.HTML {
 }
 
 var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
-	"humanize": humanize, "slug": slug, "mempct": memPct, "memcolor": memColor, "tech": tech,
+	"humanize": humanize, "slug": slug, "mempct": memPct, "memcolor": memColor, "tech": tech, "mask": maskValue,
 }).Parse(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
-<script>(function(){try{var r=document.documentElement,t=localStorage.getItem("roost-theme")||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light");r.dataset.theme=t;if(localStorage.getItem("roost-side")==="off")r.dataset.side="off";if(localStorage.getItem("roost-rail")==="off")r.dataset.rail="off";}catch(e){}})();</script>
+<script>window.__roostCfg={theme:"{{.Settings.DefaultTheme}}",view:"{{.Settings.DefaultView}}"};(function(){try{var r=document.documentElement,c=window.__roostCfg,d=(c.theme==="light"||c.theme==="dark")?c.theme:(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"),t=localStorage.getItem("roost-theme")||d;r.dataset.theme=t;if(localStorage.getItem("roost-side")==="off")r.dataset.side="off";if(localStorage.getItem("roost-rail")==="off")r.dataset.rail="off";}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
@@ -1322,6 +1485,22 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .dr-inc .d{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ok)}
  .dr-inc.open .d{background:var(--danger)}
  .dr-inc.open{color:var(--ink)}
+ /* settings page */
+ .set-body{padding:6px 18px 4px}
+ .set-group{padding:16px 0;border-top:1px solid var(--line2)}
+ .set-group:first-child{border-top:0}
+ .set-group h3{font-size:14px;margin:0 0 10px}
+ .set-group .hint{margin:-4px 0 12px;font-size:12px;color:var(--faint)}
+ .set-row{display:flex;gap:14px;flex-wrap:wrap}
+ .set-row .field{flex:1;min-width:180px}
+ .set-body .field{margin-bottom:12px}
+ .set-body .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:5px}
+ .set-body .field .fh{font-weight:400;color:var(--faint)}
+ .set-body input[type=text],.set-body input[type=number],.set-body select,.set-body textarea{width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}
+ .set-body textarea{resize:vertical;font-family:inherit}
+ .set-check{display:flex;gap:10px;align-items:flex-start;font-size:13px;cursor:pointer}
+ .set-check input{margin-top:3px;flex:none}
+ .set-foot{padding:14px 18px;border-top:1px solid var(--line2);display:flex;justify-content:flex-end}
  .count.bad{background:var(--red-bg);color:var(--danger);border-color:transparent}
  .count.ok{background:var(--teal-bg);color:var(--teal-ink);border-color:transparent}
  .idet{color:var(--faint)}
@@ -1548,7 +1727,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    <a href="/incidents"{{if eq .Page "incidents"}} class="active"{{end}}><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span> Incidents{{if .OpenIncidents}} <span class="navpip">{{.OpenIncidents}}</span>{{end}}</a>
    <a href="/status" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg></span> Status page ↗</a>
    <div class="navlabel">Manage</div>
-   <a href="#removed" data-scroll="removed"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg></span> Removed</a>
+   <a href="/settings"{{if eq .Page "settings"}} class="active"{{end}}><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span> Settings</a>
+   <a href="/#removed" data-scroll="removed"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg></span> Removed</a>
    <a href="https://github.com/cdrrazan/roost" target="_blank" rel="noopener"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span> Repository</a>
   </nav>
   <div class="grow"></div>
@@ -1619,6 +1799,55 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <div class="allclear"><span class="ico">✓</span> No incidents recorded — everything has been healthy.</div>
     {{end}}
    </section>
+   {{else if eq .Page "settings"}}
+   <form method="post" action="/settings" class="settings-form">
+    {{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}
+
+    <section class="card">
+     <div class="card-h"><h2>⚙ Settings <span class="csub">panel preferences · saved to ~/.roost/panel.json</span></h2><button class="btn btn-primary" {{if .Busy}}disabled{{end}}>Save settings</button></div>
+     <div class="set-body">
+
+      <div class="set-group">
+       <h3>Incident email</h3>
+       <p class="hint">The SMTP password is read only from <code>$ROOST_SMTP_PASSWORD</code> — never stored here.</p>
+       <div class="field"><label>Recipients <span class="fh">comma or newline separated</span></label><textarea name="emailTo" rows="2" placeholder="you@example.com, ops@example.com">{{range $i, $a := .Settings.EmailTo}}{{if $i}}, {{end}}{{$a}}{{end}}</textarea></div>
+       <div class="set-row">
+        <div class="field"><label>SMTP host</label><input type="text" name="smtpHost" value="{{.Settings.SMTPHost}}" placeholder="smtp.gmail.com"></div>
+        <div class="field" style="max-width:120px"><label>Port</label><input type="number" name="smtpPort" value="{{.Settings.SMTPPort}}" min="1" max="65535"></div>
+       </div>
+       <div class="set-row">
+        <div class="field"><label>SMTP user</label><input type="text" name="smtpUser" value="{{.Settings.SMTPUser}}" placeholder="you@example.com"></div>
+        <div class="field"><label>From <span class="fh">optional</span></label><input type="text" name="smtpFrom" value="{{.Settings.SMTPFrom}}" placeholder="roost@example.com"></div>
+       </div>
+       <div class="field"><label>Subject template</label><input type="text" name="emailSubject" value="{{.Settings.EmailSubject}}"></div>
+       <div class="field"><label>Body template <span class="fh">placeholders: {app} {status} {detail} {url} {time}</span></label><textarea name="emailBody" rows="4">{{.Settings.EmailBody}}</textarea></div>
+      </div>
+
+      <div class="set-group">
+       <h3>Appearance</h3>
+       <div class="set-row">
+        <div class="field"><label>Default view</label><select name="defaultView"><option value="list"{{if eq .Settings.DefaultView "list"}} selected{{end}}>List</option><option value="grid"{{if eq .Settings.DefaultView "grid"}} selected{{end}}>Grid</option></select></div>
+        <div class="field"><label>Default theme</label><select name="defaultTheme"><option value="system"{{if eq .Settings.DefaultTheme "system"}} selected{{end}}>System</option><option value="light"{{if eq .Settings.DefaultTheme "light"}} selected{{end}}>Light</option><option value="dark"{{if eq .Settings.DefaultTheme "dark"}} selected{{end}}>Dark</option></select></div>
+       </div>
+       <label class="set-check"><input type="checkbox" name="maskSensitive"{{if .Settings.MaskSensitive}} checked{{end}}> <span><b>Mask sensitive info</b><br><span class="fh">Hide the public IP, SSH login, and hostname on the Server &amp; Edge cards (useful when screen-sharing).</span></span></label>
+      </div>
+
+      <div class="set-group">
+       <h3>Tech stacks</h3>
+       <p class="hint">Override how a framework or database is labelled on the cards — one <code>key=Label</code> per line (e.g. <code>rails=Ruby on Rails</code>).</p>
+       <div class="field"><textarea name="techStacks" rows="4" placeholder="rails=Ruby on Rails&#10;next=Next.js">{{.TechStacksText}}</textarea></div>
+      </div>
+
+      <div class="set-group">
+       <h3>Monitoring</h3>
+       <div class="field" style="max-width:220px"><label>Incident check interval <span class="fh">minutes</span></label><input type="number" name="monitorMins" value="{{.Settings.MonitorMins}}" min="1" max="60"></div>
+       <p class="hint">The background monitor re-checks every app on this interval and opens an incident (with details) when one goes down — even with no browser open.</p>
+      </div>
+
+     </div>
+     <div class="set-foot"><button class="btn btn-primary" {{if .Busy}}disabled{{end}}>Save settings</button></div>
+    </section>
+   </form>
    {{else}}
    {{if .Error}}
    <div class="card"><div class="result err" style="margin:16px">status error: {{.Error}}</div></div>
@@ -1694,7 +1923,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
          <div class="srv-idb">
           <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}{{if and (eq .State "running") .HTTP}}<span class="rchip {{if .Reachable}}up{{else}}down{{end}}" title="Live HTTP probe: {{.HTTP}}">{{if .Reachable}}live · {{.HTTP}}{{else}}{{.HTTP}}{{end}}</span>{{end}}</div>
           <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}{{if .Repo}} · <a class="repo" href="{{.Repo}}" target="_blank" rel="noopener" title="Open repository"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 4.7 18 5 18 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>Code</a>{{end}}</div>
-          {{if or .Framework .Database .Redis .Runtime .Worker}}<div class="tags">{{if .Worker}}<span class="tag worker">worker</span>{{end}}{{if .Framework}}<span class="tag fw">{{tech .Framework}}</span>{{end}}{{if .Database}}<span class="tag db">{{tech .Database}}</span>{{end}}{{if .Redis}}<span class="tag redis">Redis</span>{{end}}{{if .Runtime}}<span class="tag rt">{{.Runtime}}</span>{{end}}</div>{{end}}
+          {{if or .Framework .Database .Redis .Runtime .Worker}}<div class="tags">{{if .Worker}}<span class="tag worker">worker</span>{{end}}{{if .Framework}}<span class="tag fw">{{$.Settings.TechLabel .Framework}}</span>{{end}}{{if .Database}}<span class="tag db">{{$.Settings.TechLabel .Database}}</span>{{end}}{{if .Redis}}<span class="tag redis">Redis</span>{{end}}{{if .Runtime}}<span class="tag rt">{{.Runtime}}</span>{{end}}</div>{{end}}
          </div>
          <div class="srv-acts">
           <div class="seg">
@@ -1748,13 +1977,14 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     <div class="card-h"><h2>Server</h2>{{if .Server.Label}}<span class="csub">{{.Server.Label}}</span>{{end}}</div>
     <div class="ov">
      {{if .Server.DiskCap}}<div class="ov-bar"><div class="mlabel">Disk <b>{{.Server.DiskPct}}%</b></div><div class="bar"><span class="fill {{if ge .Server.DiskPct 90}}bad{{else if ge .Server.DiskPct 70}}warn{{else}}ok{{end}}" style="width:{{.Server.DiskPct}}%"></span></div></div>{{end}}
-     {{if .Server.IP}}<div class="ov-row"><span class="k">IP address</span><span class="v mono">{{.Server.IP}}</span></div>{{end}}
-     {{if .Server.Host}}<div class="ov-row"><span class="k">Host</span><span class="v">{{.Server.Host}}</span></div>{{end}}
+     {{if .Server.IP}}<div class="ov-row"><span class="k">IP address</span><span class="v mono">{{mask .Settings.MaskSensitive .Server.IP}}</span></div>{{end}}
+     {{if .Server.Host}}<div class="ov-row"><span class="k">Host</span><span class="v">{{mask .Settings.MaskSensitive .Server.Host}}</span></div>{{end}}
      {{if .Server.OS}}<div class="ov-row"><span class="k">OS</span><span class="v">{{.Server.OS}}</span></div>{{end}}
      {{if .Server.Cores}}<div class="ov-row"><span class="k">CPU / RAM</span><span class="v">{{.Server.Cores}} vCPU{{if .Server.RAM}} · {{.Server.RAM}}{{end}}</span></div>{{end}}
      {{if .Server.Uptime}}<div class="ov-row"><span class="k">Uptime</span><span class="v">{{.Server.Uptime}}</span></div>{{end}}
      {{if .Server.DiskCap}}<div class="ov-row"><span class="k">Disk</span><span class="v">{{.Server.DiskUsed}} / {{.Server.DiskCap}}</span></div>{{end}}
-     {{if .Server.SSH}}<div class="sshbox"><code>ssh {{.Server.SSH}}</code><button class="btn btn-sm" data-copy="ssh {{.Server.SSH}}" title="Copy login command">Copy</button></div>{{end}}
+     {{if and .Server.SSH (not .Settings.MaskSensitive)}}<div class="sshbox"><code>ssh {{.Server.SSH}}</code><button class="btn btn-sm" data-copy="ssh {{.Server.SSH}}" title="Copy login command">Copy</button></div>{{end}}
+     {{if and .Server.SSH .Settings.MaskSensitive}}<div class="sshbox"><code>ssh •• hidden ••</code></div>{{end}}
      {{if not .Server.IP}}<p class="empty" style="padding:2px 0 0">Set a <code>server:</code> block in config.yml to show IP + SSH login.</p>{{end}}
     </div>
    </div>
@@ -1766,11 +1996,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
      <div class="ov-row"><span class="k">Tunnel</span><span class="v">{{.Edge.TunnelName}} <span class="rchip up" style="margin-left:6px">outbound</span></span></div>
      {{if .Edge.TunnelState}}<div class="ov-row"><span class="k">Connection</span><span class="v">{{if eq .Edge.TunnelState "connected"}}<span class="rchip up">connected</span>{{else if eq .Edge.TunnelState "reconnecting"}}<span class="rchip warn">reconnecting…</span>{{else if eq .Edge.TunnelState "down"}}<span class="rchip down">down</span>{{else}}<span class="rchip">unknown</span>{{end}}</span></div>
      {{if eq .Edge.TunnelState "reconnecting"}}<div class="csub" style="margin-top:2px">cloudflared is re-establishing after a wake — brief 502s here are the edge, not your apps (~5–10s).</div>{{end}}{{end}}
-     {{if .Edge.TunnelID}}<div class="ov-row"><span class="k">Tunnel ID</span><span class="v mono">{{.Edge.TunnelID}}</span></div>{{end}}
-     {{if .Edge.Account}}<div class="ov-row"><span class="k">Account</span><span class="v mono">{{.Edge.Account}}</span></div>{{end}}
+     {{if .Edge.TunnelID}}<div class="ov-row"><span class="k">Tunnel ID</span><span class="v mono">{{mask .Settings.MaskSensitive .Edge.TunnelID}}</span></div>{{end}}
+     {{if .Edge.Account}}<div class="ov-row"><span class="k">Account</span><span class="v mono">{{mask .Settings.MaskSensitive .Edge.Account}}</span></div>{{end}}
      <div class="ov-row"><span class="k">Access</span><span class="v">{{if .Edge.Protected}}<span class="tag fw">protected</span>{{else}}<span class="tag worker">public</span>{{end}}</span></div>
      {{if .Edge.Hosts}}<div class="ov-row"><span class="k">Routes</span><span class="v">{{len .Edge.Hosts}} DNS</span></div>
-     <div class="edgehosts">{{range .Edge.Hosts}}<code>{{.}}</code>{{end}}</div>{{end}}
+     {{if not .Settings.MaskSensitive}}<div class="edgehosts">{{range .Edge.Hosts}}<code>{{.}}</code>{{end}}</div>{{end}}{{end}}
     </div>
    </div>
    {{end}}
@@ -1843,7 +2073,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   document.querySelectorAll(".glist").forEach(function(e){e.classList.toggle("grid",v==="grid")});
   document.querySelectorAll("[data-view]").forEach(function(b){b.classList.toggle("active",b.dataset.view===v)});
  }
- apply(localStorage.getItem(KEY)||"list");
+ apply(localStorage.getItem(KEY)||((window.__roostCfg&&window.__roostCfg.view==="grid")?"grid":"list"));
  document.querySelectorAll("[data-view]").forEach(function(b){
   b.addEventListener("click",function(){localStorage.setItem(KEY,b.dataset.view);apply(b.dataset.view);});
  });
@@ -2078,7 +2308,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  document.querySelectorAll(".side .nav a:not(.navf)").forEach(function(a){a.addEventListener("click",function(){document.body.classList.remove("nav-open");});});
 
  // Reattach listeners + reapply view/filter to freshly rendered main/rail.
- function initDynamic(){ apply(localStorage.getItem(KEY)||"list"); filter(); attachSpark(); attachCopy(); }
+ function initDynamic(){ apply(localStorage.getItem(KEY)||((window.__roostCfg&&window.__roostCfg.view==="grid")?"grid":"list")); filter(); attachSpark(); attachCopy(); }
  initDynamic();
 
  // Live auto-refresh: poll the page and swap only main + rail, preserving
