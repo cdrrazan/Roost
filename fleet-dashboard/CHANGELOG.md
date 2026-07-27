@@ -13,9 +13,9 @@ All notable changes to Fleet are documented here. Format: [Keep a Changelog](htt
   doubles as its status page.
 
 ### Changed
-- The sidebar `Incidents` block is now **Alerts** — a Test-alert control plus a
-  *View incidents →* link. The live incident list moved to the dedicated page
-  (the sidebar block is for testing alerts only).
+- The sidebar `Incidents` block is now **Alerts** — a Test-alert control only.
+  The incident list moved to the dedicated page; the sidebar is for testing
+  alerts (reach the page via Monitoring → Incidents).
 - Resource nav links navigate home when clicked off the dashboard.
 
 ## [1.1.0] — 2026-07-26

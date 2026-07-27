@@ -48,8 +48,6 @@ button,summary{-webkit-tap-highlight-color:transparent}
 .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
 .sideinc .si-list li.bad::before{background:var(--danger)}
 .sideinc .si-list li b{color:var(--ink);font-weight:600}
-.sideinc .si-link{display:block;font-size:12px;color:var(--muted);text-decoration:none;padding:2px 0 4px}
-.sideinc .si-link:hover{color:var(--ink);text-decoration:underline}
 .nav .navpip{margin-left:auto;font-size:11px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--danger);color:#fff;display:inline-flex;align-items:center;justify-content:center}
 .sidesys{padding:10px 11px;margin:0 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
 .sidesys .navlabel{padding:0 0 7px}

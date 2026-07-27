@@ -150,13 +150,12 @@
       '<div class="edgehosts">' + e.hosts.map(function (h) { return "<code>" + esc(h) + "</code>"; }).join("") + "</div>";
   }
 
-  function renderSidebar(d) {
-    // The sidebar block is for testing alerts only — the incident list lives
-    // on the dedicated incidents page, not here.
+  function renderSidebar() {
+    // The sidebar block is for testing alerts only — incidents live on the
+    // dedicated incidents page (sidebar → Monitoring → Incidents).
     $("#sideInc").innerHTML =
-      '<div class="si-h"><span class="navlabel" style="padding:0">Alerts</span>' + (d.open.length ? '<span class="count bad">' + d.open.length + " open</span>" : '<span class="count ok">all clear</span>') + "</div>" +
-      '<a class="si-link" href="incidents.html">View incidents' + (d.open.length ? " · " + d.open.length + " active" : "") + ' →</a>' +
-      '<form class="inline" data-testalert><button class="btn btn-sm" style="width:100%;justify-content:center;margin-top:8px">Test alert</button></form>';
+      '<div class="si-h"><span class="navlabel" style="padding:0">Alerts</span></div>' +
+      '<form class="inline" data-testalert><button class="btn btn-sm" style="width:100%;justify-content:center">Test alert</button></form>';
     var sy = F.system;
     $("#sideSys").innerHTML =
       '<div class="navlabel">System · docker</div>' +
@@ -191,7 +190,7 @@
     if ($("#graphs")) renderGraphs(d);
     if ($("#applist")) renderApps(d);
     if ($("#ovBody")) renderRail(d);
-    if ($("#sideInc")) renderSidebar(d);
+    if ($("#sideInc")) renderSidebar();
     if ($("#incPage")) renderIncidents(d);
     attachDynamic();
   }
