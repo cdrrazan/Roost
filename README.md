@@ -405,7 +405,7 @@ mechanism as `roost enable`), and front it with Access. See the
 |---|---|
 | `roost init` | interactive setup; writes `~/.roost/config.yml` with explicit hostnames |
 | `roost auth login` | store the API token (`~/.roost/credentials`, `0600`) |
-| `roost doctor` | preflight: every failure comes with a specific fix |
+| `roost doctor [--fix]` | preflight: every failure comes with a specific fix. `--fix` applies the safe subset — chmod the credentials file, create a missing tunnel DNS record, flip a grey-cloud record to proxied |
 | `roost tunnel setup [--adopt] [--force]` | tunnel + all DNS records via API |
 | `roost tunnel access` | Cloudflare Access policy across every suffix |
 

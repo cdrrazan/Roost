@@ -16,12 +16,42 @@ const (
 	Fail Level = "fail"
 )
 
-// Finding is one check's outcome.
+// FixKind identifies a safe, specific remediation doctor can apply for a
+// finding when run with --fix. The set is deliberately small: only changes
+// that can't clobber something the user meant to keep.
+type FixKind string
+
+const (
+	// FixProxyDNS flips an existing, correctly-targeted tunnel record to
+	// proxied (grey-cloud → orange-cloud). PatchDNSProxied.
+	FixProxyDNS FixKind = "proxy-dns"
+	// FixCreateDNS creates a wholly missing tunnel record. Never repoints an
+	// existing record — a wrong-content record is reported, not overwritten.
+	FixCreateDNS FixKind = "create-dns"
+	// FixCredPerms chmods the credentials file to 0600.
+	FixCredPerms FixKind = "cred-perms"
+)
+
+// Fix is the remediation attached to a fixable finding. Params are
+// primitives so the doctor core needn't import the Cloudflare client; the
+// applier (fix.go) turns them into API/filesystem calls.
+type Fix struct {
+	Kind     FixKind
+	ZoneID   string // proxy-dns, create-dns
+	RecordID string // proxy-dns
+	Name     string // create-dns / proxy-dns (for the message)
+	Content  string // create-dns
+	Path     string // cred-perms
+}
+
+// Finding is one check's outcome. Fix is non-nil only when --fix can
+// safely remediate it.
 type Finding struct {
 	Check   string
 	Level   Level
 	Message string
 	Remedy  string
+	Fix     *Fix
 }
 
 func ok(check, message string) Finding {

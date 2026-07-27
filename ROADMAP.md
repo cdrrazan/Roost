@@ -11,7 +11,7 @@ project serving side projects.
 - [ ] `roost status` tunnel awareness: distinguish "cloudflared reconnecting
       after wake" (resolves itself in ~5–10s) from "app down" so users don't
       chase a non-problem.
-- [ ] `roost doctor --fix` for the safe subset: PATCH `proxied:true`,
+- [x] `roost doctor --fix` for the safe subset: PATCH `proxied:true`,
       create missing DNS records, chmod credentials.
 - [x] `roost down --remove-dns` / `roost uninstall`: clean up only the
       records recorded in `state.json`.
