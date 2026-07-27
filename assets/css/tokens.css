@@ -1,51 +1,110 @@
 /* ============================================================================
-   Fleet Dashboard — Design Tokens
+   Fleet Dashboard — Design Tokens · Material Design 3
    ----------------------------------------------------------------------------
-   THIS IS THE ONLY FILE YOU NEED TO EDIT TO REBRAND.
-   Change --brand to your accent color; everything else (buttons, links,
-   active nav, focus rings, charts) follows automatically. Light + dark are
-   both defined; the viewer's theme toggle sets data-theme on <html>.
+   REBRAND HERE. Change the primary tonal ramp (--md-primary*) and everything
+   follows — buttons, nav, cards, charts, state layers, focus.
+
+   This is an MD3 tonal system: primary + neutral surface tiers
+   (surface-container-lowest → highest), on-* text roles, outline, elevation
+   levels, and state-layer opacities. The legacy token names the components use
+   (--bg, --panel, --ink, --brand …) are ALIASED to MD3 roles at the bottom of
+   each block, so the whole UI is Material without touching every rule.
+
+   Light + dark both defined; the theme toggle sets data-theme on <html>.
    ============================================================================ */
 :root{
- --bg:#eef0f4; --bg1:#fdf1f8; --bg2:#eef1ff; --bg3:#ecfdfb; --bg4:#fff2f1;
  color-scheme:light;
- --panel:#ffffff; --panel2:#f8f9fc; --line:#ecedf3; --line2:#f2f3f7; --track:#edeff5;
- --ink:#12141c; --muted:#5f6675; --faint:#98a0b0;
- --brand:#5b54e6; --brand-ink:#fff;
- --ok:#12a150; --amber:#e08a1e; --danger:#e5484d;
- --red-bg:#fff1f2; --red-ink:#d64550; --red-line:#fbdde0;
- --amber-bg:#fff7ed; --amber-ink:#c2790f; --amber-line:#f8e6ce;
- --teal-bg:#ecfdf5; --teal-ink:#0e7a54;
- --indigo-bg:#eef0ff; --indigo-ink:#4f46e5;
- --shadow:0 1px 2px rgba(16,19,34,.04),0 12px 30px -18px rgba(16,19,34,.14);
- --shadow-lg:0 40px 80px -40px rgba(24,20,60,.30);
- --shadow-hover:0 2px 4px rgba(16,19,34,.05),0 24px 48px -22px rgba(24,20,60,.28);
- --radius:16px;
- --font:"Google Sans","Product Sans","Google Sans Text",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,system-ui,sans-serif;
- --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
- /* motion + depth (premium layer) */
- --ease:cubic-bezier(.4,0,.2,1); --spring:cubic-bezier(.34,1.4,.5,1);
- --ring:0 0 0 3px color-mix(in srgb,var(--brand) 32%,transparent);
- --grad-brand:linear-gradient(135deg,color-mix(in srgb,var(--brand) 82%,#fff),var(--brand));
- --hi:inset 0 1px 0 rgba(255,255,255,.6);
- --glass:color-mix(in srgb,var(--panel) 78%,transparent);
-}
-:root[data-theme="dark"]{
- --bg:#0a0d13; --bg1:#141021; --bg2:#0f1424; --bg3:#0d1a1e; --bg4:#1a1220;
- color-scheme:dark;
- --panel:#12161f; --panel2:#161c27; --line:#222a38; --line2:#1b2230; --track:#212836;
- --ink:#e7ecf5; --muted:#9aa4b6; --faint:#68738a;
- --brand:#7c75f5;
- --ok:#37d383; --amber:#e6a84a; --danger:#f0616a;
- --red-bg:#2a1618; --red-ink:#f0868c; --red-line:#3a1e22;
- --amber-bg:#271c10; --amber-ink:#e6b877; --amber-line:#372711;
- --teal-bg:#0f2a1c; --teal-ink:#5bdc90;
- --indigo-bg:#191d38; --indigo-ink:#a9a3ff;
- --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 34px -18px rgba(0,0,0,.7);
- --shadow-lg:0 40px 90px -40px rgba(0,0,0,.8);
- --shadow-hover:0 2px 6px rgba(0,0,0,.35),0 26px 52px -22px rgba(0,0,0,.85);
+
+ /* ---- MD3 color roles ---------------------------------------------------- */
+ --md-primary:#5b54e6; --md-on-primary:#ffffff;
+ --md-primary-container:#e4e0ff; --md-on-primary-container:#16008a;
+ --md-secondary:#5d5c72; --md-secondary-container:#e3e0f9; --md-on-secondary-container:#191a2c;
+ --md-tertiary:#0e7a54; --md-tertiary-container:#a8f2cd; --md-on-tertiary-container:#00210f;
+ --md-error:#ba1a1a; --md-on-error:#ffffff; --md-error-container:#ffdad6; --md-on-error-container:#410002;
+ --md-warning:#8a5300; --md-warning-container:#ffddb0; --md-on-warning-container:#2b1700;
+
+ --md-surface:#faf8ff;
+ --md-surface-container-lowest:#ffffff;
+ --md-surface-container-low:#f4f2fc;
+ --md-surface-container:#eeecf6;
+ --md-surface-container-high:#e8e6f1;
+ --md-surface-container-highest:#e3e0eb;
+ --md-on-surface:#1b1b21;
+ --md-on-surface-variant:#48464f;
+ --md-outline:#79767f;
+ --md-outline-variant:#cac4d0;
+ --md-surface-tint:var(--md-primary);
+
+ /* ---- elevation (MD3: shadow; tint is applied per-surface) ---------------- */
+ --elev-1:0 1px 2px rgba(16,19,34,.28),0 1px 3px 1px rgba(16,19,34,.10);
+ --elev-2:0 1px 2px rgba(16,19,34,.28),0 2px 6px 2px rgba(16,19,34,.10);
+ --elev-3:0 1px 3px rgba(16,19,34,.28),0 4px 8px 3px rgba(16,19,34,.12);
+ --elev-4:0 2px 3px rgba(16,19,34,.28),0 6px 10px 4px rgba(16,19,34,.12);
+ --elev-5:0 4px 4px rgba(16,19,34,.28),0 8px 12px 6px rgba(16,19,34,.14);
+
+ /* ---- state layers (MD3 interaction overlays) ---------------------------- */
+ --state-hover:.08; --state-focus:.10; --state-press:.10;
+ --sl-on-surface:var(--md-on-surface);
+ --sl-primary:var(--md-primary);
+
+ /* ---- shape -------------------------------------------------------------- */
+ --radius-xs:8px; --radius-sm:12px; --radius:16px; --radius-lg:20px; --radius-xl:28px; --radius-full:999px;
+
+ /* ---- MD3 motion --------------------------------------------------------- */
+ --md-standard:cubic-bezier(.2,0,0,1);
+ --md-emphasized:cubic-bezier(.2,0,0,1);
+ --md-emphasized-accel:cubic-bezier(.3,0,.8,.15);
+ --md-emphasized-decel:cubic-bezier(.05,.7,.1,1);
+
+ /* ---- type --------------------------------------------------------------- */
+ --font:"Google Sans","Product Sans","Google Sans Text",Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif;
+ --mono:ui-monospace,SFMono-Regular,"Roboto Mono",Menlo,monospace;
+
+ /* ---- legacy aliases → MD3 (components read these) ----------------------- */
+ --bg:var(--md-surface);
+ --panel:var(--md-surface-container-low); --panel2:var(--md-surface-container);
+ --line:var(--md-outline-variant); --line2:var(--md-surface-container-high); --track:var(--md-surface-container-high);
+ --ink:var(--md-on-surface); --muted:var(--md-on-surface-variant); --faint:var(--md-outline);
+ --brand:var(--md-primary); --brand-ink:var(--md-on-primary);
+ --ok:#1f8b4c; --amber:#a86a00; --danger:var(--md-error);
+ --red-bg:var(--md-error-container); --red-ink:#8c1010; --red-line:color-mix(in srgb,var(--md-error) 30%,transparent);
+ --amber-bg:var(--md-warning-container); --amber-ink:var(--md-on-warning-container); --amber-line:color-mix(in srgb,var(--amber) 30%,transparent);
+ --teal-bg:var(--md-tertiary-container); --teal-ink:var(--md-on-tertiary-container);
+ --indigo-bg:var(--md-primary-container); --indigo-ink:var(--md-on-primary-container);
+ --shadow:var(--elev-1); --shadow-hover:var(--elev-2); --shadow-lg:var(--elev-3);
+ --ease:var(--md-standard); --spring:cubic-bezier(.34,1.4,.5,1);
  --ring:0 0 0 3px color-mix(in srgb,var(--brand) 40%,transparent);
- --grad-brand:linear-gradient(135deg,color-mix(in srgb,var(--brand) 78%,#fff),var(--brand));
- --hi:inset 0 1px 0 rgba(255,255,255,.06);
- --glass:color-mix(in srgb,var(--panel) 72%,transparent);
+ --grad-brand:linear-gradient(135deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));
+ --hi:none; --glass:color-mix(in srgb,var(--md-surface) 80%,transparent);
+}
+
+:root[data-theme="dark"]{
+ color-scheme:dark;
+
+ --md-primary:#c7bfff; --md-on-primary:#29018f;
+ --md-primary-container:#4239a5; --md-on-primary-container:#e5deff;
+ --md-secondary:#c6c3dc; --md-secondary-container:#454458; --md-on-secondary-container:#e3e0f9;
+ --md-tertiary:#5bdca0; --md-tertiary-container:#00522f; --md-on-tertiary-container:#8bf9c4;
+ --md-error:#ffb4ab; --md-on-error:#690005; --md-error-container:#93000a; --md-on-error-container:#ffdad6;
+ --md-warning:#ffb95a; --md-warning-container:#5c3d00; --md-on-warning-container:#ffddb0;
+
+ --md-surface:#131218;
+ --md-surface-container-lowest:#0d0e13;
+ --md-surface-container-low:#1b1b21;
+ --md-surface-container:#201f26;
+ --md-surface-container-high:#2a2930;
+ --md-surface-container-highest:#35343b;
+ --md-on-surface:#e5e1e9;
+ --md-on-surface-variant:#c9c5d0;
+ --md-outline:#938f99;
+ --md-outline-variant:#48464f;
+
+ --elev-1:0 1px 2px rgba(0,0,0,.5),0 1px 3px 1px rgba(0,0,0,.3);
+ --elev-2:0 1px 2px rgba(0,0,0,.5),0 2px 6px 2px rgba(0,0,0,.3);
+ --elev-3:0 1px 3px rgba(0,0,0,.5),0 4px 8px 3px rgba(0,0,0,.35);
+ --elev-4:0 2px 3px rgba(0,0,0,.5),0 6px 10px 4px rgba(0,0,0,.35);
+ --elev-5:0 4px 4px rgba(0,0,0,.5),0 8px 12px 6px rgba(0,0,0,.4);
+
+ --ok:#5bdc90; --amber:#ffb95a; --danger:var(--md-error);
+ --red-ink:#ffb4ab;
 }

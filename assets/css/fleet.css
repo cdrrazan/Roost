@@ -15,7 +15,7 @@ h1,h2,h3{margin:0;letter-spacing:-.01em}
 ::-webkit-scrollbar-thumb:hover{background:var(--faint)}
 ::-webkit-scrollbar-track{background:transparent}
 :focus{outline:none}
-a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:none;box-shadow:var(--ring);border-radius:8px}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--md-primary);outline-offset:2px}
 button,summary{-webkit-tap-highlight-color:transparent}
 ::selection{background:color-mix(in srgb,var(--brand) 26%,transparent)}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;transition-duration:.001ms!important}}
@@ -417,3 +417,182 @@ dialog::backdrop{animation:fade .2s var(--ease)}
 .skeleton::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--ink) 7%,transparent),transparent);animation:shimmer 1.3s infinite}
 @keyframes shimmer{to{transform:translateX(100%)}}
+
+/* ============================================================================
+   MATERIAL DESIGN 3 LAYER
+   Upgrades the base components to MD3: elevated surfaces, filled/tonal/outlined/
+   text buttons, pill nav indicators, circular icon buttons, MD3 chips, state
+   layers (the hover/press overlay), and a FAB. Reads MD3 tokens from tokens.css.
+   ============================================================================ */
+
+/* ---- state layer: the MD3 hover/press overlay on any interactive ---------- */
+.btn,.iconbtn,.nav a,.segbtn,.kebab,.seggroup button,.toggle button,.menu-item,
+.pal-list li,.fab,.chip-btn{position:relative;isolation:isolate}
+.btn::after,.iconbtn::after,.nav a::after,.segbtn::after,.kebab::after,
+.seggroup button::after,.toggle button::after,.menu-item::after,.pal-list li::after,
+.fab::after{content:"";position:absolute;inset:0;border-radius:inherit;background:currentColor;
+ opacity:0;transition:opacity .15s var(--md-standard);pointer-events:none;z-index:-1}
+.btn:hover::after,.iconbtn:hover::after,.nav a:hover::after,.segbtn:hover::after,
+.kebab:hover::after,.seggroup button:hover::after,.toggle button:hover::after,
+.menu-item:hover::after,.pal-list li:hover::after,.fab:hover::after{opacity:var(--state-hover)}
+.btn:active::after,.iconbtn:active::after,.nav a:active::after,.segbtn:active::after,
+.kebab:active::after,.fab:active::after{opacity:var(--state-press)}
+
+/* ---- elevated cards (no border; elevation defines them) ------------------- */
+.card{border:none;background:var(--md-surface-container-low);box-shadow:var(--elev-1);border-radius:var(--radius)}
+.card:hover{border:none;box-shadow:var(--elev-2)}
+.gcard{border:none;background:var(--md-surface-container-low);box-shadow:var(--elev-1);border-radius:var(--radius)}
+.gcard:hover{box-shadow:var(--elev-2)}
+.glist.grid .srv{border:1px solid var(--md-outline-variant);background:var(--md-surface-container-lowest);border-radius:var(--radius-sm);box-shadow:none}
+.glist.grid .srv:hover{border-color:var(--md-outline-variant);background:var(--md-surface-container-low);box-shadow:var(--elev-2)}
+.card-h{border-bottom-color:var(--md-outline-variant)}
+
+/* ---- buttons: MD3 variants ---------------------------------------------- */
+.btn{border-radius:var(--radius-full);padding:9px 20px;font-weight:600;letter-spacing:.01em;
+ border:1px solid var(--md-outline-variant);background:transparent;color:var(--md-primary)}
+.btn:hover{transform:none;box-shadow:none}
+.btn:active{transform:none}
+.btn-sm{padding:7px 14px}
+.btn-primary{background:var(--md-primary);color:var(--md-on-primary);border-color:transparent;box-shadow:none}
+.btn-primary:hover{box-shadow:var(--elev-1)}
+.btn-ok{background:var(--ok);color:#fff;border-color:transparent}
+.btn-ok:hover{background:var(--ok);color:#fff;box-shadow:var(--elev-1)}
+:root[data-theme="dark"] .btn-ok{color:#08160e}
+.btn-danger{background:transparent;color:var(--md-error);border-color:transparent}
+.btn-danger:hover{background:transparent;border-color:transparent}
+
+/* ---- icon buttons: circular, no container ------------------------------- */
+.iconbtn{border-radius:var(--radius-full);border:none;background:transparent;color:var(--md-on-surface-variant);width:40px;height:40px}
+.iconbtn:hover{background:transparent;border:none}
+.iconbtn:active{transform:none}
+.iconbtn.on{background:var(--md-primary-container);color:var(--md-on-primary-container)}
+.iconbtn.palk{border:1px solid var(--md-outline-variant)}
+.kebab{border-radius:var(--radius-full);border:none;background:transparent}
+.menu[open] .kebab{background:var(--md-primary-container);color:var(--md-on-primary-container)}
+
+/* ---- nav: MD3 pill active indicator ------------------------------------- */
+.nav a{border-radius:var(--radius-full);padding:10px 16px;font-weight:600}
+.nav a.active{background:var(--md-secondary-container);color:var(--md-on-secondary-container)}
+.nav a.active::before{display:none}
+.nav a.active .ico,.nav a.active{color:var(--md-on-secondary-container)}
+
+/* ---- search: MD3 filled field ------------------------------------------- */
+.search input{border-radius:var(--radius-full);border:1px solid transparent;background:var(--md-surface-container-high);padding-top:11px;padding-bottom:11px}
+.search input:focus{border-color:var(--md-primary);box-shadow:none;background:var(--md-surface-container-high)}
+select.filter{border-radius:var(--radius-full);border-color:var(--md-outline-variant);background:transparent}
+
+/* ---- chips: MD3 shape ---------------------------------------------------- */
+.tag{border-radius:var(--radius-xs);font-weight:600;padding:3px 9px;border:1px solid transparent}
+.tag.rt{border-color:var(--md-outline-variant);background:transparent}
+.pill{border-radius:var(--radius-full)}
+.rchip{border-radius:var(--radius-full)}
+.count{border-radius:var(--radius-full)}
+
+/* ---- segmented (toggle) — MD3 outlined segmented button ----------------- */
+.toggle{border-radius:var(--radius-full);border:1px solid var(--md-outline-variant);background:transparent;padding:0;overflow:hidden}
+.toggle button{border-radius:0;padding:8px 16px}
+.toggle button.active{background:var(--md-secondary-container);color:var(--md-on-secondary-container);box-shadow:none}
+.seg{border-radius:var(--radius-full);border-color:var(--md-outline-variant);overflow:hidden}
+
+/* ---- topbar: MD3 flat app bar ------------------------------------------- */
+.topbar{background:var(--md-surface);border-bottom:1px solid var(--md-outline-variant)}
+.side{background:var(--md-surface);border-right:1px solid var(--md-outline-variant)}
+.rail{background:var(--md-surface)}
+
+/* ---- FAB (floating action button) --------------------------------------- */
+.fab{position:fixed;right:26px;bottom:26px;z-index:60;height:56px;padding:0 20px;min-width:56px;
+ display:inline-flex;align-items:center;gap:12px;border:none;cursor:pointer;
+ border-radius:var(--radius-lg);background:var(--md-primary-container);color:var(--md-on-primary-container);
+ box-shadow:var(--elev-3);font:inherit;font-size:14px;font-weight:600;
+ transition:box-shadow .2s var(--md-standard),transform .2s var(--spring)}
+.fab:hover{box-shadow:var(--elev-4)} .fab:active{transform:scale(.96)}
+.fab svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2}
+@media(max-width:600px){.fab{right:16px;bottom:16px;padding:0;width:56px;justify-content:center}.fab .fab-t{display:none}}
+
+/* ---- dialogs / drawer / palette: MD3 surfaces --------------------------- */
+dialog{background:var(--md-surface-container-high);border:none;box-shadow:var(--elev-3);border-radius:var(--radius-xl)}
+dialog.drawer{border-radius:0;box-shadow:var(--elev-5)}
+dialog.palette{border-radius:var(--radius-xl)}
+.menu-pop{background:var(--md-surface-container-high);border:none;box-shadow:var(--elev-2);border-radius:var(--radius-sm)}
+
+/* ---- switch: MD3 style (already close; refine colors) ------------------- */
+.switch .track{background:var(--md-surface-container-highest);border:2px solid var(--md-outline)}
+.switch .track::after{background:var(--md-outline);width:14px;height:14px;top:5px;left:5px}
+.switch input:checked+.track{background:var(--md-primary);border-color:var(--md-primary)}
+.switch input:checked+.track::after{background:var(--md-on-primary);width:18px;height:18px;top:3px;left:3px;transform:translateX(16px)}
+
+/* ---- ripple (MD3 touch feedback; spawned by md3.js) --------------------- */
+.btn,.iconbtn,.fab,.nav a,.segbtn,.kebab,.toggle button,.seggroup button,
+.menu-item,.pal-list li,.chip-btn{overflow:hidden}
+.ripple-ink{position:absolute;border-radius:50%;background:currentColor;opacity:.24;
+ transform:scale(0);pointer-events:none;z-index:-1;animation:ripple-out .55s var(--md-standard)}
+@keyframes ripple-out{to{transform:scale(1);opacity:0}}
+
+/* ---- app bar: flat at rest, elevates when content scrolls under ---------- */
+.topbar{transition:box-shadow .2s var(--md-standard),background .2s var(--md-standard);z-index:5}
+.topbar.scrolled{box-shadow:var(--elev-2);border-bottom-color:transparent;background:var(--md-surface-container-low)}
+
+/* ---- FAB clearance: pad scroll regions so nothing hides under it --------- */
+main{padding-bottom:92px} .rail{padding-bottom:96px}
+@media(max-width:1080px){main,.rail{padding-bottom:80px}}
+
+/* ---- MD3 type scale refinements ----------------------------------------- */
+.card-h h2{font-size:16px;font-weight:600;letter-spacing:0}
+.card-h .csub{letter-spacing:.01em}
+.navlabel,.grouphdr{font-weight:600;letter-spacing:.08em}
+.page-h{font-size:28px;font-weight:600;letter-spacing:-.01em}
+.brand .bt{font-weight:600}
+
+/* ---- calmer banners in dark (MD3 containers can read too hot) ------------ */
+:root[data-theme="dark"] .incbanner{background:color-mix(in srgb,var(--md-error-container) 55%,var(--md-surface));color:var(--md-on-error-container);border-color:transparent}
+:root[data-theme="dark"] .incbanner .ib-dot{background:var(--md-error)}
+:root[data-theme="dark"] .alert.bad,:root[data-theme="dark"] .att.red{background:color-mix(in srgb,var(--md-error-container) 50%,var(--md-surface));color:var(--md-on-error-container);border-color:transparent}
+:root[data-theme="dark"] .alert.warn,:root[data-theme="dark"] .att.amber{background:color-mix(in srgb,var(--md-warning-container) 50%,var(--md-surface));color:var(--md-on-warning-container);border-color:transparent}
+:root[data-theme="dark"] .att.red .att-t{color:var(--md-error)}
+:root[data-theme="dark"] .att.amber .att-t{color:var(--md-warning)}
+
+/* ---- MD3 filter chips (status filter) ----------------------------------- */
+.chipset{display:inline-flex;gap:8px;align-items:center}
+.chip-btn{font:inherit;font-size:13px;font-weight:600;cursor:pointer;height:34px;padding:0 14px;
+ display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-xs);
+ border:1px solid var(--md-outline-variant);background:transparent;color:var(--md-on-surface-variant);
+ transition:background .15s var(--md-standard),color .15s var(--md-standard),border-color .15s var(--md-standard)}
+.chip-btn:hover{color:var(--md-on-surface)}
+.chip-btn.on{background:var(--md-secondary-container);color:var(--md-on-secondary-container);border-color:transparent;padding-left:10px}
+.chip-btn.on::before{content:"✓";font-size:13px;font-weight:700;line-height:1}
+.chip-btn:not(.on)::before{content:none}
+
+/* ---- MD3 charts & data viz ---------------------------------------------- */
+/* progress bars → flat tonal, fully rounded */
+.bar{background:var(--md-surface-container-high);border-radius:var(--radius-full)}
+.fill{border-radius:var(--radius-full)}
+.fill.ok,.fill.teal{background:var(--ok)}
+.fill.warn,.fill.amber{background:var(--amber)}
+.fill.bad{background:var(--danger)}
+/* donut: tonal track + surface-low hole */
+.donut{--track:var(--md-surface-container-high)}
+.donut::after{background:var(--md-surface-container-low)}
+/* memory sparkbars → tonal track, rounded */
+.spark .sb{background:var(--md-surface-container-high);border-radius:6px}
+.spark .sb i{border-radius:6px 6px 3px 3px}
+.spark .sb.hot{outline-color:var(--md-primary)}
+/* cpu sparkline → primary */
+.cpuspark path{stroke:var(--md-primary)}
+/* metric icon chips → MD3 tonal (already tonal; round a touch more) */
+.gcard .gh .mi{border-radius:var(--radius-sm)}
+.srv-ico{border-radius:var(--radius-sm);background:var(--md-primary-container);color:var(--md-on-primary-container)}
+
+/* ---- density: MD3 breathes a little more -------------------------------- */
+.card-h{padding:16px 18px}
+.nav a{margin-bottom:1px}
+.ov-row{padding:8px 0}
+
+/* ---- empty state (no filter matches) ------------------------------------ */
+.empty-state{display:flex;flex-direction:column;align-items:center;gap:9px;padding:44px 18px;text-align:center}
+.empty-state svg{width:34px;height:34px;color:var(--md-outline)}
+.empty-state b{font-size:14px;font-weight:600;color:var(--md-on-surface)}
+.empty-state span{display:block;font-size:12.5px;color:var(--md-on-surface-variant);margin-top:2px}
+
+/* ---- links use primary consistently ------------------------------------- */
+a{color:var(--md-primary)}
+.dr-url,.srv-sub .repo:hover{color:var(--md-primary)}
