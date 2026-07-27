@@ -181,6 +181,14 @@ func (r *Runner) Prepare(apps []generate.App, profiles []string, shouldSeed func
 	return nil
 }
 
+// ReloadProxy reloads Caddy against the generated Caddyfile, surfacing any
+// error. It's the exported path used by `roost share` after writing a
+// temporary route; internal callers use reloadProxy (best-effort).
+func (r *Runner) ReloadProxy() error {
+	_, err := r.run(r.compose("exec", "-T", "caddy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile")...)
+	return err
+}
+
 // reloadProxy reloads Caddy so it rebuilds its reverse-proxy connection
 // pools. Apps may have been recreated with new container IPs, and Caddy —
 // started earlier as infra — can otherwise hold stale upstream keep-alives to

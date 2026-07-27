@@ -19,11 +19,11 @@ project serving side projects.
 - [x] Runtime version → base image matrix maintenance (Ruby 3.4, Node 24).
 - [x] `roost logs` multiplexing (`roost logs` with no app = all apps).
 
-## v2 — considered, not committed
+## v2
 
-- **Per-app health checks** in generated compose, surfaced in `status`.
-- **Postgres per-app credentials** instead of the shared roost user.
-- **`roost share`**: a one-shot temporary hostname for a single app —
+- [x] **Per-app health checks** in generated compose, surfaced in `status`.
+- [x] **Postgres per-app credentials** instead of the shared roost user.
+- [x] **`roost share`**: a one-shot temporary hostname for a single app —
   spiritually a nicer `cloudflared tunnel --url`, but with your domain.
 - **Windows lifecycle** (Task Scheduler unit) — detection/generation already
   work; only `enable` is macOS/Linux.
