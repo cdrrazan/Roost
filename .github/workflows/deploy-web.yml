@@ -43,6 +43,9 @@ jobs:
   deploy:
     name: Build · Ship · Restart roost-web
     runs-on: ubuntu-latest
+    environment:
+      name: control-panel
+      url: https://control.rsynk.com
     steps:
       - name: Gate on secrets
         id: gate
