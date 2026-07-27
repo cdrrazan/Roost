@@ -262,6 +262,9 @@ set `framework:` yourself. Every inferred value is overridable per app.
 - **Multi-database Rails** — a per-app database user so apps that connect as their
   own username and use Solid Cache/Queue/Cable (sibling `<app>_*` databases) just
   work.
+- **Per-app Postgres credentials** — each Postgres app owns its database under its
+  own role (name-derived password), so one app's `DATABASE_URL` can't read
+  another's data; `CREATEDB` still lets Rails multi-db make its sibling databases.
 - **Compiled vs interpreted** — Rails/Django/Sinatra source is bind-mounted so a
   `restart` picks up edits; next/node/static build into the image (mounting the
   host source would shadow the build).

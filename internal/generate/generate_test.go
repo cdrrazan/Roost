@@ -489,11 +489,45 @@ func TestRenderPostgresInit(t *testing.T) {
 		t.Fatalf("RenderPostgresInit: %v", err)
 	}
 	s := string(out)
-	if !strings.Contains(s, `CREATE DATABASE "crm"`) {
-		t.Errorf("postgres-init.sql missing crm database:\n%s", s)
+	if !strings.Contains(s, `CREATE ROLE crm LOGIN CREATEDB PASSWORD '`) {
+		t.Errorf("postgres-init.sql missing per-app crm role:\n%s", s)
+	}
+	if !strings.Contains(s, `CREATE DATABASE "crm" OWNER crm`) {
+		t.Errorf("postgres-init.sql: crm database should be owned by the crm role:\n%s", s)
+	}
+	if strings.Contains(s, "OWNER roost") {
+		t.Errorf("postgres-init.sql must not fall back to the shared roost owner:\n%s", s)
 	}
 	if strings.Contains(s, "blog") {
 		t.Errorf("postgres-init.sql must not include the mysql app blog:\n%s", s)
+	}
+}
+
+func TestDBPasswordDeterministicAndDistinct(t *testing.T) {
+	if dbPassword("crm") != dbPassword("crm") {
+		t.Error("dbPassword must be stable for the same app across regenerations")
+	}
+	if dbPassword("crm") == dbPassword("shop") {
+		t.Error("dbPassword must differ per app")
+	}
+	if dbPassword("crm") == "roost" {
+		t.Error("dbPassword must not be the shared roost credential")
+	}
+}
+
+func TestAppEnvPostgresUsesPerAppCreds(t *testing.T) {
+	app := App{Name: "crm", Framework: "django", Port: 8000, Database: "postgres"}
+	env := map[string]string{}
+	for _, p := range appEnv(app, nil) {
+		env[p.Key] = p.Value
+	}
+	got := env["DATABASE_URL"]
+	want := "postgres://crm:" + dbPassword("crm") + "@postgres:5432/crm"
+	if got != want {
+		t.Errorf("DATABASE_URL = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "roost:roost") {
+		t.Errorf("DATABASE_URL still uses the shared roost credential: %q", got)
 	}
 }
 
