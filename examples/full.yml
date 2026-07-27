@@ -4,6 +4,13 @@
 # Fallback domain: bare-path apps become <name>.demo.example.com.
 domain: demo.example.com
 
+# Optional: route this hostname through the tunnel to the `roost web`
+# control panel (start/stop the fleet, add/remove apps from a browser).
+# The panel is a host process outside the stack — run it always-on with
+# `roost enable`'s launchd/systemd mechanism and ALWAYS put Cloudflare
+# Access in front of it. Omit this key and the panel stays loopback-only.
+control_host: control.example.com
+
 tunnel:
   # Always the literal default or your own value — roost never invents
   # tunnel names, so the Cloudflare dashboard stays recognizable.
