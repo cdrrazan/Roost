@@ -2,6 +2,15 @@
 
 All notable changes to Fleet are documented here. Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.5.0] — 2026-07-27
+
+### Changed
+- **Compact sidebar Alerts box** — the Test-alert button now sits inline with the
+  label (one tight row instead of a full-width button), roughly halving its
+  height. New `.btn-xs` button size.
+- Docs refreshed: 7 pages (incidents added), settings/mask/share/mark-read
+  documented in the README and integration guide.
+
 ## [1.4.0] — 2026-07-27
 
 ### Changed

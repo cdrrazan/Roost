@@ -3,11 +3,11 @@
 # ⛵ Fleet — Control Dashboard Template
 
 **A premium, zero-build admin dashboard for self-hosted app fleets.**
-Live metrics · real reachability · incidents · command palette · light & dark — in pure HTML/CSS/JS.
+Live metrics · real reachability · incidents & share · settings · command palette · light & dark — in pure HTML/CSS/JS.
 
 `no framework` · `no build step` · `~30 KB CSS` · `light + dark` · `fully responsive`
 
-### [▶ Live demo](https://cdrrazan.github.io/Roost/) · [Components](https://cdrrazan.github.io/Roost/components.html) · [Status page](https://cdrrazan.github.io/Roost/status.html)
+### [▶ Live demo](https://cdrrazan.github.io/Roost/) · [Incidents](https://cdrrazan.github.io/Roost/incidents.html) · [Settings](https://cdrrazan.github.io/Roost/settings.html) · [Status page](https://cdrrazan.github.io/Roost/status.html)
 
 </div>
 
@@ -39,12 +39,13 @@ It's **vanilla** on purpose — open `index.html` and it runs. No `npm install`,
 
 - **Live dashboard** — per-app cards with status, tech badges, CPU %, memory, network, uptime, and a memory sparkline. Metrics update live.
 - **Real reachability chips** — "live · 200" vs "502" so you see what's *actually* serving, not just "container up".
-- **Incidents** — active-incident banner, an all-clear/open indicator, and a timeline with durations. Plus a **Test alert** affordance.
+- **Incidents** — active-incident banner plus a **dedicated incidents page** (its own nav item) with the full open/resolved history, durations, a **Mark all read** control (history is kept — read entries just dim), and **share** buttons (copy / X / LinkedIn / Facebook) that post a one-line status summary. The sidebar keeps a compact **Test alert** box.
+- **Settings** — a working settings page (localStorage): default **view & theme**, a **mask mode** that hides IP / SSH / host / tunnel ids on the cards (safe screen-sharing), **email subject/body templates**, and **tech-stack label overrides**.
 - **Command palette** — ⌘K / Ctrl-K fuzzy search over apps and actions with full keyboard nav.
-- **Detail drawer** — click any app for image, status, restarts, env keys, and recent logs.
+- **Detail drawer** — click any app for image, status, restarts, env keys, that app's own **incident history**, and recent logs.
 - **Collapsible panels** — pin the brand + bottom cluster; the nav scrolls; the info rail folds away to stretch the workspace.
 - **Public status page** — a controls-free, secret-free `status.html` you can share.
-- **6 pages** — dashboard, status, login, settings, component library, 404.
+- **7 pages** — dashboard, incidents, status, login, settings, component library, 404.
 - **Light & dark** — the viewer's choice, remembered. Both are hand-tuned.
 - **One-file theming** — change your brand color in `assets/css/tokens.css`; everything follows.
 
@@ -53,9 +54,10 @@ It's **vanilla** on purpose — open `index.html` and it runs. No `npm install`,
 ```
 fleet-dashboard/
 ├─ index.html          # the dashboard
+├─ incidents.html      # incident history + share
 ├─ status.html         # public status page
 ├─ login.html          # sign-in screen
-├─ settings.html       # preferences (theme, alerts, thresholds)
+├─ settings.html       # preferences (view, theme, mask, email templates, tech stacks)
 ├─ components.html     # component library / style guide
 ├─ 404.html            # not-found page
 ├─ assets/
