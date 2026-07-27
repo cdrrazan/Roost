@@ -1374,8 +1374,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .side .grow{display:none}
  .sideinc,.sidesys{flex:none}
  .side .user{flex:none}
- .sideinc{padding:11px;margin:12px 0 8px;border:1px solid var(--line);border-radius:11px;background:var(--panel2)}
- .sideinc .si-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+ .sideinc{padding:7px 9px;margin:10px 0 6px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+ .sideinc .si-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:0}
  .sideinc .si-list{list-style:none;margin:0 0 2px;padding:0;display:flex;flex-direction:column;gap:6px}
  .sideinc .si-list li{font-size:11.5px;color:var(--muted);padding-left:13px;position:relative;line-height:1.4}
  .sideinc .si-list li::before{content:"";position:absolute;left:0;top:5px;width:6px;height:6px;border-radius:50%;background:var(--ok)}
@@ -1415,6 +1415,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   color:var(--ink);background:var(--panel);transition:.12s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
  .btn:hover{transform:translateY(-1px)} .btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
  .btn-sm{padding:6px 10px;font-size:12px;border-radius:9px}
+ .btn-xs{padding:3px 9px;font-size:11px;border-radius:8px;font-weight:600}
  .btn-primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
  .btn-ok{background:var(--teal-bg);border-color:transparent;color:var(--teal-ink)}
  .btn-ok:hover{background:var(--ok);color:#fff}
@@ -1745,6 +1746,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .glist.grid .srv{border:1px solid var(--md-outline-variant);background:var(--md-surface-container-lowest);border-radius:var(--radius-sm)}
  .glist.grid .srv:hover{background:var(--md-surface-container-low);box-shadow:var(--elev-2)}
  .btn{border-radius:var(--radius-full);padding:9px 20px;font-weight:600;border:1px solid var(--md-outline-variant);background:transparent;color:var(--md-primary);transition:box-shadow .18s var(--md-standard),background .18s var(--md-standard)}
+ .btn.btn-xs{padding:3px 11px;font-size:11px}
  .btn:hover{transform:none;box-shadow:none}
  .btn-primary{background:var(--md-primary);color:var(--md-on-primary);border-color:transparent}
  .btn-primary:hover{box-shadow:var(--elev-1)}
@@ -1823,8 +1825,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
   </nav>
   <div class="grow"></div>
   <div class="sideinc" id="incidents">
-   <div class="si-h"><span class="navlabel" style="padding:0">Alerts</span></div>
-   <form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-sm" style="width:100%;justify-content:center" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form>
+   <div class="si-h"><span class="navlabel" style="padding:0">Alerts</span><form class="inline" method="post" action="/test-alert">{{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}<button class="btn btn-xs" title="Send a test email to confirm alerts work" {{if .Busy}}disabled{{end}}>Test alert</button></form></div>
   </div>
   {{if .System.Images}}
   <div class="sidesys">

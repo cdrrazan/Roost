@@ -159,8 +159,8 @@
     // The sidebar block is for testing alerts only — incidents live on the
     // dedicated incidents page (sidebar → Monitoring → Incidents).
     $("#sideInc").innerHTML =
-      '<div class="si-h"><span class="navlabel" style="padding:0">Alerts</span></div>' +
-      '<form class="inline" data-testalert><button class="btn btn-sm" style="width:100%;justify-content:center">Test alert</button></form>';
+      '<div class="si-h"><span class="navlabel" style="padding:0">Alerts</span>' +
+      '<form class="inline" data-testalert><button class="btn btn-xs">Test alert</button></form></div>';
     var sy = F.system;
     $("#sideSys").innerHTML =
       '<div class="navlabel">System · docker</div>' +
