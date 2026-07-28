@@ -443,10 +443,10 @@ mechanism as `roost enable`), and front it with Access. See the
 | `roost uninstall` | stop the stack and delete the DNS records **and** the tunnel roost created (only what `state.json` records — never foreign records or tunnels). Config and build artifacts stay |
 | `roost start <app>` / `stop <app>` / `restart <app>` | act on a single app's container |
 | `roost deploy <app>` | `git pull --ff-only` that app's clone, then rebuild + restart just it — the command CI runs over SSH on a push |
-| `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add/remove apps with a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
+| `roost web [--addr] [--token]` | serve a control panel (status, whole-stack and per-app Start/Stop, add an app from a **GitHub URL** or host path, **Pull & redeploy** any git-backed app, remove — all behind a doctor gate) over HTTP; runs as a host process outside the stack, front it with Cloudflare Access |
 | `roost share <app> [--as sub]` | expose one running app at a temporary hostname on your own domain until Ctrl-C — a nicer `cloudflared tunnel --url`. Adds a Caddy route only (the wildcard already covers DNS/ingress/SSL), so nothing is left at the edge if it's killed |
 | `roost status` / `logs [app] [-f]` | state, health, memory, URLs + an advisory **edge** line (tunnel connected / reconnecting-after-wake / down, so a brief 502 isn't mistaken for an app fault) / container logs (all apps if no app named) |
-| `roost add <path>` / `remove <name>` | edit the app list (comments preserved) |
+| `roost add <path>` / `add --repo <url>` / `remove <name>` | edit the app list (comments preserved). `--repo` clones the git repo into `~/.roost/sources/<name>` and records `repo:`; redeploy it later with `roost deploy <app>` |
 | `roost list` / `detect` | resolved apps + URLs / framework detection with its signal |
 | `roost generate` | write `~/.roost/build/*` without starting anything |
 | `roost enable` / `disable` | boot-on-login via launchd (macOS) / systemd `--user` (Linux) / Task Scheduler (Windows) |
