@@ -93,7 +93,12 @@ type Defaults struct {
 // App is one application entry. In YAML it may be either a bare string
 // (a path, using the global domain) or a map.
 type App struct {
-	Path      string            `yaml:"path"`
+	Path string `yaml:"path"`
+	// Repo is the app's git source (e.g. https://github.com/user/app). When
+	// set, `roost add --repo` clones it into ~/.roost/sources/<name> and
+	// `roost update` pulls it before rebuilding. Purely informational to the
+	// build pipeline — Path is what gets built.
+	Repo      string            `yaml:"repo"`
 	Domain    string            `yaml:"domain"`
 	Name      string            `yaml:"name"`
 	Framework string            `yaml:"framework"`

@@ -11,9 +11,9 @@ import (
 )
 
 // AddApp appends an app to the config file's apps list, preserving the
-// file's comments and formatting. With a domain, a map entry is
-// written; without, a bare path string.
-func AddApp(configPath, appPath, domain string) error {
+// file's comments and formatting. With a domain or a repo, a map entry
+// is written; with neither, a bare path string.
+func AddApp(configPath, appPath, domain, repo string) error {
 	doc, err := readDocument(configPath)
 	if err != nil {
 		return err
@@ -41,15 +41,26 @@ func AddApp(configPath, appPath, domain string) error {
 	}
 
 	var entry *yaml.Node
-	if domain == "" {
+	if domain == "" && repo == "" {
 		entry = &yaml.Node{Kind: yaml.ScalarNode, Value: appPath}
 	} else {
-		entry = &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		content := []*yaml.Node{
 			{Kind: yaml.ScalarNode, Value: "path"},
 			{Kind: yaml.ScalarNode, Value: appPath},
-			{Kind: yaml.ScalarNode, Value: "domain"},
-			{Kind: yaml.ScalarNode, Value: domain},
-		}}
+		}
+		if domain != "" {
+			content = append(content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "domain"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: domain},
+			)
+		}
+		if repo != "" {
+			content = append(content,
+				&yaml.Node{Kind: yaml.ScalarNode, Value: "repo"},
+				&yaml.Node{Kind: yaml.ScalarNode, Value: repo},
+			)
+		}
+		entry = &yaml.Node{Kind: yaml.MappingNode, Content: content}
 	}
 	apps.Content = append(apps.Content, entry)
 	return writeDocument(configPath, doc)

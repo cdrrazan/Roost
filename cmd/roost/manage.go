@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,30 +11,66 @@ import (
 	"github.com/cdrrazan/roost/internal/config"
 	"github.com/cdrrazan/roost/internal/lifecycle"
 	"github.com/cdrrazan/roost/internal/shell"
+	"github.com/cdrrazan/roost/internal/source"
 )
 
 // newAddCmd is the everyday command: append an app to the config
-// (comments preserved). With --domain the entry gets an explicit FQDN;
-// without, the global domain rule applies.
+// (comments preserved). Two forms:
+//
+//	roost add <path>            reference a folder already on disk
+//	roost add --repo <url>      clone a git repo into ~/.roost/sources/<name>
+//
+// With --domain the entry gets an explicit FQDN; without, the global
+// domain rule applies. --name overrides the name derived from the repo.
 func newAddCmd(flags *rootFlags) *cobra.Command {
-	var domain string
+	var domain, repo, name string
 	cmd := &cobra.Command{
-		Use:   "add <path>",
-		Short: "Append an app path to the config",
-		Args:  cobra.ExactArgs(1),
+		Use:   "add [path]",
+		Short: "Append an app to the config (a local path or a git repo to clone)",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfgPath, err := config.FindConfig(flags.configPath)
 			if err != nil {
 				return err
 			}
-			if err := config.AddApp(cfgPath, args[0], domain); err != nil {
+
+			// A local path and a repo are mutually exclusive.
+			if repo != "" && len(args) > 0 {
+				return fmt.Errorf("give either a <path> or --repo, not both")
+			}
+			if repo == "" && len(args) == 0 {
+				return fmt.Errorf("give a <path> to an existing folder, or --repo <url> to clone")
+			}
+
+			if repo == "" {
+				if err := config.AddApp(cfgPath, args[0], domain, ""); err != nil {
+					return err
+				}
+				cmd.Printf("added %s to %s\n", args[0], cfgPath)
+				return nil
+			}
+
+			if name == "" {
+				name = source.NameFromRepo(repo)
+			}
+			dest, err := source.PathFor(name)
+			if err != nil {
 				return err
 			}
-			cmd.Printf("added %s to %s\n", args[0], cfgPath)
+			cmd.Printf("cloning %s → %s\n", repo, dest)
+			if err := source.Clone(shell.Exec{}, repo, dest); err != nil {
+				return err
+			}
+			if err := config.AddApp(cfgPath, dest, domain, repo); err != nil {
+				return err
+			}
+			cmd.Printf("added %s (%s) to %s\n", name, repo, cfgPath)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&domain, "domain", "", "explicit FQDN for the app (otherwise the global domain applies)")
+	cmd.Flags().StringVar(&repo, "repo", "", "git URL to clone into ~/.roost/sources/<name>")
+	cmd.Flags().StringVar(&name, "name", "", "app name (default: derived from the repo URL)")
 	return cmd
 }
 
