@@ -47,12 +47,17 @@
       else if (pctOf(a) >= 90) alerts.push({ level: "warn", text: humanize(a.name) + " memory at " + pctOf(a) + "%" });
     });
     var open = F.incidents.filter(function (i) { return i.open; });
+    // Featured: apps flagged featured (max 2); fall back to the first two
+    // non-worker apps so the section is never empty.
+    var real = apps.filter(function (a) { return !a.worker; });
+    var featured = real.filter(function (a) { return a.featured; }).slice(0, 2);
+    if (!featured.length) featured = real.slice(0, 2);
     return {
       total: total, running: running, stopped: total - running,
       runningPct: total ? Math.round(running / total * 100) : 0,
       memUsed: (used / 1024).toFixed(1) + "GiB", memCap: (cap / 1024).toFixed(1) + "GiB",
       memPct: cap ? Math.round(used / cap * 100) : 0,
-      groups: groups, alerts: alerts, open: open
+      groups: groups, alerts: alerts, open: open, featured: featured
     };
   }
 
@@ -121,6 +126,37 @@
       '<div class="gcard teal"><div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/></svg></span> Fleet status</div><div class="donutrow"><div class="donut" style="--v:' + d.runningPct + ';--c:var(--ok)"><div class="dc"><div><b>' + d.running + "</b><span>of " + d.total + ' up</span></div></div></div><div class="dleg"><div class="li"><span class="sw" style="background:var(--ok)"></span> Running <b>' + d.running + '</b></div><div class="li"><span class="sw" style="background:var(--track)"></span> Stopped <b>' + d.stopped + '</b></div><div class="li"><span class="sw" style="background:var(--ok)"></span> Docker <b>OK</b></div></div></div></div>' +
       '<div class="gcard amber"><div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/></svg></span> Memory usage</div><div class="donutrow"><div class="donut" style="--v:' + d.memPct + ';--c:var(--amber)"><div class="dc"><div><b>' + d.memPct + "%</b><span>used</span></div></div></div><div class=\"dleg\"><div class=\"li\"><span class=\"sw\" style=\"background:var(--amber)\"></span> Used <b>" + d.memUsed + '</b></div><div class="li"><span class="sw" style="background:var(--track)"></span> Cap <b>' + d.memCap + "</b></div></div></div></div>" +
       '<div class="gcard indigo"><div class="gh"><span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="21" x2="21" y2="21"/><rect x="5" y="11" width="3.4" height="8" rx="1"/><rect x="10.3" y="6" width="3.4" height="13" rx="1"/><rect x="15.6" y="14" width="3.4" height="5" rx="1"/></svg></span> Memory by app</div><div class="spark">' + spark + '<div class="spark-tip" id="sparkTip" hidden></div></div><div class="sparkcap"><span>' + d.total + " apps</span><span>% of cap</span></div></div>";
+  }
+
+  function featCard(a) {
+    var running = a.state === "running";
+    var pill = running ? '<span class="pill run">running</span>' : '<span class="pill stop">' + esc(a.state) + "</span>";
+    var rchip = running && a.http ? '<span class="rchip ' + (a.http === "200" ? "up" : "down") + '">' + (a.http === "200" ? "live · " + a.http : esc(a.http)) + "</span>" : "";
+    var sub = a.url ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.url) + "</a>" : "background worker";
+    var metrics = running ? '<div class="fc-metrics">' +
+      '<div class="fc-m"><i>CPU</i><b>' + a.cpu.toFixed(2) + "%</b></div>" +
+      (a.cap ? '<div class="fc-m"><i>MEM</i><b>' + esc(memStr(a)) + "</b></div>" : "") +
+      (a.up ? '<div class="fc-m"><i>UP</i><b>' + esc(a.up.replace(/^Up /, "")) + "</b></div>" : "") + "</div>"
+      : '<div class="fc-metrics"><div class="fc-m off">Stopped — no live metrics</div></div>';
+    return '<div class="featcard" data-app="' + esc(a.name) + '">' +
+      '<div class="fc-top">' +
+      '<span class="srv-ico" data-detail="' + esc(a.name) + '" title="View details" role="button" tabindex="0">' + (a.url ? ICO_GLOBE : ICO_WORKER) + "</span>" +
+      '<div class="srv-idb"><div class="srv-nm"><span class="dot ' + (running ? "run" : "stop") + '"></span><span class="srv-name">' + esc(humanize(a.name)) + "</span>" + pill + rchip + "</div>" +
+      '<div class="srv-sub">' + sub + "</div></div>" +
+      '<span class="fc-star" title="Featured app">★</span>' +
+      "</div>" + metrics +
+      '<div class="fc-acts"><div class="seg">' +
+      '<button class="segbtn go" data-act="start" data-app="' + esc(a.name) + '"' + (running ? " disabled" : "") + ">Start</button>" +
+      '<button class="segbtn st" data-act="stop" data-app="' + esc(a.name) + '"' + (running ? "" : " disabled") + ">Stop</button></div>" +
+      '<button class="btn btn-sm" data-detail="' + esc(a.name) + '">View details</button></div>' +
+      "</div>";
+  }
+  function renderFeatured(d) {
+    var host = $("#featured"); if (!host) return;
+    if (!d.featured.length) { host.innerHTML = ""; return; }
+    host.innerHTML =
+      '<div class="feat-h"><h2><span class="fc-star">★</span> Featured <span class="csub">pinned apps at a glance</span></h2></div>' +
+      '<div class="feat-grid">' + d.featured.map(featCard).join("") + "</div>";
   }
 
   function renderBanners(d) {
@@ -210,6 +246,7 @@
     var d = derive();
     if ($("#alertHost")) renderBanners(d);
     if ($("#graphs")) renderGraphs(d);
+    if ($("#featured")) renderFeatured(d);
     if ($("#applist")) renderApps(d);
     if ($("#ovBody")) renderRail(d);
     if ($("#sideInc")) renderSidebar();

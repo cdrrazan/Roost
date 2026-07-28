@@ -57,6 +57,7 @@ the same structures server-side and lets the JS handle interactions.
 | `health` | string | e.g. `"healthy"` |
 | `env` | string[] | env **key names** (never values) |
 | `worker` | bool | renders under Workers, no route |
+| `featured` | bool | pins the app to the Featured strip (max 2; first two apps if none flagged) |
 
 ### `server`, `system`, `edge`, `incidents`
 See `mock.js`. `incidents[]` items: `{ app, label, kind, detail, since, ago, open }`

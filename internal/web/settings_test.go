@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cdrrazan/roost/internal/runner"
 )
@@ -146,6 +147,33 @@ func TestDashboardDataIsCachedAcrossPages(t *testing.T) {
 	serve(s, "GET", "/", nil)
 	if n := atomic.LoadInt32(&f.statusCalls); n != 2 {
 		t.Fatalf("expected a fresh Status() after invalidate, got %d total", n)
+	}
+}
+
+func TestDashboardServesStaleWhileRevalidating(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "a", State: "running", URL: "https://a", HTTP: "200", Reachable: true}}}
+	s := NewServer(f, "")
+
+	serve(s, "GET", "/", nil) // prime the snapshot (1 read)
+	if n := atomic.LoadInt32(&f.statusCalls); n != 1 {
+		t.Fatalf("expected 1 read after priming, got %d", n)
+	}
+
+	// Force the snapshot past its TTL. A render must now serve the stale
+	// snapshot immediately (no blocking read on the request path) and kick a
+	// single background refresh.
+	s.snapMu.Lock()
+	s.snap.at = s.snap.at.Add(-time.Hour)
+	s.snapMu.Unlock()
+
+	serve(s, "GET", "/incidents", nil)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && atomic.LoadInt32(&f.statusCalls) < 2 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := atomic.LoadInt32(&f.statusCalls); n != 2 {
+		t.Fatalf("stale render should trigger exactly one background refresh, got %d total reads", n)
 	}
 }
 
