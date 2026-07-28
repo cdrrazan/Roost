@@ -40,6 +40,7 @@ It's **vanilla** on purpose — open `index.html` and it runs. No `npm install`,
 ## ✨ Features
 
 - **Live dashboard** — per-app cards with status, tech badges, CPU %, memory, network, uptime, and a memory sparkline. Metrics update live.
+- **Featured apps** — a pinned strip of up to **two** highlighted apps just below the stat gauges (flag with `featured: true`; falls back to your first two apps), each with status, reachability, live metrics, and quick start/stop.
 - **Real reachability chips** — "live · 200" vs "502" so you see what's *actually* serving, not just "container up".
 - **Incidents** — active-incident banner plus a **dedicated incidents page** (its own nav item) with the full open/resolved history, durations, a **Mark all read** control (history is kept — read entries just dim), and **share** buttons (copy / X / LinkedIn / Facebook) that post a one-line status summary. The sidebar keeps a compact **Test alert** box.
 - **Settings** — a working settings page (localStorage): default **view & theme**, a **mask mode** that hides IP / SSH / host / tunnel ids on the cards (safe screen-sharing), **email subject/body templates**, and **tech-stack label overrides**.

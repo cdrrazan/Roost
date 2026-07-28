@@ -118,7 +118,7 @@ main{overflow-y:auto;padding:20px;min-width:0}
    banners are re-rendered every 4s tick, so they must NOT animate (would
    flicker). These containers persist across renders → animation fires once. */
 @media(prefers-reduced-motion:no-preference){
- main>.graphs,main>.card{animation:rise .5s var(--ease) both}
+ main>.graphs,main>.feat,main>.card{animation:rise .5s var(--ease) both}
  main>.card:nth-of-type(2){animation-delay:.05s}
  main>.card:nth-of-type(3){animation-delay:.1s}
  main>.card:nth-of-type(4){animation-delay:.14s}
@@ -153,6 +153,26 @@ main{overflow-y:auto;padding:20px;min-width:0}
 .gcard.amber .mi{background:var(--amber-bg);color:var(--amber-ink)}
 .gcard.indigo .mi{background:var(--indigo-bg);color:var(--indigo-ink)}
 .gcard .mi svg{width:16px;height:16px;stroke:currentColor}
+/* featured apps — up to two pinned cards between the gauges and the list */
+.feat{margin-bottom:18px}
+.feat-h{display:flex;align-items:center;margin:0 0 12px}
+.feat-h h2{font-size:13.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px}
+.feat-h .csub{font-size:11.5px;color:var(--faint);font-weight:400}
+.feat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.featcard{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow),var(--hi);padding:15px 17px;display:flex;flex-direction:column;gap:13px;overflow:hidden;transition:box-shadow .25s var(--ease),transform .25s var(--ease),border-color .25s var(--ease)}
+.featcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--brand),color-mix(in srgb,var(--brand) 40%,transparent))}
+.featcard:hover{box-shadow:var(--shadow-hover),var(--hi);transform:translateY(-2px);border-color:color-mix(in srgb,var(--line) 55%,var(--brand))}
+.fc-top{display:flex;align-items:flex-start;gap:12px}
+.fc-star{margin-left:auto;color:var(--amber-ink);font-size:15px;line-height:1;flex:none}
+.feat-h .fc-star{color:var(--amber-ink);margin-left:0}
+.fc-metrics{display:flex;flex-wrap:wrap;gap:16px;padding-top:12px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.fc-m{display:flex;flex-direction:column;gap:2px}
+.fc-m i{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--faint)}
+.fc-m b{font-size:13px;color:var(--ink);font-weight:650}
+.fc-m.off{color:var(--faint);font-size:12px;font-weight:500}
+.fc-acts{display:flex;align-items:center;gap:8px}
+.fc-acts .seg{flex:none}
+@media(max-width:900px){.feat-grid{grid-template-columns:1fr}}
 .donutrow{display:flex;align-items:center;gap:16px}
 .donut{--v:0;--c:var(--ok);width:96px;height:96px;flex:none;border-radius:50%;position:relative;background:conic-gradient(var(--c) calc(var(--v)*1%),var(--track) 0)}
 .donut::after{content:"";position:absolute;inset:11px;border-radius:50%;background:var(--panel);z-index:0}
