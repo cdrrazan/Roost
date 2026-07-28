@@ -6,10 +6,11 @@ All notable changes to Fleet are documented here. Format: [Keep a Changelog](htt
 
 ### Added
 - **Featured apps** — a pinned strip of up to **two** highlighted apps between the
-  stat gauges and the Applications list. Flag apps with `featured: true` in the
-  data (falls back to the first two non-worker apps if none are flagged); each
-  card shows status, reachability, live CPU/MEM/uptime, and quick start/stop +
-  detail. New `.feat` / `.featcard` styles.
+  stat gauges and the Applications list. **Star any app card** to feature it
+  (persisted to `localStorage` `fleet-favorites`); `featured: true` in the data
+  is the initial pick, falling back to the first two non-worker apps. Each card
+  shows status, reachability, live CPU/MEM/uptime, and quick start/stop + detail.
+  New `.feat` / `.featcard` / `.favbtn` styles.
 
 ## [1.5.0] — 2026-07-27
 

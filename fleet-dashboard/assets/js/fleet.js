@@ -65,6 +65,19 @@
   var ICO_GLOBE = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>';
   var ICO_WORKER = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>';
   var ICO_GH = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17 4.7 18 5 18 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>';
+  var ICO_STAR = '<svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg>';
+
+  /* ---------- favorites (max 2 featured; persisted like theme/view) ---------- */
+  var FAV_MAX = 2;
+  function favList() { try { var v = JSON.parse(localStorage.getItem("fleet-favorites")); return Array.isArray(v) ? v : null; } catch (e) { return null; } }
+  function saveFav() { try { localStorage.setItem("fleet-favorites", JSON.stringify(F.apps.filter(function (a) { return a.featured && !a.worker; }).map(function (a) { return a.name; }))); } catch (e) {} }
+  // On boot, a saved favorites list (if any) is authoritative over the mock
+  // defaults; with no saved list the data's own featured:true flags stand.
+  function applyFav() { var l = favList(); if (!l) return; F.apps.forEach(function (a) { a.featured = l.indexOf(a.name) > -1; }); }
+  function favBtn(a) {
+    return '<button class="favbtn' + (a.featured ? " on" : "") + '" data-fav="' + esc(a.name) + '" aria-pressed="' + (a.featured ? "true" : "false") +
+      '" title="' + (a.featured ? "Remove from featured" : "Add to featured") + '">' + ICO_STAR + "</button>";
+  }
 
   /* ---------- card ---------- */
   function card(a) {
@@ -95,7 +108,7 @@
       '<div class="srv-nm"><span class="dot ' + (running ? "run" : "stop") + '"></span><span class="srv-name">' + esc(humanize(a.name)) + "</span>" + pill + rchip + "</div>" +
       '<div class="srv-sub">' + sub + "</div>" + tags +
       "</div>" +
-      '<div class="srv-acts"><div class="seg">' +
+      '<div class="srv-acts">' + (a.worker ? "" : favBtn(a)) + '<div class="seg">' +
       '<button class="segbtn go" data-act="start" data-app="' + esc(a.name) + '"' + (running ? " disabled" : "") + ">Start</button>" +
       '<button class="segbtn st" data-act="stop" data-app="' + esc(a.name) + '"' + (running ? "" : " disabled") + ">Stop</button>" +
       "</div>" +
@@ -143,7 +156,7 @@
       '<span class="srv-ico" data-detail="' + esc(a.name) + '" title="View details" role="button" tabindex="0">' + (a.url ? ICO_GLOBE : ICO_WORKER) + "</span>" +
       '<div class="srv-idb"><div class="srv-nm"><span class="dot ' + (running ? "run" : "stop") + '"></span><span class="srv-name">' + esc(humanize(a.name)) + "</span>" + pill + rchip + "</div>" +
       '<div class="srv-sub">' + sub + "</div></div>" +
-      '<span class="fc-star" title="Featured app">★</span>' +
+      '<button class="favbtn on fc-star" data-fav="' + esc(a.name) + '" aria-pressed="true" title="Remove from featured">' + ICO_STAR + "</button>" +
       "</div>" + metrics +
       '<div class="fc-acts"><div class="seg">' +
       '<button class="segbtn go" data-act="start" data-app="' + esc(a.name) + '"' + (running ? " disabled" : "") + ">Start</button>" +
@@ -315,6 +328,21 @@
     renderAll();
   });
 
+  /* ---------- favorite / unfavorite (demo: mutate model + localStorage) ---------- */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-fav]"); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    var a = F.apps.find(function (x) { return x.name === b.dataset.fav; }); if (!a) return;
+    if (!a.featured) {
+      var n = F.apps.filter(function (x) { return x.featured && !x.worker; }).length;
+      if (n >= FAV_MAX) { toast("Featured is limited to " + FAV_MAX + " apps — unfeature one first"); return; }
+    }
+    a.featured = !a.featured;
+    saveFav();
+    renderAll();
+    toast(a.featured ? humanize(a.name) + " added to featured" : humanize(a.name) + " removed from featured");
+  });
+
   /* ---------- detail drawer ---------- */
   var drawer = $("#drawer");
   function openDrawer(name) {
@@ -456,5 +484,6 @@
   document.addEventListener("visibilitychange", function () { if (!document.hidden) jitter(); });
 
   /* ---------- boot ---------- */
+  applyFav();
   renderAll();
 })();
