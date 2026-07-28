@@ -336,8 +336,9 @@ type Server struct {
 	// TTL means navigating to /incidents or /settings reuses the dashboard's
 	// fresh snapshot instead of re-shelling docker, and concurrent requests
 	// (the 5s poll racing a click) collapse onto one refresh.
-	snapMu sync.Mutex
-	snap   *dashSnapshot
+	snapMu     sync.Mutex
+	snap       *dashSnapshot
+	refreshing bool // a background snapshot refresh is in flight
 }
 
 // dashSnapshot is one cached read of the expensive controller data.
@@ -351,19 +352,49 @@ type dashSnapshot struct {
 	at        time.Time
 }
 
-// snapTTL bounds how stale the cached dashboard data may be. Kept just under
-// the 5s auto-refresh poll so each poll still refreshes, while back-to-back
-// navigations reuse the snapshot.
+// snapTTL bounds how fresh the cached dashboard data is before a background
+// refresh is triggered. Kept just under the 5s auto-refresh poll so a page that
+// stays open keeps its data current.
 const snapTTL = 4 * time.Second
 
-// dashData returns the cached controller reads, refreshing (under the lock, so
-// a stampede collapses to one refresh) when the snapshot is missing or stale.
+// dashData returns the cached controller reads using a stale-while-revalidate
+// policy: whenever a snapshot exists it is returned immediately — even if past
+// snapTTL — and a stale one kicks a single background refresh. Only the very
+// first load (no snapshot yet) blocks on docker; from then on full-page
+// navigations (/incidents, /settings) never wait on the reads, and the 5s poll
+// plus the async refresh keep the data current. The cold read runs under the
+// lock so a burst of first requests collapses onto one read.
 func (s *Server) dashData() *dashSnapshot {
 	s.snapMu.Lock()
-	defer s.snapMu.Unlock()
-	if s.snap != nil && time.Since(s.snap.at) < snapTTL {
-		return s.snap
+	if s.snap != nil {
+		if time.Since(s.snap.at) >= snapTTL && !s.refreshing {
+			s.refreshing = true
+			go s.refreshSnap()
+		}
+		d := s.snap
+		s.snapMu.Unlock()
+		return d
 	}
+	d := s.readSnapshot()
+	s.snap = d
+	s.snapMu.Unlock()
+	return d
+}
+
+// refreshSnap re-reads the controller off the request path and swaps in the
+// fresh snapshot. Runs at most once at a time (guarded by refreshing).
+func (s *Server) refreshSnap() {
+	d := s.readSnapshot()
+	s.snapMu.Lock()
+	s.snap = d
+	s.refreshing = false
+	s.snapMu.Unlock()
+}
+
+// readSnapshot performs the expensive controller reads. Callers that hold
+// snapMu (the cold path) block others; the background refresher does not hold
+// the lock while reading, so stale data keeps serving during the refresh.
+func (s *Server) readSnapshot() *dashSnapshot {
 	apps, err := s.ctrl.Status()
 	d := &dashSnapshot{apps: apps, statusErr: err, at: time.Now()}
 	if removed, rerr := s.ctrl.RemovedApps(); rerr == nil {
@@ -372,11 +403,11 @@ func (s *Server) dashData() *dashSnapshot {
 	d.server = s.ctrl.ServerInfo()
 	d.system = s.ctrl.SystemInfo()
 	d.edge = s.ctrl.EdgeInfo()
-	s.snap = d
 	return d
 }
 
-// invalidateSnap forces the next dashData call to re-read the controller.
+// invalidateSnap forces the next dashData call to do a fresh blocking read
+// (used after a mutating action, when the user wants to see the new state).
 func (s *Server) invalidateSnap() {
 	s.snapMu.Lock()
 	s.snap = nil
