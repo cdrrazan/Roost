@@ -26,17 +26,19 @@ type fakeController struct {
 	mu               sync.Mutex
 	started, stopped []string
 
-	addPath, addDomain string
-	addCalls           int
-	removeName         string
-	removeImage        bool
-	removeCalls        int
-	removed            []RemovedApp
-	server             ServerInfo
-	system             SystemInfo
-	edge               EdgeInfo
-	details            map[string]AppDetail
-	emitLines          []string // lines AddApp/RemoveApp emit when called
+	addPath, addDomain, addRepo string
+	addCalls                    int
+	deployName                  string
+	deployCalls                 int
+	removeName                  string
+	removeImage                 bool
+	removeCalls                 int
+	removed                     []RemovedApp
+	server                      ServerInfo
+	system                      SystemInfo
+	edge                        EdgeInfo
+	details                     map[string]AppDetail
+	emitLines                   []string // lines AddApp/RemoveApp emit when called
 }
 
 func (f *fakeController) Status() ([]runner.AppStatus, error) {
@@ -92,9 +94,23 @@ func (f *fakeController) stoppedApps() []string {
 	return append([]string(nil), f.stopped...)
 }
 
-func (f *fakeController) AddApp(path, domain string, emit func(string)) error {
+func (f *fakeController) AddApp(path, domain, repo string, emit func(string)) error {
 	f.mu.Lock()
-	f.addPath, f.addDomain, f.addCalls = path, domain, f.addCalls+1
+	f.addPath, f.addDomain, f.addRepo, f.addCalls = path, domain, repo, f.addCalls+1
+	lines := append([]string(nil), f.emitLines...)
+	f.mu.Unlock()
+	for _, l := range lines {
+		emit(l)
+	}
+	if f.release != nil {
+		<-f.release
+	}
+	return f.upErr
+}
+
+func (f *fakeController) DeployApp(name string, emit func(string)) error {
+	f.mu.Lock()
+	f.deployName, f.deployCalls = name, f.deployCalls+1
 	lines := append([]string(nil), f.emitLines...)
 	f.mu.Unlock()
 	for _, l := range lines {
@@ -141,7 +157,8 @@ func (f *fakeController) snapshot() fakeController {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return fakeController{
-		addPath: f.addPath, addDomain: f.addDomain, addCalls: f.addCalls,
+		addPath: f.addPath, addDomain: f.addDomain, addRepo: f.addRepo, addCalls: f.addCalls,
+		deployName: f.deployName, deployCalls: f.deployCalls,
 		removeName: f.removeName, removeImage: f.removeImage, removeCalls: f.removeCalls,
 	}
 }
@@ -651,6 +668,50 @@ func TestAddRequiresPath(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if f.snapshot().addCalls != 0 {
 		t.Error("AddApp ran without a path")
+	}
+}
+
+func TestAddWithRepoInvokesController(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/add?repo=https://github.com/u/app", nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303", rr.Code)
+	}
+	waitFor(t, func() bool { return f.snapshot().addCalls == 1 })
+	if s := f.snapshot(); s.addRepo != "https://github.com/u/app" || s.addPath != "" {
+		t.Errorf("AddApp got (path=%q, repo=%q), want (path empty, repo set)", s.addPath, s.addRepo)
+	}
+}
+
+func TestAddRejectsPathAndRepoTogether(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/add?path=/x&repo=https://github.com/u/app", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d, want 400", rr.Code)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if f.snapshot().addCalls != 0 {
+		t.Error("AddApp ran with both path and repo")
+	}
+}
+
+func TestDeployInvokesController(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/deploy?app=blog", nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("code = %d, want 303", rr.Code)
+	}
+	waitFor(t, func() bool { return f.snapshot().deployCalls == 1 })
+	if s := f.snapshot(); s.deployName != "blog" {
+		t.Errorf("DeployApp got %q, want blog", s.deployName)
+	}
+}
+
+func TestDeployRequiresApp(t *testing.T) {
+	f := &fakeController{}
+	rr := serve(NewServer(f, ""), "POST", "/deploy", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing-app code = %d, want 400", rr.Code)
 	}
 }
 
