@@ -177,6 +177,81 @@ func TestDashboardServesStaleWhileRevalidating(t *testing.T) {
 	}
 }
 
+func TestSettingsNormalizeCapsFeatured(t *testing.T) {
+	got := Settings{Featured: []string{" analytics ", "billing", "analytics", "", "gateway"}}.Normalize()
+	want := []string{"analytics", "billing"}
+	if !reflect.DeepEqual(got.Featured, want) {
+		t.Fatalf("Featured = %#v, want %#v (trim, dedup, cap at 2)", got.Featured, want)
+	}
+}
+
+func TestToggleFeaturedPersistsAndCaps(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "analytics", State: "running"},
+		{Name: "billing", State: "running"},
+		{Name: "gateway", State: "running"},
+	}}
+	st := &fakeStore{loaded: DefaultSettings()}
+	s := NewServer(f, "")
+	s.SetSettingsStore(st)
+
+	servePost(s, "/app/featured", url.Values{"app": {"analytics"}})
+	servePost(s, "/app/featured", url.Values{"app": {"billing"}})
+	if got := s.currentSettings().Featured; !reflect.DeepEqual(got, []string{"analytics", "billing"}) {
+		t.Fatalf("after adding two: %#v", got)
+	}
+	// a third is capped out (no silent replace)
+	servePost(s, "/app/featured", url.Values{"app": {"gateway"}})
+	if got := s.currentSettings().Featured; !reflect.DeepEqual(got, []string{"analytics", "billing"}) {
+		t.Fatalf("cap not enforced: %#v", got)
+	}
+	// toggling a featured app removes it, and persistence fires
+	rr := servePost(s, "/app/featured", url.Values{"app": {"analytics"}})
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("POST /app/featured = %d, want 303", rr.Code)
+	}
+	if got := s.currentSettings().Featured; !reflect.DeepEqual(got, []string{"billing"}) {
+		t.Fatalf("toggle off: %#v", got)
+	}
+	if st.saves == 0 {
+		t.Fatal("expected featured toggle to persist via the store")
+	}
+	// with room again, gateway now fits
+	servePost(s, "/app/featured", url.Values{"app": {"gateway"}})
+	if got := s.currentSettings().Featured; !reflect.DeepEqual(got, []string{"billing", "gateway"}) {
+		t.Fatalf("re-add after room freed: %#v", got)
+	}
+}
+
+func TestDashboardRendersFeaturedSection(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{
+		{Name: "analytics", State: "running", URL: "https://analytics.example.com", HTTP: "200", Reachable: true},
+		{Name: "billing", State: "running"},
+	}}
+	s := NewServer(f, "")
+	s.SetSettingsStore(&fakeStore{loaded: Settings{Featured: []string{"analytics"}}.Normalize()})
+
+	body := serve(s, "GET", "/", nil).Body.String()
+	if !strings.Contains(body, `class="feat"`) {
+		t.Error("dashboard should render the featured section when an app is featured")
+	}
+	if !strings.Contains(body, "favbtn on") {
+		t.Error("featured app should show an active (filled) star toggle")
+	}
+	if !strings.Contains(body, `action="/app/featured"`) {
+		t.Error("cards should post to the featured toggle endpoint")
+	}
+}
+
+func TestDashboardNoFeaturedSectionWhenNoneSet(t *testing.T) {
+	f := &fakeController{statuses: []runner.AppStatus{{Name: "analytics", State: "running"}}}
+	s := NewServer(f, "")
+	body := serve(s, "GET", "/", nil).Body.String()
+	if strings.Contains(body, `class="feat"`) {
+		t.Error("no featured section until an app is starred (panel is opt-in, no fallback)")
+	}
+}
+
 func TestIncidentSummary(t *testing.T) {
 	// all clear
 	if got := incidentSummary(statusView{RunningCount: 5, Total: 5}); !strings.Contains(got, "operational") || !strings.Contains(got, "5/5") {

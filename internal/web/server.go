@@ -676,6 +676,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /down", s.guard(s.handleAction("stopping", s.ctrl.Down)))
 	mux.HandleFunc("POST /app/up", s.guard(s.handleAppAction("starting", s.ctrl.StartApp)))
 	mux.HandleFunc("POST /app/down", s.guard(s.handleAppAction("stopping", s.ctrl.StopApp)))
+	mux.HandleFunc("POST /app/featured", s.guard(s.handleToggleFeatured))
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
 	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
@@ -783,6 +784,49 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Unlock()
 	http.Redirect(w, r, "/incidents", http.StatusSeeOther)
+}
+
+// handleToggleFeatured pins or unpins an app on the dashboard's Featured strip.
+// Guarded — it mutates persisted settings. Toggling an already-featured app
+// removes it; adding past featuredCap is a no-op (unfeature one first). The new
+// list is persisted and redirected back to the dashboard.
+func (s *Server) handleToggleFeatured(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("app"))
+	if name == "" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	s.mu.Lock()
+	cur := s.settings
+	next := make([]string, 0, len(cur.Featured)+1)
+	found := false
+	for _, n := range cur.Featured {
+		if n == name {
+			found = true
+			continue
+		}
+		next = append(next, n)
+	}
+	if !found && len(cur.Featured) < featuredCap {
+		next = append(next, name)
+	}
+	cur.Featured = next
+	cur = cur.Normalize()
+	s.settings = cur
+	store := s.store
+	s.mu.Unlock()
+
+	if store != nil {
+		if err := store.Save(cur); err != nil {
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // handleSettingsPage renders the settings form in the panel shell.
@@ -1049,6 +1093,8 @@ type statusView struct {
 	Apps           []runner.AppStatus
 	Groups         []appGroup         // apps bucketed into Main / Utilities / Workers
 	Attention      []runner.AppStatus // apps not running — surfaced up top
+	Featured       []runner.AppStatus // pinned apps (max featuredCap) for the Featured strip
+	FeaturedSet    map[string]bool    // featured app names, for star-toggle state on cards
 	Total          int
 	RunningCount   int
 	RunningPct     int
@@ -1190,6 +1236,7 @@ func (s *Server) buildStatusView() statusView {
 		}
 		view.Alerts = buildAlerts(apps)
 		view.Sparks = s.recordAndRenderTrends(apps)
+		view.Featured, view.FeaturedSet = featuredApps(apps, view.Settings.Featured)
 	}
 	view.Removed = data.removed
 	view.Server = data.server
@@ -1222,6 +1269,34 @@ func incidentSummary(v statusView) string {
 		svc += "s"
 	}
 	return fmt.Sprintf("🔴 Roost: %d %s affected — %s.", v.OpenIncidents, svc, strings.Join(parts, ", "))
+}
+
+// featuredApps resolves the configured featured names to live app statuses, in
+// configured order, skipping workers and unknown names, capped at featuredCap.
+// The panel is opt-in — no fallback — so an empty configuration yields no strip
+// and the star toggles stay unambiguous. FeaturedSet drives the filled-star
+// state on every card.
+func featuredApps(apps []runner.AppStatus, names []string) ([]runner.AppStatus, map[string]bool) {
+	byName := make(map[string]runner.AppStatus, len(apps))
+	for _, a := range apps {
+		if !a.Worker {
+			byName[a.Name] = a
+		}
+	}
+	set := map[string]bool{}
+	var feat []runner.AppStatus
+	for _, n := range names {
+		a, ok := byName[n]
+		if !ok || set[n] {
+			continue
+		}
+		set[n] = true
+		feat = append(feat, a)
+		if len(feat) == featuredCap {
+			break
+		}
+	}
+	return feat, set
 }
 
 // buildAlerts turns the fleet state into banner warnings: stopped apps and
@@ -1502,6 +1577,31 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .gcard.amber .mi{background:var(--amber-bg);color:var(--amber-ink)}
  .gcard.indigo .mi{background:var(--indigo-bg);color:var(--indigo-ink)}
  .gcard .mi svg{width:16px;height:16px;stroke:currentColor}
+ /* featured strip + favorite (star) toggle */
+ .feat{margin-bottom:18px}
+ .feat-h{display:flex;align-items:center;margin:0 0 12px}
+ .feat-h h2{font-size:13.5px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px}
+ .feat-h .csub{font-size:11.5px;color:var(--faint);font-weight:400}
+ .feat-h .fc-star{color:var(--amber-ink)}
+ .feat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+ .featcard{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px 17px;display:flex;flex-direction:column;gap:13px;overflow:hidden}
+ .featcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--brand),color-mix(in srgb,var(--brand) 40%,transparent))}
+ .fc-top{display:flex;align-items:flex-start;gap:12px}
+ .fc-top>form.inline{margin-left:auto;display:flex;align-items:flex-start}
+ .fc-metrics{display:flex;flex-wrap:wrap;gap:16px;padding-top:12px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+ .fc-m{display:flex;flex-direction:column;gap:2px}
+ .fc-m i{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--faint)}
+ .fc-m b{font-size:13px;color:var(--ink);font-weight:650}
+ .fc-m.off{color:var(--faint);font-size:12px;font-weight:500}
+ .fc-acts{display:flex;align-items:center;gap:8px}
+ .fc-acts .seg{flex:none}
+ .favbtn{display:grid;place-items:center;width:30px;height:30px;flex:none;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--faint);cursor:pointer;transition:color .15s,border-color .15s}
+ .favbtn svg{width:16px;height:16px;fill:none;stroke:currentColor}
+ .favbtn:hover{color:var(--amber-ink);border-color:color-mix(in srgb,var(--line) 45%,var(--amber-ink))}
+ .favbtn.on{color:var(--amber-ink)}
+ .favbtn.on svg{fill:currentColor;stroke:currentColor}
+ .featcard .favbtn.fc-star{border:0;background:transparent;width:26px;height:26px}
+ @media(max-width:900px){.feat-grid{grid-template-columns:1fr}}
  .donutrow{display:flex;align-items:center;gap:16px}
  .donut{--v:0;--c:var(--ok);width:96px;height:96px;flex:none;border-radius:50%;position:relative;background:conic-gradient(var(--c) calc(var(--v)*1%),var(--track) 0)}
  .donut::after{content:"";position:absolute;inset:11px;border-radius:50%;background:var(--panel);z-index:0}
@@ -2038,6 +2138,34 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     </div>
    </div>
 
+   {{if .Featured}}
+   <section class="feat">
+    <div class="feat-h"><h2><span class="fc-star">★</span> Featured <span class="csub">pinned apps at a glance</span></h2></div>
+    <div class="feat-grid">
+    {{range .Featured}}
+     <div class="featcard" data-app="{{.Name}}">
+      <div class="fc-top">
+       <span class="srv-ico" data-detail="{{.Name}}" title="View details" role="button" tabindex="0">{{if .URL}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>{{else}}<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></svg>{{end}}</span>
+       <div class="srv-idb">
+        <div class="srv-nm"><span class="dot {{if eq .State "running"}}run{{else}}stop{{end}}"></span><span class="srv-name">{{humanize .Name}}</span>{{if eq .State "running"}}<span class="pill run">{{.State}}</span>{{else}}<span class="pill stop">{{.State}}</span>{{end}}{{if and (eq .State "running") .HTTP}}<span class="rchip {{if .Reachable}}up{{else}}down{{end}}" title="Live HTTP probe: {{.HTTP}}">{{if .Reachable}}live · {{.HTTP}}{{else}}{{.HTTP}}{{end}}</span>{{end}}</div>
+        <div class="srv-sub">{{if .URL}}<a href="{{.URL}}">{{.URL}}</a>{{else}}background worker{{end}}{{if .Health}} · {{.Health}}{{end}}</div>
+       </div>
+       <form class="inline" method="post" action="/app/featured"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="favbtn on fc-star" aria-pressed="true" title="Remove from featured" {{if $.Busy}}disabled{{end}}><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg></button></form>
+      </div>
+      {{if eq .State "running"}}<div class="fc-metrics">{{if .CPU}}<div class="fc-m"><i>CPU</i><b>{{.CPU}}</b></div>{{end}}{{if .Memory}}<div class="fc-m"><i>MEM</i><b>{{.Memory}}</b></div>{{end}}{{if .Up}}<div class="fc-m"><i>UP</i><b>{{.Up}}</b></div>{{end}}</div>{{else}}<div class="fc-metrics"><div class="fc-m off">Stopped — no live metrics</div></div>{{end}}
+      <div class="fc-acts">
+       <div class="seg">
+        <form class="inline" method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="segbtn go" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
+        <form class="inline" method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="segbtn st" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>
+       </div>
+       <button type="button" class="btn btn-sm" data-detail="{{.Name}}">View details</button>
+      </div>
+     </div>
+    {{end}}
+    </div>
+   </section>
+   {{end}}
+
    <section class="card">
     <div class="card-h"><h2>Applications <span class="csub">manage and monitor your fleet</span></h2><span id="livedot" class="livedot" title="Live — auto-refreshing every 5s">live</span><span class="count">{{.RunningCount}}/{{.Total}} up</span></div>
     <div class="applist">
@@ -2056,6 +2184,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
           {{if or .Framework .Database .Redis .Runtime .Worker}}<div class="tags">{{if .Worker}}<span class="tag worker">worker</span>{{end}}{{if .Framework}}<span class="tag fw">{{$.Settings.TechLabel .Framework}}</span>{{end}}{{if .Database}}<span class="tag db">{{$.Settings.TechLabel .Database}}</span>{{end}}{{if .Redis}}<span class="tag redis">Redis</span>{{end}}{{if .Runtime}}<span class="tag rt">{{.Runtime}}</span>{{end}}</div>{{end}}
          </div>
          <div class="srv-acts">
+          {{if not .Worker}}<form class="inline" method="post" action="/app/featured"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="favbtn{{if index $.FeaturedSet .Name}} on{{end}}" aria-pressed="{{if index $.FeaturedSet .Name}}true{{else}}false{{end}}" title="{{if index $.FeaturedSet .Name}}Remove from featured{{else}}Add to featured{{end}}" {{if $.Busy}}disabled{{end}}><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg></button></form>{{end}}
           <div class="seg">
            <form class="inline" method="post" action="/app/up"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="segbtn go" {{if or $.Busy (eq .State "running")}}disabled{{end}}>Start</button></form>
            <form class="inline" method="post" action="/app/down"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="segbtn st" {{if or $.Busy (ne .State "running")}}disabled{{end}}>Stop</button></form>

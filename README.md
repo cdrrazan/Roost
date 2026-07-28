@@ -373,6 +373,10 @@ it does:
   **Processing** log. Remove drops it (optionally deleting the image to free
   disk) and lists it under **Removed** for one-click re-add. Shared database
   volumes are never touched.
+- **Featured apps** — pin up to **two** apps to a highlighted strip below the
+  gauges with the **star toggle** on any app card. Each featured card shows
+  status, reachability, live CPU/MEM/uptime, and quick Start/Stop. The choice
+  persists to `~/.roost/panel.json` (`featured:` list); opt-in, no default strip.
 - **At a glance** — donut gauges for fleet + memory and a per-app memory bar
   chart up top; a right rail with an Overview, a **Server** card (disk, host, OS,
   CPU/RAM, uptime, and the IP + a copyable SSH login from the `server:` block),
