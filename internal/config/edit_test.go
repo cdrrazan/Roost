@@ -27,7 +27,7 @@ func writeEditConfig(t *testing.T) string {
 func TestAddApp(t *testing.T) {
 	t.Run("bare path when no domain given", func(t *testing.T) {
 		path := writeEditConfig(t)
-		if err := AddApp(path, "~/projects/app2", ""); err != nil {
+		if err := AddApp(path, "~/projects/app2", "", ""); err != nil {
 			t.Fatalf("AddApp: %v", err)
 		}
 		data, _ := os.ReadFile(path)
@@ -42,7 +42,7 @@ func TestAddApp(t *testing.T) {
 
 	t.Run("map entry when domain given", func(t *testing.T) {
 		path := writeEditConfig(t)
-		if err := AddApp(path, "~/projects/app3", "app3.other.org"); err != nil {
+		if err := AddApp(path, "~/projects/app3", "app3.other.org", ""); err != nil {
 			t.Fatalf("AddApp: %v", err)
 		}
 		data, _ := os.ReadFile(path)
@@ -55,9 +55,34 @@ func TestAddApp(t *testing.T) {
 		}
 	})
 
+	t.Run("repo written as a map entry with path and repo", func(t *testing.T) {
+		path := writeEditConfig(t)
+		if err := AddApp(path, "~/.roost/sources/app4", "", "https://github.com/u/app4"); err != nil {
+			t.Fatalf("AddApp: %v", err)
+		}
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load after AddApp: %v", err)
+		}
+		var got *App
+		for i := range cfg.Apps {
+			if cfg.Apps[i].Repo == "https://github.com/u/app4" {
+				got = &cfg.Apps[i]
+			}
+		}
+		if got == nil {
+			t.Fatalf("app with repo not found; apps: %+v", cfg.Apps)
+		}
+		if !strings.HasSuffix(got.Path, "sources/app4") {
+			t.Errorf("path = %q, want it to end in sources/app4", got.Path)
+		}
+	})
+
 	t.Run("result still parses", func(t *testing.T) {
 		path := writeEditConfig(t)
-		if err := AddApp(path, "~/projects/app2", "app2.example.com"); err != nil {
+		if err := AddApp(path, "~/projects/app2", "app2.example.com", ""); err != nil {
 			t.Fatal(err)
 		}
 		home := t.TempDir()
@@ -79,7 +104,7 @@ func TestAddApp(t *testing.T) {
 		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := AddApp(path, "/apps/one", "one.example.com"); err != nil {
+		if err := AddApp(path, "/apps/one", "one.example.com", ""); err != nil {
 			t.Fatalf("AddApp: %v", err)
 		}
 		cfg, err := Load(path)
@@ -96,7 +121,7 @@ func TestAddApp(t *testing.T) {
 		if err := os.WriteFile(path, []byte("domain: example.com\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := AddApp(path, "/apps/one", ""); err != nil {
+		if err := AddApp(path, "/apps/one", "", ""); err != nil {
 			t.Fatalf("AddApp: %v", err)
 		}
 		data, _ := os.ReadFile(path)
@@ -109,7 +134,7 @@ func TestAddApp(t *testing.T) {
 func TestRemoveApp(t *testing.T) {
 	t.Run("removes by name and keeps comments", func(t *testing.T) {
 		path := writeEditConfig(t)
-		if err := AddApp(path, "~/projects/app2", ""); err != nil {
+		if err := AddApp(path, "~/projects/app2", "", ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := RemoveApp(path, "app2"); err != nil {
@@ -130,7 +155,7 @@ func TestRemoveApp(t *testing.T) {
 
 	t.Run("removes map-form app by explicit name", func(t *testing.T) {
 		path := writeEditConfig(t)
-		if err := AddApp(path, "~/projects/whatever", "x.example.com"); err != nil {
+		if err := AddApp(path, "~/projects/whatever", "x.example.com", ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := RemoveApp(path, "whatever"); err != nil {

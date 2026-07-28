@@ -189,8 +189,12 @@ type Controller interface {
 	// one app down (optionally deleting its image) and records it for re-add.
 	// Both stream human-readable progress lines through emit so the panel's
 	// processing pane can show what's happening.
-	AddApp(path, domain string, emit func(string)) error
+	AddApp(path, domain, repo string, emit func(string)) error
 	RemoveApp(name string, deleteImage bool, emit func(string)) error
+
+	// DeployApp pulls a repo-backed app's checkout (fast-forward only) and
+	// rebuilds just that container — the panel's redeploy for a git-backed app.
+	DeployApp(name string, emit func(string)) error
 
 	// RemovedApps lists apps removed via the panel, so it can offer a
 	// one-click re-add without the user retyping the path.
@@ -678,6 +682,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /app/down", s.guard(s.handleAppAction("stopping", s.ctrl.StopApp)))
 	mux.HandleFunc("POST /app/featured", s.guard(s.handleToggleFeatured))
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
+	mux.HandleFunc("POST /deploy", s.guard(s.handleDeploy))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
 	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
 	mux.HandleFunc("GET /incidents", s.handleIncidentsPage)
@@ -1021,13 +1026,34 @@ func (s *Server) handleAppAction(verb string, fn func(string) error) http.Handle
 // config edit, build, start — streams into the processing pane via emit.
 func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 	path := r.FormValue("path")
-	if path == "" {
-		http.Error(w, "missing path", http.StatusBadRequest)
+	repo := r.FormValue("repo")
+	if path == "" && repo == "" {
+		http.Error(w, "give a path or a repo URL", http.StatusBadRequest)
+		return
+	}
+	if path != "" && repo != "" {
+		http.Error(w, "give a path or a repo URL, not both", http.StatusBadRequest)
 		return
 	}
 	domain := r.FormValue("domain")
-	s.runAction(w, r, "adding "+path, func(emit func(string)) error {
-		return s.ctrl.AddApp(path, domain, emit)
+	label := "adding " + path
+	if repo != "" {
+		label = "cloning " + repo
+	}
+	s.runAction(w, r, label, func(emit func(string)) error {
+		return s.ctrl.AddApp(path, domain, repo, emit)
+	})
+}
+
+// handleDeploy pulls a repo-backed app's checkout and rebuilds its container.
+func (s *Server) handleDeploy(w http.ResponseWriter, r *http.Request) {
+	app := r.FormValue("app")
+	if app == "" {
+		http.Error(w, "missing app", http.StatusBadRequest)
+		return
+	}
+	s.runAction(w, r, "deploying "+app, func(emit func(string)) error {
+		return s.ctrl.DeployApp(app, emit)
 	})
 }
 
@@ -2194,6 +2220,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
            <div class="menu-pop">
             <button type="button" class="menu-item" data-detail="{{.Name}}">View details</button>
             {{if .URL}}<a class="menu-item" href="{{.URL}}" target="_blank" rel="noopener">Open site ↗</a>{{end}}
+            {{if .Repo}}<form method="post" action="/deploy"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}<button class="menu-item" title="git pull the app's source (fast-forward only), then rebuild &amp; restart it" {{if $.Busy}}disabled{{end}}>Pull &amp; redeploy</button></form>{{end}}
             <div class="menu-sep"></div>
             <form method="post" action="/remove" onsubmit="return confirm('Remove {{humanize .Name}} from the config?')"><input type="hidden" name="app" value="{{.Name}}">{{if $.Token}}<input type="hidden" name="token" value="{{$.Token}}">{{end}}
              <label class="free"><input type="checkbox" name="image" value="on"> Also delete image <span>(free disk)</span></label>
@@ -2316,10 +2343,11 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  <div class="modal-h"><h2>Add an app</h2><button class="modal-x" id="closeadd" aria-label="Close">×</button></div>
  <form method="post" action="/add">
   <div class="modal-b">
-   <div class="field"><label>Host path</label><input type="text" name="path" placeholder="/home/ubuntu/apps/myapp" required autofocus></div>
+   <div class="field"><label>GitHub repo URL <span style="font-weight:400;color:var(--faint)">(cloned into ~/.roost/sources)</span></label><input type="text" name="repo" placeholder="https://github.com/user/app" autofocus></div>
+   <div class="field"><label>…or host path <span style="font-weight:400;color:var(--faint)">(a folder already on disk)</span></label><input type="text" name="path" placeholder="/home/ubuntu/apps/myapp"></div>
    <div class="field"><label>Hostname <span style="font-weight:400;color:var(--faint)">(optional)</span></label><input type="text" name="domain" placeholder="myapp.example.com"></div>
    {{if .Token}}<input type="hidden" name="token" value="{{.Token}}">{{end}}
-   <p class="hint">Runs <code>roost doctor</code> first; the app is added, built &amp; started only if preflight passes.</p>
+   <p class="hint">Give a <strong>repo URL</strong> to clone, or a <strong>host path</strong> already on disk — not both. Runs <code>roost doctor</code> first; the app is added, built &amp; started only if preflight passes.</p>
    <button class="btn btn-primary" style="width:100%;justify-content:center" {{if .Busy}}disabled{{end}}>Check &amp; add</button>
   </div>
  </form>

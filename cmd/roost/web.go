@@ -23,6 +23,7 @@ import (
 	"github.com/cdrrazan/roost/internal/notify"
 	"github.com/cdrrazan/roost/internal/runner"
 	"github.com/cdrrazan/roost/internal/shell"
+	"github.com/cdrrazan/roost/internal/source"
 	"github.com/cdrrazan/roost/internal/state"
 	"github.com/cdrrazan/roost/internal/web"
 )
@@ -295,6 +296,35 @@ func (c *stackController) StartApp(name string) error {
 	return r.Resume(name)
 }
 
+// DeployApp pulls the app's git checkout (fast-forward only), then rebuilds
+// and recreates just that container — the panel's redeploy button for a
+// repo-backed app. It reuses the same deployApp that `roost deploy` runs.
+func (c *stackController) DeployApp(name string, emit func(string)) error {
+	_, resolved, _, err := loadResolved(c.flags)
+	if err != nil {
+		return err
+	}
+	var path string
+	for i := range resolved {
+		if resolved[i].Name == name {
+			path = resolved[i].Path
+		}
+	}
+	if path == "" {
+		return fmt.Errorf("app %q not found", name)
+	}
+	r, err := newRunner()
+	if err != nil {
+		return err
+	}
+	emit("git pull + rebuild + restart " + name)
+	if err := deployApp(shell.Exec{}, r, path, name); err != nil {
+		return err
+	}
+	emit("deployed " + name)
+	return nil
+}
+
 // StopApp stops one app container, leaving shared infrastructure running, after
 // checking the name resolves to a configured app.
 func (c *stackController) StopApp(name string) error {
@@ -322,7 +352,7 @@ func (c *stackController) StopApp(name string) error {
 // is a host-side admin tool) and is why the panel must sit behind Cloudflare
 // Access and the on/off token — an unauthenticated caller here is code
 // execution on the box.
-func (c *stackController) AddApp(path, domain string, emit func(string)) error {
+func (c *stackController) AddApp(path, domain, repo string, emit func(string)) error {
 	emit("preflight: running roost doctor")
 	findings := runDoctor(c.flags, shell.Exec{})
 	if doctor.HasFailures(findings) {
@@ -340,8 +370,23 @@ func (c *stackController) AddApp(path, domain string, emit func(string)) error {
 	if err != nil {
 		return err
 	}
+
+	// A repo URL clones into ~/.roost/sources/<name> and becomes the path;
+	// otherwise the user gave a host path already on disk.
+	if repo != "" {
+		dest, err := source.PathFor(source.NameFromRepo(repo))
+		if err != nil {
+			return err
+		}
+		emit("cloning " + repo + " → " + dest)
+		if err := source.Clone(shell.Exec{}, repo, dest); err != nil {
+			return err
+		}
+		path = dest
+	}
+
 	emit("adding to config: " + path)
-	if err := config.AddApp(cfgPath, path, domain); err != nil {
+	if err := config.AddApp(cfgPath, path, domain, repo); err != nil {
 		return err
 	}
 
