@@ -67,7 +67,10 @@ rows without deleting them; `app` links an incident to its card's detail drawer.
 The share buttons on the incidents page compose a one-line summary from this list.
 
 ### Settings (`localStorage`)
-The settings page persists to `localStorage`: `fleet-theme` / `fleet-view`, and a
+The settings page persists to `localStorage`: `fleet-theme` / `fleet-view`, a
+`fleet-favorites` JSON array of featured app names (max 2, set by the star
+toggle on each card — authoritative over the data's `featured:true` flags once
+present), and a
 `fleet-settings` JSON `{ mask, recipient, emailSubject, emailBody, tech:{} }`.
 `fleet.js` reads it to mask IP / SSH / host / tunnel ids on the cards and to apply
 tech-stack label overrides. Swap this for your own backend settings if you like.

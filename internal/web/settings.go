@@ -28,7 +28,14 @@ type Settings struct {
 
 	// MonitorMins is the incident-detection interval in minutes.
 	MonitorMins int `json:"monitorMins"`
+
+	// Featured pins up to featuredCap apps (by name) to the dashboard's
+	// Featured strip. Toggled with the star button on each app card.
+	Featured []string `json:"featured"`
 }
+
+// featuredCap bounds how many apps the Featured strip shows.
+const featuredCap = 2
 
 // DefaultSettings returns the out-of-the-box configuration. Every zero-valued
 // field a user leaves blank falls back to one of these via Normalize.
@@ -77,6 +84,21 @@ func (s Settings) Normalize() Settings {
 		}
 	}
 	s.EmailTo = to
+	// Featured: trim, drop blanks, dedup, cap at featuredCap.
+	var feat []string
+	seen := map[string]bool{}
+	for _, n := range s.Featured {
+		n = strings.TrimSpace(n)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		feat = append(feat, n)
+		if len(feat) == featuredCap {
+			break
+		}
+	}
+	s.Featured = feat
 	return s
 }
 

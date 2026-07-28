@@ -173,6 +173,14 @@ main{overflow-y:auto;padding:20px;min-width:0}
 .fc-acts{display:flex;align-items:center;gap:8px}
 .fc-acts .seg{flex:none}
 @media(max-width:900px){.feat-grid{grid-template-columns:1fr}}
+/* favorite / feature toggle — star button on every app card */
+.favbtn{display:grid;place-items:center;width:30px;height:30px;flex:none;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--faint);cursor:pointer;transition:color .15s var(--ease),border-color .15s var(--ease),transform .12s var(--ease)}
+.favbtn svg{width:16px;height:16px;fill:none;stroke:currentColor}
+.favbtn:hover{color:var(--amber-ink);border-color:color-mix(in srgb,var(--line) 45%,var(--amber-ink))}
+.favbtn:active{transform:scale(.9)}
+.favbtn.on{color:var(--amber-ink)}
+.favbtn.on svg{fill:currentColor;stroke:currentColor}
+.featcard .favbtn.fc-star{border:0;background:transparent;width:26px;height:26px;margin-left:auto}
 .donutrow{display:flex;align-items:center;gap:16px}
 .donut{--v:0;--c:var(--ok);width:96px;height:96px;flex:none;border-radius:50%;position:relative;background:conic-gradient(var(--c) calc(var(--v)*1%),var(--track) 0)}
 .donut::after{content:"";position:absolute;inset:11px;border-radius:50%;background:var(--panel);z-index:0}
