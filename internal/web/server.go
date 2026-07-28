@@ -2505,6 +2505,19 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    .catch(function(){btn.innerHTML="Failed";})
    .finally(function(){setTimeout(function(){btn.disabled=false;btn.innerHTML=orig;btn._busy=0;},2000);});
  },true);
+ // Featured star toggle: post via fetch and live-swap the fresh state in, so
+ // pinning/unpinning an app never reloads the page. The POST updates the saved
+ // settings synchronously, so the immediately-following refresh() renders the
+ // new Featured strip and star states.
+ document.addEventListener("submit",function(e){
+  var f=e.target;
+  if(!f||f.getAttribute("action")!=="/app/featured")return;
+  e.preventDefault();
+  var btn=f.querySelector("button"); if(btn&&btn.disabled)return;
+  fetch("/app/featured",{method:"POST",body:new FormData(f)})
+   .then(function(){refresh(true);})
+   .catch(function(){});
+ },true);
  // Incidents-page share: compose the status summary + this panel's /status URL
  // and hand it to X / LinkedIn / Facebook, or the clipboard.
  document.addEventListener("click",function(e){
@@ -2590,11 +2603,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  // scroll, view mode, search/filter, and any open menu or dialog. One source
  // of truth (the server template) — no client-side rendering to drift.
  var busy=false;
- function refresh(){
-  if(busy||document.hidden)return;
-  if(document.querySelector("dialog[open]"))return;         // adding an app
-  if(document.querySelector("details.menu[open]"))return;   // a menu is open
-  if(document.activeElement&&document.activeElement.id==="q")return; // typing search
+ function refresh(force){
+  if(!force){
+   if(busy||document.hidden)return;
+   if(document.querySelector("dialog[open]"))return;         // adding an app
+   if(document.querySelector("details.menu[open]"))return;   // a menu is open
+   if(document.activeElement&&document.activeElement.id==="q")return; // typing search
+  }
   busy=true;
   fetch(location.pathname,{headers:{"X-Roost-Poll":"1"},cache:"no-store"})
    .then(function(r){return r.ok?r.text():Promise.reject(r.status);})
