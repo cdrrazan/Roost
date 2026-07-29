@@ -390,7 +390,7 @@ func (c *stackController) AddApp(path, domain, repo string, emit func(string)) e
 		return err
 	}
 
-	apps, controlHost, err := loadPlanned(c.cmd, c.flags)
+	apps, opts, err := loadPlanned(c.cmd, c.flags)
 	if err != nil {
 		return err
 	}
@@ -399,7 +399,7 @@ func (c *stackController) AddApp(path, domain, repo string, emit func(string)) e
 		return err
 	}
 	emit("generating artifacts")
-	if _, err := generate.Generate(dir, apps, controlHost); err != nil {
+	if _, err := generate.Generate(dir, apps, opts); err != nil {
 		return err
 	}
 
@@ -469,10 +469,10 @@ func (c *stackController) RemoveApp(name string, deleteImage bool, emit func(str
 
 	// Regenerate so the removed app leaves the compose file. Skipped when the
 	// config is now empty (nothing to generate) — best-effort either way.
-	if apps2, controlHost, lerr := loadPlanned(c.cmd, c.flags); lerr == nil && len(apps2) > 0 {
+	if apps2, opts, lerr := loadPlanned(c.cmd, c.flags); lerr == nil && len(apps2) > 0 {
 		if dir, derr := buildDir(); derr == nil {
 			emit("regenerating artifacts")
-			_, _ = generate.Generate(dir, apps2, controlHost)
+			_, _ = generate.Generate(dir, apps2, opts)
 		}
 	}
 	emit("done — moved to the Removed list")

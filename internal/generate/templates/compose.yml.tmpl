@@ -62,7 +62,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel run --token ${ROOST_TUNNEL_TOKEN}
+    command: tunnel run {{if .TunnelProtocol}}--protocol {{.TunnelProtocol}} {{end}}--token ${ROOST_TUNNEL_TOKEN}
     networks:
       - roost
 {{- if .NeedsMySQL}}

@@ -54,7 +54,7 @@ func TestRenderComposeRedisAndCommand(t *testing.T) {
 		{Name: "worker", Framework: "rails", Port: 3000, Redis: true, Command: "bundle exec sidekiq", Worker: true, Memory: "512m",
 			Env: map[string]string{"DATABASE_URL": "postgres://roost:roost@postgres:5432/web"}},
 	}
-	out, err := RenderCompose("/b", apps, "")
+	out, err := RenderCompose("/b", apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}

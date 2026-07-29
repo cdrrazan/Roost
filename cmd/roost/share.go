@@ -39,7 +39,7 @@ func newShareCmd(flags *rootFlags) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			apps, controlHost, err := loadPlanned(cmd, flags)
+			apps, opts, err := loadPlanned(cmd, flags)
 			if err != nil {
 				return err
 			}
@@ -76,7 +76,7 @@ func newShareCmd(flags *rootFlags) *cobra.Command {
 			// A synthetic app produces the extra Caddy route host -> app:port.
 			shareApp := generate.App{Name: target.Name, FQDN: host, Port: target.Port, Framework: target.Framework}
 			writeCaddy := func(extra ...generate.App) error {
-				data, err := generate.RenderCaddyfile(append(append([]generate.App{}, apps...), extra...), controlHost)
+				data, err := generate.RenderCaddyfile(append(append([]generate.App{}, apps...), extra...), opts.ControlHost)
 				if err != nil {
 					return err
 				}
