@@ -77,6 +77,11 @@ type Server struct {
 type Tunnel struct {
 	Name   string  `yaml:"name"`
 	Access *Access `yaml:"access"`
+	// Protocol overrides the cloudflared edge transport. Empty (the default)
+	// lets cloudflared pick QUIC (UDP), which is fastest on clean links.
+	// Set "http2" to force TCP/443 on networks that throttle or drop UDP
+	// (many home/office ISPs), where QUIC flaps and every app 502s.
+	Protocol string `yaml:"protocol"`
 }
 
 // Access is the optional Cloudflare Access policy configuration.

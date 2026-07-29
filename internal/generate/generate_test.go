@@ -76,7 +76,7 @@ func TestPlanRemoteDisablesSourceMount(t *testing.T) {
 	if !apps[0].NoSourceMount {
 		t.Error("remote mode should set NoSourceMount on a rails app")
 	}
-	out, err := RenderCompose("/build", apps, "")
+	out, err := RenderCompose("/build", apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRenderComposeHealthcheck(t *testing.T) {
 		{Name: "web", FQDN: "web.example.com", Path: "/apps/web", Framework: "rails", Port: 3000, Memory: "512m", HealthCheck: `ruby -rsocket -e 'TCPSocket.new("127.0.0.1",3000).close'`},
 		{Name: "worker", Path: "/apps/web", Framework: "rails", Memory: "512m", Worker: true, Command: "bundle exec sidekiq"},
 	}
-	out, err := RenderCompose("/build", apps, "")
+	out, err := RenderCompose("/build", apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestRenderComposeHealthcheck(t *testing.T) {
 }
 
 func TestRenderCompose(t *testing.T) {
-	out, err := RenderCompose("/home/u/.roost/build", sampleApps(), "")
+	out, err := RenderCompose("/home/u/.roost/build", sampleApps(), Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestRenderComposeInjectsSeedEnv(t *testing.T) {
 		// Static apps carry no env at all; nothing to seed.
 		{Name: "site", FQDN: "site.example.com", Path: "/apps/site", Framework: "static", Port: 80, Memory: "512m"},
 	}
-	out, err := RenderCompose(buildDir, apps, "")
+	out, err := RenderCompose(buildDir, apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestRenderComposeNoSeedFileIsClean(t *testing.T) {
 	// Missing ~/.roost/seed.env is not an error and injects nothing.
 	home := t.TempDir()
 	apps := []App{{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m"}}
-	out, err := RenderCompose(filepath.Join(home, "build"), apps, "")
+	out, err := RenderCompose(filepath.Join(home, "build"), apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestRenderComposeNoMountForCompiledApps(t *testing.T) {
 		{Name: "svc", FQDN: "svc.example.com", Path: "/apps/svc", Framework: "node", Port: 3000, StartCommand: "npm run start", Memory: "512m"},
 		{Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog", Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m"},
 	}
-	out, err := RenderCompose("/b", apps, "")
+	out, err := RenderCompose("/b", apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestRenderComposeOmitsUnusedDatabases(t *testing.T) {
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",
 		Framework: "static", Port: 80, Memory: "512m",
 	}}
-	out, err := RenderCompose("/b", apps, "")
+	out, err := RenderCompose("/b", apps, Opts{})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -682,7 +682,7 @@ func TestRenderDockerfile(t *testing.T) {
 
 func TestGenerateWritesArtifacts(t *testing.T) {
 	buildDir := filepath.Join(t.TempDir(), "build")
-	written, err := Generate(buildDir, sampleApps(), "")
+	written, err := Generate(buildDir, sampleApps(), Opts{})
 	if err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
@@ -718,7 +718,7 @@ func TestGenerateOmitsUnusedInitScripts(t *testing.T) {
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",
 		Framework: "static", Port: 80, Memory: "512m",
 	}}
-	if _, err := Generate(buildDir, apps, ""); err != nil {
+	if _, err := Generate(buildDir, apps, Opts{}); err != nil {
 		t.Fatalf("Generate: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(buildDir, "mysql-init.sql")); err == nil {
@@ -849,7 +849,7 @@ func TestControlHostRoute(t *testing.T) {
 	if !strings.Contains(cs, "reverse_proxy host.docker.internal:4600") {
 		t.Error("Caddyfile control route not pointed at the host panel")
 	}
-	compose, err := RenderCompose("/b", apps, "roost.rsynk.com")
+	compose, err := RenderCompose("/b", apps, Opts{ControlHost: "roost.rsynk.com"})
 	if err != nil {
 		t.Fatalf("RenderCompose: %v", err)
 	}
@@ -862,8 +862,27 @@ func TestControlHostRoute(t *testing.T) {
 	if strings.Contains(string(caddy2), "host.docker.internal") {
 		t.Error("control route leaked when control host unset")
 	}
-	compose2, _ := RenderCompose("/b", apps, "")
+	compose2, _ := RenderCompose("/b", apps, Opts{})
 	if strings.Contains(string(compose2), "host-gateway") {
 		t.Error("extra_host leaked when control host unset")
+	}
+}
+
+func TestTunnelProtocol(t *testing.T) {
+	apps := sampleApps()
+
+	// http2 forces the cloudflared --protocol flag (TCP on UDP-hostile links).
+	compose, err := RenderCompose("/b", apps, Opts{TunnelProtocol: "http2"})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	if !strings.Contains(string(compose), "tunnel run --protocol http2 --token") {
+		t.Error("compose missing --protocol http2 on the cloudflared command")
+	}
+
+	// Empty leaves cloudflared on its QUIC default — no --protocol flag.
+	plain, _ := RenderCompose("/b", apps, Opts{})
+	if strings.Contains(string(plain), "--protocol") {
+		t.Error("--protocol leaked when tunnel protocol unset")
 	}
 }

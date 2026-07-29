@@ -124,6 +124,7 @@ A bare path is enough; a map opens up per-app overrides. Both forms mix freely.
 domain: demo.example.com          # fallback suffix for bare-path apps
 tunnel:
   name: rserver                   # your tunnel's name (never generated)
+  protocol: http2                 # optional; force TCP/443 when your ISP throttles UDP/QUIC (default: QUIC)
   access:
     emails: [me@example.com]      # Cloudflare Access wall before first exposure
 defaults:

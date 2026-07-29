@@ -411,6 +411,17 @@ type composeApp struct {
 	Env         []envPair
 }
 
+// Opts carries the stack-wide (non-per-app) settings that shape the
+// generated artifacts.
+type Opts struct {
+	// ControlHost, when set, exposes the `roost web` panel at this hostname
+	// through the tunnel (Caddy route + host-gateway extra_host).
+	ControlHost string
+	// TunnelProtocol overrides the cloudflared transport ("" = QUIC default,
+	// "http2" = TCP/443 for networks that throttle UDP).
+	TunnelProtocol string
+}
+
 type composeData struct {
 	BuildDir      string
 	Apps          []composeApp
@@ -421,13 +432,15 @@ type composeData struct {
 	// makes Caddy add a host-gateway extra_host so it can reach the panel
 	// running on the host.
 	ControlHost string
+	// TunnelProtocol, when set, forces the cloudflared --protocol flag.
+	TunnelProtocol string
 }
 
 // RenderCompose renders compose.yml. buildDir is where generated
 // artifacts live, used for Dockerfile and init-script mount paths.
-// controlHost, when set, gives Caddy a route to the host-run web panel.
-func RenderCompose(buildDir string, apps []App, controlHost string) ([]byte, error) {
-	data := composeData{BuildDir: buildDir, ControlHost: controlHost}
+// opts carries the control-host route and cloudflared transport override.
+func RenderCompose(buildDir string, apps []App, opts Opts) ([]byte, error) {
+	data := composeData{BuildDir: buildDir, ControlHost: opts.ControlHost, TunnelProtocol: opts.TunnelProtocol}
 	// seed.env lives next to build/ under ~/.roost; its pairs are shared
 	// across every app so demo seeds land the same super-admin login.
 	seed := loadSeedEnv(filepath.Dir(buildDir))
@@ -608,7 +621,7 @@ func render(name string, data any) ([]byte, error) {
 // written. Apps with their own Dockerfile get none generated; init
 // scripts are only written (and stale ones removed) for databases in
 // use.
-func Generate(buildDir string, apps []App, controlHost string) ([]string, error) {
+func Generate(buildDir string, apps []App, opts Opts) ([]string, error) {
 	dockerfilesDir := filepath.Join(buildDir, "dockerfiles")
 	// The dockerfiles dir is wholly roost-generated: clear it so
 	// removed apps don't leave stale Dockerfiles behind.
@@ -629,7 +642,7 @@ func Generate(buildDir string, apps []App, controlHost string) ([]string, error)
 		return nil
 	}
 
-	compose, err := RenderCompose(buildDir, apps, controlHost)
+	compose, err := RenderCompose(buildDir, apps, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -637,7 +650,7 @@ func Generate(buildDir string, apps []App, controlHost string) ([]string, error)
 		return nil, err
 	}
 
-	caddy, err := RenderCaddyfile(apps, controlHost)
+	caddy, err := RenderCaddyfile(apps, opts.ControlHost)
 	if err != nil {
 		return nil, err
 	}
