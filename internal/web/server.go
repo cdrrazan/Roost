@@ -144,18 +144,41 @@ type appGroup struct {
 }
 
 // groupApps buckets apps into Main apps / Utilities / Workers by category,
-// preserving input order within each bucket and omitting empty buckets. An
-// unknown or empty category falls back to Main apps.
-func groupApps(apps []runner.AppStatus) []appGroup {
+// omitting empty buckets. An unknown or empty category falls back to Main apps.
+// Within each bucket apps are sorted by their position in order (the user's
+// drag-and-drop ordering); apps not listed in order keep their input order and
+// sort after the ordered ones. Because bucketing is by category, order can only
+// rearrange apps within a category — never move one to another category.
+func groupApps(apps []runner.AppStatus, order []string) []appGroup {
+	rank := make(map[string]int, len(order))
+	for i, n := range order {
+		if _, ok := rank[n]; !ok {
+			rank[n] = i
+		}
+	}
 	buckets := map[string][]runner.AppStatus{}
 	for _, a := range apps {
-		buckets[groupTitle(a.Category)] = append(buckets[groupTitle(a.Category)], a)
+		t := groupTitle(a.Category)
+		buckets[t] = append(buckets[t], a)
 	}
 	var out []appGroup
 	for _, title := range []string{"Main apps", "Utilities", "Workers"} {
-		if apps := buckets[title]; len(apps) > 0 {
-			out = append(out, appGroup{Title: title, Apps: apps})
+		bucket := buckets[title]
+		if len(bucket) == 0 {
+			continue
 		}
+		sort.SliceStable(bucket, func(i, j int) bool {
+			ri, oki := rank[bucket[i].Name]
+			rj, okj := rank[bucket[j].Name]
+			if oki && okj {
+				return ri < rj
+			}
+			if oki != okj {
+				return oki // a ranked app sorts before an unranked one
+			}
+			return false // both unranked: stable keeps input order
+		})
+		out = append(out, appGroup{Title: title, Apps: bucket})
 	}
 	return out
 }
@@ -707,6 +730,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /app/up", s.guard(s.handleAppAction("starting", s.ctrl.StartApp)))
 	mux.HandleFunc("POST /app/down", s.guard(s.handleAppAction("stopping", s.ctrl.StopApp)))
 	mux.HandleFunc("POST /app/featured", s.guard(s.handleToggleFeatured))
+	mux.HandleFunc("POST /order", s.guard(s.handleReorder))
 	mux.HandleFunc("POST /add", s.guard(s.handleAdd))
 	mux.HandleFunc("POST /deploy", s.guard(s.handleDeploy))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
@@ -858,6 +882,39 @@ func (s *Server) handleToggleFeatured(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// handleReorder persists the user's drag-and-drop app ordering. Guarded — it
+// mutates persisted settings. The body carries a comma-separated `order` of app
+// names (grid-mode DOM order). Category grouping stays authoritative, so this
+// only affects within-category order; it can never move an app to another
+// category. Replies 204 (the client re-renders from its own state; no redirect).
+func (s *Server) handleReorder(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	var order []string
+	for _, n := range strings.Split(r.FormValue("order"), ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			order = append(order, n)
+		}
+	}
+	s.mu.Lock()
+	cur := s.settings
+	cur.Order = order
+	cur = cur.Normalize()
+	s.settings = cur
+	store := s.store
+	s.mu.Unlock()
+
+	if store != nil {
+		if err := store.Save(cur); err != nil {
+			http.Error(w, "save failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleSettingsPage renders the settings form in the panel shell.
@@ -1264,7 +1321,7 @@ func (s *Server) buildStatusView() statusView {
 		apps := data.apps
 		view.DockerOK = true
 		view.Apps = apps
-		view.Groups = groupApps(apps)
+		view.Groups = groupApps(apps, view.Settings.Order)
 		view.Total = len(apps)
 		var used, capacity float64
 		for _, a := range apps {
@@ -1447,7 +1504,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>roost control</title>
-<script>window.__roostCfg={theme:"{{.Settings.DefaultTheme}}",view:"{{.Settings.DefaultView}}"};(function(){try{var r=document.documentElement,c=window.__roostCfg,d=(c.theme==="light"||c.theme==="dark")?c.theme:(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"),t=localStorage.getItem("roost-theme")||d;r.dataset.theme=t;if(localStorage.getItem("roost-side")==="off")r.dataset.side="off";if(localStorage.getItem("roost-rail")==="off")r.dataset.rail="off";}catch(e){}})();</script>
+<script>window.__roostCfg={theme:"{{.Settings.DefaultTheme}}",view:"{{.Settings.DefaultView}}",token:"{{.Token}}"};(function(){try{var r=document.documentElement,c=window.__roostCfg,d=(c.theme==="light"||c.theme==="dark")?c.theme:(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"),t=localStorage.getItem("roost-theme")||d;r.dataset.theme=t;if(localStorage.getItem("roost-side")==="off")r.dataset.side="off";if(localStorage.getItem("roost-rail")==="off")r.dataset.rail="off";}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap" rel="stylesheet">
@@ -1688,6 +1745,9 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  .glist.grid .srv{border:1px solid var(--line);border-radius:14px;padding:18px;gap:14px;background:var(--panel2)}
  .glist.grid .grouphdr{padding-left:4px}
  .glist.grid .srv-top{flex-wrap:wrap;align-items:center}
+ .glist.grid .srv[draggable="true"]{cursor:grab}
+ .glist.grid .srv.dragging{opacity:.45;cursor:grabbing}
+ .glist.grid .srv.dragging *{pointer-events:none}
  .glist.grid .srv-idb{flex:1 1 55%}
  .glist.grid .srv-acts{flex-basis:100%;justify-content:flex-start;margin-top:2px}
  .srv-top{display:flex;align-items:flex-start;gap:12px}
@@ -2385,6 +2445,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  function apply(v){
   document.querySelectorAll(".glist").forEach(function(e){e.classList.toggle("grid",v==="grid")});
   document.querySelectorAll("[data-view]").forEach(function(b){b.classList.toggle("active",b.dataset.view===v)});
+  // Cards are only draggable in grid mode (reorder is a grid affordance).
+  document.querySelectorAll(".glist .srv").forEach(function(s){s.draggable=(v==="grid")});
  }
  apply(localStorage.getItem(KEY)||((window.__roostCfg&&window.__roostCfg.view==="grid")?"grid":"list"));
  document.querySelectorAll("[data-view]").forEach(function(b){
@@ -2572,6 +2634,41 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
    .then(function(){refresh(true);})
    .catch(function(){});
  },true);
+ // Drag-and-drop reorder (grid mode). A card can only be dropped within its own
+ // category container (.glist) — never into another category. On drop the new
+ // global DOM order POSTs to /order and is persisted, so list mode respects it
+ // too. Listeners are delegated on document, so they survive the live refresh.
+ var dragEl=null, srcList=null;
+ document.addEventListener("dragstart",function(e){
+  var s=e.target.closest(".srv"); if(!s||!s.closest(".glist.grid"))return;
+  // Don't hijack a drag that starts on an interactive control (buttons/links).
+  if(e.target.closest("a,button,input,summary")){e.preventDefault();return;}
+  dragEl=s; srcList=s.closest(".glist"); s.classList.add("dragging");
+  e.dataTransfer.effectAllowed="move";
+  try{e.dataTransfer.setData("text/plain",s.dataset.app||"");}catch(_){}
+ });
+ document.addEventListener("dragover",function(e){
+  if(!dragEl)return;
+  var list=e.target.closest(".glist"); if(!list||list!==srcList)return; // within-category only
+  e.preventDefault();
+  var over=e.target.closest(".srv");
+  if(!over||over===dragEl)return;
+  var b=over.getBoundingClientRect();
+  // Insert before the hovered card when the cursor is in its upper/left half.
+  var before=e.clientY<b.top+b.height/2||(e.clientY<b.bottom&&e.clientX<b.left+b.width/2);
+  list.insertBefore(dragEl,before?over:over.nextSibling);
+ });
+ function endDrag(persist){
+  if(!dragEl)return;
+  dragEl.classList.remove("dragging"); dragEl=null; srcList=null;
+  if(!persist)return;
+  var names=[].map.call(document.querySelectorAll(".glist [data-app]"),function(s){return s.dataset.app;}).filter(Boolean);
+  var body=new URLSearchParams(); body.set("order",names.join(","));
+  var tok=window.__roostCfg&&window.__roostCfg.token; if(tok)body.set("token",tok);
+  fetch("/order",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:body.toString()}).catch(function(){});
+ }
+ document.addEventListener("drop",function(e){ if(dragEl){e.preventDefault();} endDrag(true); });
+ document.addEventListener("dragend",function(){ endDrag(false); });
  // Incidents-page share: compose the status summary + this panel's /status URL
  // and hand it to X / LinkedIn / Facebook, or the clipboard.
  document.addEventListener("click",function(e){

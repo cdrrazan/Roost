@@ -32,6 +32,13 @@ type Settings struct {
 	// Featured pins up to featuredCap apps (by name) to the dashboard's
 	// Featured strip. Toggled with the star button on each app card.
 	Featured []string `json:"featured"`
+
+	// Order is the user's preferred app ordering (by name), set by drag-and-drop
+	// in grid mode. groupApps sorts each category bucket by this order; names not
+	// listed keep their config order after the ordered ones. It only reorders
+	// within a category — an app's category comes from config, so a name's
+	// position here can never move it to another category.
+	Order []string `json:"order"`
 }
 
 // featuredCap bounds how many apps the Featured strip shows.
@@ -99,6 +106,18 @@ func (s Settings) Normalize() Settings {
 		}
 	}
 	s.Featured = feat
+	// Order: trim, drop blanks, dedup (no cap — it can list every app).
+	var order []string
+	oseen := map[string]bool{}
+	for _, n := range s.Order {
+		n = strings.TrimSpace(n)
+		if n == "" || oseen[n] {
+			continue
+		}
+		oseen[n] = true
+		order = append(order, n)
+	}
+	s.Order = order
 	return s
 }
 
