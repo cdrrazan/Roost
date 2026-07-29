@@ -499,6 +499,14 @@ func (s *Server) checkIncidents() {
 					"Docker is reachable again.\n\n" + now.Format(time.RFC1123) + link})
 			}
 		}
+		present := make(map[string]bool, len(apps))
+		for _, a := range apps {
+			present[a.Name] = true
+		}
+		// An app dropped from the config no longer appears in Status(); prune
+		// its stale health + any open/closed incidents so a removed app can't
+		// linger as a permanently-"down" incident (it never recovers to resolve).
+		s.pruneAbsent(present)
 		for _, a := range apps {
 			if a.Worker {
 				continue
@@ -532,6 +540,24 @@ func (s *Server) checkIncidents() {
 			_ = s.notifier.Notify(m.subject, m.body)
 		}
 	}
+}
+
+// pruneAbsent drops health tracking and incident history for apps not in the
+// present set (i.e. removed from the config). Control-plane incidents (App == "")
+// are always kept. Must be called under s.mu.
+func (s *Server) pruneAbsent(present map[string]bool) {
+	for name := range s.health {
+		if !present[name] {
+			delete(s.health, name)
+		}
+	}
+	kept := s.incidents[:0]
+	for _, in := range s.incidents {
+		if in.App == "" || present[in.App] {
+			kept = append(kept, in)
+		}
+	}
+	s.incidents = kept
 }
 
 // openIncident records a new open incident for app+kind, unless one is already

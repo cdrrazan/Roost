@@ -343,6 +343,45 @@ func TestIncidentDetectionAndNotify(t *testing.T) {
 	}
 }
 
+func TestIncidentPrunedWhenAppRemoved(t *testing.T) {
+	f := &fakeController{}
+	s := NewServer(f, "")
+
+	// Baseline healthy, then the app goes down → one open incident.
+	f.statuses = []runner.AppStatus{{Name: "gone", State: "running", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+	f.statuses = []runner.AppStatus{{Name: "gone", State: "exited"}}
+	s.checkIncidents()
+
+	s.mu.Lock()
+	open := 0
+	for _, in := range s.incidents {
+		if in.App == "gone" && in.Resolved.IsZero() {
+			open++
+		}
+	}
+	s.mu.Unlock()
+	if open != 1 {
+		t.Fatalf("want 1 open incident for gone, got %d", open)
+	}
+
+	// The app is removed from the config: Status() no longer lists it. A
+	// stale down incident must not linger (the notesnook-down-1.4h bug).
+	f.statuses = []runner.AppStatus{{Name: "other", State: "running", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, in := range s.incidents {
+		if in.App == "gone" {
+			t.Fatalf("incident for removed app should be pruned, still have %+v", in)
+		}
+	}
+	if _, ok := s.health["gone"]; ok {
+		t.Error("health entry for removed app should be pruned")
+	}
+}
+
 func TestIncidentsPageAndMarkRead(t *testing.T) {
 	f := &fakeController{}
 	s := NewServer(f, "")
