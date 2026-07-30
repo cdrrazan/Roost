@@ -343,6 +343,45 @@ func TestIncidentDetectionAndNotify(t *testing.T) {
 	}
 }
 
+func TestIncidentPrunedWhenAppRemoved(t *testing.T) {
+	f := &fakeController{}
+	s := NewServer(f, "")
+
+	// Baseline healthy, then the app goes down → one open incident.
+	f.statuses = []runner.AppStatus{{Name: "gone", State: "running", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+	f.statuses = []runner.AppStatus{{Name: "gone", State: "exited"}}
+	s.checkIncidents()
+
+	s.mu.Lock()
+	open := 0
+	for _, in := range s.incidents {
+		if in.App == "gone" && in.Resolved.IsZero() {
+			open++
+		}
+	}
+	s.mu.Unlock()
+	if open != 1 {
+		t.Fatalf("want 1 open incident for gone, got %d", open)
+	}
+
+	// The app is removed from the config: Status() no longer lists it. A
+	// stale down incident must not linger (the notesnook-down-1.4h bug).
+	f.statuses = []runner.AppStatus{{Name: "other", State: "running", HTTP: "200", Reachable: true}}
+	s.checkIncidents()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, in := range s.incidents {
+		if in.App == "gone" {
+			t.Fatalf("incident for removed app should be pruned, still have %+v", in)
+		}
+	}
+	if _, ok := s.health["gone"]; ok {
+		t.Error("health entry for removed app should be pruned")
+	}
+}
+
 func TestIncidentsPageAndMarkRead(t *testing.T) {
 	f := &fakeController{}
 	s := NewServer(f, "")
@@ -813,7 +852,7 @@ func TestGroupAppsOrderAndFallback(t *testing.T) {
 		{Name: "sure-worker", Category: "worker"},
 		{Name: "unlabeled", Category: ""}, // empty → Main apps
 	}
-	groups := groupApps(apps)
+	groups := groupApps(apps, nil)
 	if len(groups) != 3 {
 		t.Fatalf("groups = %d, want 3 (empty groups omitted)", len(groups))
 	}
@@ -826,9 +865,105 @@ func TestGroupAppsOrderAndFallback(t *testing.T) {
 }
 
 func TestGroupAppsOmitsEmpty(t *testing.T) {
-	groups := groupApps([]runner.AppStatus{{Name: "a", Category: "utility"}})
+	groups := groupApps([]runner.AppStatus{{Name: "a", Category: "utility"}}, nil)
 	if len(groups) != 1 || groups[0].Title != "Utilities" {
 		t.Fatalf("groups = %+v, want only Utilities", groups)
+	}
+}
+
+func TestGroupAppsRespectsOrder(t *testing.T) {
+	apps := []runner.AppStatus{
+		{Name: "a", Category: "main"},
+		{Name: "b", Category: "main"},
+		{Name: "u1", Category: "utility"},
+		{Name: "u2", Category: "utility"},
+	}
+	// Order asks b before a (within main) and u2 before u1 (within utilities).
+	order := []string{"b", "u2", "a", "u1"}
+	got := map[string][]string{}
+	for _, g := range groupApps(apps, order) {
+		for _, ap := range g.Apps {
+			got[g.Title] = append(got[g.Title], ap.Name)
+		}
+	}
+	if strings.Join(got["Main apps"], ",") != "b,a" {
+		t.Errorf("main order = %v, want [b a]", got["Main apps"])
+	}
+	if strings.Join(got["Utilities"], ",") != "u2,u1" {
+		t.Errorf("utilities order = %v, want [u2 u1]", got["Utilities"])
+	}
+}
+
+func TestGroupAppsOrderNeverCrossesCategory(t *testing.T) {
+	apps := []runner.AppStatus{
+		{Name: "app", Category: "main"},
+		{Name: "util", Category: "utility"},
+	}
+	// Even when the persisted order interleaves names across categories, the
+	// config category is authoritative: an app is only reordered within its
+	// own bucket, never moved to another category.
+	for _, g := range groupApps(apps, []string{"util", "app"}) {
+		if g.Title == "Main apps" && (len(g.Apps) != 1 || g.Apps[0].Name != "app") {
+			t.Errorf("main = %v, want [app]", g.Apps)
+		}
+		if g.Title == "Utilities" && (len(g.Apps) != 1 || g.Apps[0].Name != "util") {
+			t.Errorf("utilities = %v, want [util]", g.Apps)
+		}
+	}
+}
+
+func TestGroupAppsUnorderedKeepInputOrderAfterRanked(t *testing.T) {
+	apps := []runner.AppStatus{
+		{Name: "x", Category: "main"},
+		{Name: "y", Category: "main"},
+		{Name: "z", Category: "main"},
+	}
+	// Only y is ranked; x and z are unranked and keep their input order,
+	// appearing after the ranked ones.
+	got := []string{}
+	for _, g := range groupApps(apps, []string{"y"}) {
+		for _, ap := range g.Apps {
+			got = append(got, ap.Name)
+		}
+	}
+	if strings.Join(got, ",") != "y,x,z" {
+		t.Fatalf("order = %v, want [y x z]", got)
+	}
+}
+
+type memSettingsStore struct{ saved Settings }
+
+func (m *memSettingsStore) Load() (Settings, error) { return m.saved, nil }
+func (m *memSettingsStore) Save(s Settings) error   { m.saved = s; return nil }
+
+func TestHandleReorderPersistsOrder(t *testing.T) {
+	s := NewServer(&fakeController{}, "tok")
+	store := &memSettingsStore{}
+	s.SetSettingsStore(store)
+
+	req := httptest.NewRequest("POST", "/order", strings.NewReader("order=b,a,c&token=tok"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent && rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 204 or 303", rr.Code)
+	}
+	if got := strings.Join(s.currentSettings().Order, ","); got != "b,a,c" {
+		t.Fatalf("live order = %q, want b,a,c", got)
+	}
+	if got := strings.Join(store.saved.Order, ","); got != "b,a,c" {
+		t.Fatalf("persisted order = %q, want b,a,c", got)
+	}
+}
+
+func TestHandleReorderNeedsToken(t *testing.T) {
+	s := NewServer(&fakeController{}, "tok")
+	req := httptest.NewRequest("POST", "/order", strings.NewReader("order=b,a"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rr, req)
+	if rr.Code == http.StatusNoContent || rr.Code == http.StatusSeeOther {
+		t.Fatalf("reorder without token should be rejected, got %d", rr.Code)
 	}
 }
 

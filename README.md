@@ -345,6 +345,55 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 
 ---
 
+## 🏠 Where to run it — laptop, server, or both
+
+roost is a Go binary driving Docker, so it runs anywhere Docker does. Three shapes:
+
+**On your laptop (default).** Follow the quickstart, then `roost enable` to bring
+the stack up at every login. Apps are live while the machine is awake — see
+*the honest part* above.
+
+**On an always-on server.** Install roost + Docker on the box, copy
+`~/.roost/config.yml` and `~/.roost/credentials` over, run `roost up`, then
+`roost enable` (plus `loginctl enable-linger <user>` on a headless Linux box so
+the units start with no interactive login). The tunnel is **outbound** — no ports
+to open, and **no DNS change** when the box's IP changes; Cloudflare finds it by
+the tunnel token. Lighter option: keep roost on your laptop and run only the
+containers on the box with `remote: ssh://user@box` in `config.yml`.
+
+**Both at once — a dev laptop *and* a prod box.** Two connectors sharing **one**
+tunnel split traffic between them (a request randomly hits whichever answers
+first → intermittent 502s). To run both machines simultaneously, give each its
+**own tunnel** and its **own hostnames**:
+
+```yaml
+# Prod box — ~/.roost/config.yml
+tunnel:
+  name: rserver
+# apps resolve to everest.example.com
+```
+
+```yaml
+# Dev laptop — ~/.roost/config.yml
+tunnel:
+  name: rserver-local
+# same apps, but everest-local.example.com
+```
+
+The two tunnels are independent, so **both stay live with zero conflict**:
+`everest.example.com` is your always-on prod copy, `everest-local.example.com`
+is the one you hack on. Point each hostname's DNS at its own tunnel (a wildcard
+per suffix for prod; the `-local` names get their own records for the dev tunnel
+— exact records win over a wildcard). The one rule: **one cloudflared per
+tunnel**.
+
+> **Data does not cross between the two.** Each environment has its own Docker
+> volumes (its own Postgres/MySQL), on purpose. If an app ships its own sync
+> (e.g. a notes app with a sync server), point each client at whichever
+> environment you want — roost keeps the two stacks isolated.
+
+---
+
 ## 🖥️ Web control panel — `roost web`
 
 `roost web` serves a small **dashboard** so you can run the whole fleet from a
@@ -392,7 +441,9 @@ it does:
   **share** buttons (copy / X / LinkedIn / Facebook) that post a one-line status
   summary. A background monitor re-checks every app on a configurable interval
   (**default 2 min**) and opens an incident — with details — even with no browser
-  open. Optional **email alerts** (SMTP; the password comes from
+  open. An app you've since **removed from the config** is pruned from incident
+  tracking on the next check, so a deleted app never lingers as a permanently-open
+  "down" incident. Optional **email alerts** (SMTP; the password comes from
   `$ROOST_SMTP_PASSWORD`, never config); the sidebar keeps a **Test alert**
   button. Click any app for a **detail drawer** — image, restarts, env **key
   names**, that app's own **incident history**, and a recent-log tail. The public
@@ -405,7 +456,10 @@ it does:
   and **tech-stack label overrides** (`rails=Ruby on Rails`).
 - **Comfort** — a **Material Design 3** interface (tonal surfaces, ripples,
   elevated cards) in light / **dark**; search, **filter chips** with a friendly
-  empty state, **list / grid** views, a **⌘K command palette**, and fully
+  empty state, **list / grid** views with **drag-and-drop reordering** in grid
+  (grab a card and drop it into place — the order persists to `~/.roost/panel.json`
+  and is honoured in list view too; you can only reorder **within** a category,
+  never move an app to another one), a **⌘K command palette**, and fully
   mobile-responsive.
 
 **Exposing it.** Set the top-level `control_host:` in `config.yml` and roost
@@ -711,6 +765,30 @@ failed deploy rather than a silent bad merge.
 </details>
 
 <details>
+<summary><b>How do I keep roost itself in sync on my laptop and my box?</b></summary>
+
+Two moving parts — the roost **binary** and each app's **source**:
+
+- **The binary, locally.** After pulling this repo, `go install ./cmd/roost`
+  (installs to `~/go/bin`), or `go build -o roost ./cmd/roost && sudo install -m
+  0755 roost /usr/local/bin/roost`. Restart `roost web` so the panel process picks
+  up the new binary.
+- **The binary, on the box.** A merge to **`main`** triggers
+  [`.github/workflows/deploy-web.yml`](.github/workflows/deploy-web.yml): it builds
+  for the box's CPU arch, `scp`s the binary over a deploy key, installs it, and
+  restarts the `roost-web` systemd `--user` service. Nothing by hand — set the
+  `DEPLOY_SSH_KEY` / `DEPLOY_HOST` / `DEPLOY_USER` repo secrets once (see the
+  workflow header). So the loop is **commit to `develop` → PR → merge to `main`**,
+  and the box updates within a minute or two.
+- **App source (not roost).** `roost deploy <app>` on the host does a `git pull
+  --ff-only` + rebuild of that one container — see the two entries above.
+
+Laptop and box are separate installs of the same tool; keeping them in step is
+"`go install` here, merge-to-`main` there." Only `roost-web` is auto-restarted on
+the box — a change to the running *stack* still needs a `roost up` / `roost deploy`.
+</details>
+
+<details>
 <summary><b>How do I keep it running after a reboot, with no one logged in?</b></summary>
 
 `roost enable` installs a boot unit — launchd on macOS, a systemd `--user` unit
@@ -729,6 +807,9 @@ is the supervisor.
 - **[Examples](examples/)** — runnable configs from minimal to every-knob, plus a
   [demo with fake data](examples/demo/config.yml) and an
   [`include` walkthrough](examples/includes/).
+- **[Runbook](docs/runbook.md)** — copy-paste developer & ops commands: git
+  workflow, syncing the binary local + box, adding/updating apps (incl. a forked
+  app with its own Dockerfile + Postgres), and common ops.
 - **[Website](https://roost.app.rsynk.com)** — one-page overview ([source](site/)).
 - **[Ops scripts](scripts/)** — running a fleet on an always-on box: an encrypted
   backup (DB dumps + `age`-encrypted secrets → R2) and a one-shot bootstrap that

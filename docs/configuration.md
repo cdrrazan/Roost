@@ -62,7 +62,11 @@ apps: [...]                # see below
     **tech-stack label overrides** (one `key=Label` per line, e.g.
     `rails=Ruby on Rails`). Saving rebuilds email delivery in place — no restart.
     `config.yml`'s `notify:` block still works as a fallback when the settings
-    page hasn't set an SMTP host.
+    page hasn't set an SMTP host. The panel also persists two things you set by
+    clicking, not typing: your **featured pins** (the star toggle, `featured:`)
+    and, in grid view, your **drag-and-drop card order** (`order:`, honoured in
+    list view too, reorderable within a category only). Both are written by the
+    panel — you don't edit `panel.json` by hand.
   - **Share status** — the Incidents page has copy / X / LinkedIn / Facebook
     buttons that post a one-line summary of the current status plus the `/status`
     link.
