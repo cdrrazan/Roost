@@ -807,6 +807,9 @@ is the supervisor.
 - **[Examples](examples/)** — runnable configs from minimal to every-knob, plus a
   [demo with fake data](examples/demo/config.yml) and an
   [`include` walkthrough](examples/includes/).
+- **[Runbook](docs/runbook.md)** — copy-paste developer & ops commands: git
+  workflow, syncing the binary local + box, adding/updating apps (incl. a forked
+  app with its own Dockerfile + Postgres), and common ops.
 - **[Website](https://roost.app.rsynk.com)** — one-page overview ([source](site/)).
 - **[Ops scripts](scripts/)** — running a fleet on an always-on box: an encrypted
   backup (DB dumps + `age`-encrypted secrets → R2) and a one-shot bootstrap that
