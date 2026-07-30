@@ -345,6 +345,55 @@ Once published: `go install github.com/cdrrazan/roost/cmd/roost@latest`.
 
 ---
 
+## 🏠 Where to run it — laptop, server, or both
+
+roost is a Go binary driving Docker, so it runs anywhere Docker does. Three shapes:
+
+**On your laptop (default).** Follow the quickstart, then `roost enable` to bring
+the stack up at every login. Apps are live while the machine is awake — see
+*the honest part* above.
+
+**On an always-on server.** Install roost + Docker on the box, copy
+`~/.roost/config.yml` and `~/.roost/credentials` over, run `roost up`, then
+`roost enable` (plus `loginctl enable-linger <user>` on a headless Linux box so
+the units start with no interactive login). The tunnel is **outbound** — no ports
+to open, and **no DNS change** when the box's IP changes; Cloudflare finds it by
+the tunnel token. Lighter option: keep roost on your laptop and run only the
+containers on the box with `remote: ssh://user@box` in `config.yml`.
+
+**Both at once — a dev laptop *and* a prod box.** Two connectors sharing **one**
+tunnel split traffic between them (a request randomly hits whichever answers
+first → intermittent 502s). To run both machines simultaneously, give each its
+**own tunnel** and its **own hostnames**:
+
+```yaml
+# Prod box — ~/.roost/config.yml
+tunnel:
+  name: rserver
+# apps resolve to everest.example.com
+```
+
+```yaml
+# Dev laptop — ~/.roost/config.yml
+tunnel:
+  name: rserver-local
+# same apps, but everest-local.example.com
+```
+
+The two tunnels are independent, so **both stay live with zero conflict**:
+`everest.example.com` is your always-on prod copy, `everest-local.example.com`
+is the one you hack on. Point each hostname's DNS at its own tunnel (a wildcard
+per suffix for prod; the `-local` names get their own records for the dev tunnel
+— exact records win over a wildcard). The one rule: **one cloudflared per
+tunnel**.
+
+> **Data does not cross between the two.** Each environment has its own Docker
+> volumes (its own Postgres/MySQL), on purpose. If an app ships its own sync
+> (e.g. a notes app with a sync server), point each client at whichever
+> environment you want — roost keeps the two stacks isolated.
+
+---
+
 ## 🖥️ Web control panel — `roost web`
 
 `roost web` serves a small **dashboard** so you can run the whole fleet from a
