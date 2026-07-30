@@ -765,6 +765,30 @@ failed deploy rather than a silent bad merge.
 </details>
 
 <details>
+<summary><b>How do I keep roost itself in sync on my laptop and my box?</b></summary>
+
+Two moving parts — the roost **binary** and each app's **source**:
+
+- **The binary, locally.** After pulling this repo, `go install ./cmd/roost`
+  (installs to `~/go/bin`), or `go build -o roost ./cmd/roost && sudo install -m
+  0755 roost /usr/local/bin/roost`. Restart `roost web` so the panel process picks
+  up the new binary.
+- **The binary, on the box.** A merge to **`main`** triggers
+  [`.github/workflows/deploy-web.yml`](.github/workflows/deploy-web.yml): it builds
+  for the box's CPU arch, `scp`s the binary over a deploy key, installs it, and
+  restarts the `roost-web` systemd `--user` service. Nothing by hand — set the
+  `DEPLOY_SSH_KEY` / `DEPLOY_HOST` / `DEPLOY_USER` repo secrets once (see the
+  workflow header). So the loop is **commit to `develop` → PR → merge to `main`**,
+  and the box updates within a minute or two.
+- **App source (not roost).** `roost deploy <app>` on the host does a `git pull
+  --ff-only` + rebuild of that one container — see the two entries above.
+
+Laptop and box are separate installs of the same tool; keeping them in step is
+"`go install` here, merge-to-`main` there." Only `roost-web` is auto-restarted on
+the box — a change to the running *stack* still needs a `roost up` / `roost deploy`.
+</details>
+
+<details>
 <summary><b>How do I keep it running after a reboot, with no one logged in?</b></summary>
 
 `roost enable` installs a boot unit — launchd on macOS, a systemd `--user` unit
