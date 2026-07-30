@@ -392,7 +392,9 @@ it does:
   **share** buttons (copy / X / LinkedIn / Facebook) that post a one-line status
   summary. A background monitor re-checks every app on a configurable interval
   (**default 2 min**) and opens an incident — with details — even with no browser
-  open. Optional **email alerts** (SMTP; the password comes from
+  open. An app you've since **removed from the config** is pruned from incident
+  tracking on the next check, so a deleted app never lingers as a permanently-open
+  "down" incident. Optional **email alerts** (SMTP; the password comes from
   `$ROOST_SMTP_PASSWORD`, never config); the sidebar keeps a **Test alert**
   button. Click any app for a **detail drawer** — image, restarts, env **key
   names**, that app's own **incident history**, and a recent-log tail. The public
@@ -405,7 +407,10 @@ it does:
   and **tech-stack label overrides** (`rails=Ruby on Rails`).
 - **Comfort** — a **Material Design 3** interface (tonal surfaces, ripples,
   elevated cards) in light / **dark**; search, **filter chips** with a friendly
-  empty state, **list / grid** views, a **⌘K command palette**, and fully
+  empty state, **list / grid** views with **drag-and-drop reordering** in grid
+  (grab a card and drop it into place — the order persists to `~/.roost/panel.json`
+  and is honoured in list view too; you can only reorder **within** a category,
+  never move an app to another one), a **⌘K command palette**, and fully
   mobile-responsive.
 
 **Exposing it.** Set the top-level `control_host:` in `config.yml` and roost
