@@ -336,6 +336,12 @@ type Server struct {
 	trendMu sync.Mutex
 	trend   map[string][]float64
 
+	// hist is the aggregate metrics time-series the Dashboard charts read
+	// (most recent last, capped). Sampled on each /api/metrics poll. In-memory
+	// only — it lives for the panel process's lifetime, like trend.
+	histMu sync.Mutex
+	hist   []metricSample
+
 	// events is a rolling in-memory audit log of panel actions (most recent
 	// first, capped), rendered as the activity timeline. Guarded by mu.
 	events []event
@@ -735,6 +741,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /deploy", s.guard(s.handleDeploy))
 	mux.HandleFunc("POST /remove", s.guard(s.handleRemove))
 	mux.HandleFunc("POST /test-alert", s.guard(s.handleTestAlert))
+	mux.HandleFunc("GET /dashboard", s.handleDashboardPage)
+	mux.HandleFunc("GET /api/metrics", s.handleMetricsAPI)
 	mux.HandleFunc("GET /incidents", s.handleIncidentsPage)
 	mux.HandleFunc("POST /incidents/read", s.guard(s.handleMarkRead))
 	mux.HandleFunc("GET /settings", s.handleSettingsPage)
@@ -1428,6 +1436,180 @@ func buildAlerts(apps []runner.AppStatus) []Alert {
 	return alerts
 }
 
+// metricsCap bounds the aggregate time-series ring the Dashboard charts read.
+// 240 samples at the 5s poll cadence is ~20 minutes of live history.
+const metricsCap = 240
+
+// metricSample is one point in the Dashboard's aggregate time-series.
+type metricSample struct {
+	T       time.Time
+	CPU     float64 // summed CPU% across running apps
+	MemUsed float64 // summed bytes in use
+	MemCap  float64 // summed memory caps
+	NetRx   float64 // summed network read bytes
+	NetTx   float64 // summed network write bytes
+	Running int
+	Total   int
+}
+
+// round1 rounds to one decimal without importing math.
+func round1(f float64) float64 { return float64(int(f*10+0.5)) / 10 }
+
+// recordSample appends an aggregate sample to the ring, capping its length.
+func (s *Server) recordSample(m metricSample) {
+	s.histMu.Lock()
+	defer s.histMu.Unlock()
+	s.hist = append(s.hist, m)
+	if len(s.hist) > metricsCap {
+		s.hist = s.hist[len(s.hist)-metricsCap:]
+	}
+}
+
+// historyJSON renders the aggregate ring for the /api/metrics response.
+func (s *Server) historyJSON() []map[string]any {
+	s.histMu.Lock()
+	defer s.histMu.Unlock()
+	out := make([]map[string]any, 0, len(s.hist))
+	for _, m := range s.hist {
+		pct := 0
+		if m.MemCap > 0 {
+			pct = int(m.MemUsed/m.MemCap*100 + 0.5)
+		}
+		out = append(out, map[string]any{
+			"t": m.T.Format("15:04:05"), "cpu": round1(m.CPU),
+			"mem": m.MemUsed, "memPct": pct, "netRx": m.NetRx, "netTx": m.NetTx,
+			"running": m.Running, "total": m.Total,
+		})
+	}
+	return out
+}
+
+// handleDashboardPage renders the monitoring dashboard (charts) in the shared
+// shell, mirroring the incidents page.
+func (s *Server) handleDashboardPage(w http.ResponseWriter, _ *http.Request) {
+	s.renderPage(w, "metrics")
+}
+
+// handleMetricsAPI is the Dashboard's real-time data feed: a JSON snapshot of
+// aggregate + per-app metrics, host/system/edge facts, incidents, and the
+// accumulated time-series. Read-only (no mutation), so it is unguarded like
+// GET /api/app; the panel itself is loopback/Access-gated.
+func (s *Server) handleMetricsAPI(w http.ResponseWriter, _ *http.Request) {
+	data := s.dashData()
+	now := time.Now()
+	payload := map[string]any{"ts": now.Format("15:04:05")}
+
+	if data.statusErr != nil {
+		payload["dockerOK"] = false
+		payload["error"] = data.statusErr.Error()
+	} else {
+		var cpu, memU, memC, rx, tx float64
+		running := 0
+		apps := make([]map[string]any, 0, len(data.apps))
+		for _, a := range data.apps {
+			c := parseCPU(a.CPU)
+			var mu, mc float64
+			if u, cp, ok := parseMem(a.Memory); ok {
+				mu, mc = u, cp
+			}
+			var arx, atx float64
+			if r, t, ok := parseMem(a.Net); ok {
+				arx, atx = r, t
+			}
+			if a.State == "running" {
+				running++
+				cpu += c
+				memU += mu
+				memC += mc
+				rx += arx
+				tx += atx
+			}
+			apps = append(apps, map[string]any{
+				"name": a.Name, "state": a.State, "health": a.Health,
+				"cpu": a.CPU, "cpuPct": c, "mem": a.Memory, "memUsed": mu,
+				"memPct": memPct(a.Memory), "net": a.Net, "up": a.Up,
+				"url": a.URL, "reachable": a.Reachable, "category": a.Category,
+			})
+		}
+		total := len(data.apps)
+		s.recordSample(metricSample{T: now, CPU: cpu, MemUsed: memU, MemCap: memC,
+			NetRx: rx, NetTx: tx, Running: running, Total: total})
+		memPctAgg := 0
+		if memC > 0 {
+			memPctAgg = int(memU/memC*100 + 0.5)
+		}
+		payload["dockerOK"] = true
+		payload["aggregate"] = map[string]any{
+			"cpuPct": round1(cpu), "memUsed": memU, "memCap": memC,
+			"memUsedH": humanBytes(memU), "memCapH": humanBytes(memC), "memPct": memPctAgg,
+			"netRx": rx, "netTx": tx, "netRxH": humanBytes(rx), "netTxH": humanBytes(tx),
+			"running": running, "total": total,
+		}
+		payload["apps"] = apps
+	}
+
+	payload["server"] = map[string]any{
+		"host": data.server.Host, "os": data.server.OS, "uptime": data.server.Uptime,
+		"cores": data.server.Cores, "ram": data.server.RAM,
+		"diskUsed": data.server.DiskUsed, "diskCap": data.server.DiskCap, "diskPct": data.server.DiskPct,
+	}
+	payload["system"] = map[string]any{
+		"images": data.system.Images, "imagesSize": data.system.ImagesSize,
+		"containers": data.system.Containers, "volumes": data.system.Volumes,
+		"volumesSize": data.system.VolumesSize, "buildCache": data.system.BuildCache,
+		"reclaimable": data.system.Reclaimable,
+	}
+	payload["edge"] = map[string]any{
+		"tunnelName": data.edge.TunnelName, "tunnelState": data.edge.TunnelState,
+		"protected": data.edge.Protected, "hosts": data.edge.Hosts,
+	}
+	payload["incidents"] = s.incidentsMetrics(now)
+	payload["history"] = s.historyJSON()
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+// incidentsMetrics summarizes incidents for the Dashboard: open/resolved counts,
+// the recent list, and a 14-day opened-per-day bucket for the incidents chart.
+func (s *Server) incidentsMetrics(now time.Time) map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	open, resolved := 0, 0
+	recent := make([]map[string]any, 0, len(s.incidents))
+	const days = 14
+	buckets := make([]int, days)
+	today := now.Truncate(24 * time.Hour)
+	for _, in := range s.incidents {
+		label := "Control plane"
+		if in.App != "" {
+			label = humanize(in.App)
+		}
+		isOpen := in.Resolved.IsZero()
+		if isOpen {
+			open++
+		} else {
+			resolved++
+		}
+		ago := "resolved after " + compactDur(in.Resolved.Sub(in.Since))
+		if isOpen {
+			ago = "down " + compactDur(now.Sub(in.Since))
+		}
+		recent = append(recent, map[string]any{
+			"label": label, "detail": in.Detail, "kind": in.Kind, "open": isOpen, "ago": ago,
+		})
+		if d := int(today.Sub(in.Since.Truncate(24*time.Hour)) / (24 * time.Hour)); d >= 0 && d < days {
+			buckets[days-1-d]++
+		}
+	}
+	series := make([]map[string]any, days)
+	for i := 0; i < days; i++ {
+		day := today.AddDate(0, 0, -(days - 1 - i))
+		series[i] = map[string]any{"day": day.Format("Jan 2"), "count": buckets[i]}
+	}
+	return map[string]any{"open": open, "resolved": resolved, "recent": recent, "days": series}
+}
+
 // recordAndRenderTrends appends each app's current CPU sample to the ring and
 // returns a per-app inline sparkline SVG keyed by app name.
 func (s *Server) recordAndRenderTrends(apps []runner.AppStatus) map[string]template.HTML {
@@ -1574,7 +1756,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  /* sidebar — fixed column, scrolls on its own */
  .side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px;overflow:hidden}
  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 14px;flex:none}
- .logo{width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);flex:none;overflow:hidden}
+ .logo{display:block;width:36px;height:36px;border-radius:10px;box-shadow:var(--shadow);flex:none;overflow:hidden}
  .logo svg{width:100%;height:100%;display:block}
  .brand .bt{font-size:15.5px;font-weight:700;letter-spacing:-.2px}
  .brand .bs{font-size:12px;color:var(--faint)}
@@ -2047,12 +2229,13 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
 
  <aside class="side">
   <div class="brand">
-   <div class="logo"><svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="url(#rg)"/><path d="M10.5 19.2 L20 11 L29.5 19.2" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.4 18.4 V28.6 H26.6 V18.4" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.4 28.6 V24 a2.6 2.6 0 0 1 5.2 0 V28.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b83f7"/><stop offset=".55" stop-color="#5b54e6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs></svg></div>
+   <a href="/" class="logo" title="Home"><svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="11" fill="url(#rg)"/><path d="M10.5 19.2 L20 11 L29.5 19.2" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.4 18.4 V28.6 H26.6 V18.4" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.4 28.6 V24 a2.6 2.6 0 0 1 5.2 0 V28.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b83f7"/><stop offset=".55" stop-color="#5b54e6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs></svg></a>
    <div><div class="bt">roost</div><div class="bs">Control panel</div></div>
   </div>
   <nav class="nav">
+   <a href="/dashboard"{{if eq .Page "metrics"}} class="active"{{end}}><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="20" x2="3" y2="10"/><line x1="9" y1="20" x2="9" y2="4"/><line x1="15" y1="20" x2="15" y2="12"/><line x1="21" y1="20" x2="21" y2="7"/></svg></span> Dashboard</a>
    <div class="navlabel">Resources</div>
-   <a href="/" class="navf{{if ne .Page "incidents"}} active{{end}}" data-cat=""><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
+   <a href="/" class="navf{{if eq .Page "dashboard"}} active{{end}}" data-cat=""><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span> All apps</a>
    <a href="/" class="navf" data-cat="Main apps"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9 6.75 19.6l1-5.8L3.5 9.2l5.9-.9z"/></svg></span> Main apps</a>
    <a href="/" class="navf" data-cat="Utilities"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.3"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.3"/></svg></span> Utilities</a>
    <a href="/" class="navf" data-cat="Workers"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v8a2 2 0 0 1-1 1.73l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.73l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8z"/><path d="M3.3 7 12 12l8.7-5"/><line x1="12" y1="22" x2="12" y2="12"/></svg></span> Workers</a>
@@ -2190,6 +2373,148 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
      <div class="set-foot"><button class="btn btn-primary" {{if .Busy}}disabled{{end}}>Save settings</button></div>
     </section>
    </form>
+   {{else if eq .Page "metrics"}}
+   <section class="card" id="dash">
+    <style>
+    #dash .dash-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin:14px 0}
+    #dash .tile{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+    #dash .tile .tv{font-size:1.45rem;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+    #dash .tile .tl{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
+    #dash .tile .td{font-size:.72rem;color:var(--muted);margin-top:4px}
+    #dash .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0}
+    #dash .dcard h3{font-size:.76rem;font-weight:600;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em}
+    #dash .chart{height:140px}
+    #dash .lc{width:100%;height:140px;display:block}
+    #dash .empty{color:var(--muted);font-size:.8rem;padding:26px 0;text-align:center}
+    #dash .barrow{display:flex;align-items:center;gap:9px;margin:7px 0;font-size:.78rem}
+    #dash .barrow .bn{width:92px;flex:none;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #dash .barrow .bt{flex:1;height:10px;background:var(--track);border-radius:6px;overflow:hidden}
+    #dash .barrow .bf{height:100%;border-radius:6px;transition:width .5s}
+    #dash .barrow .bv{width:76px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+    #dash .gauges-wrap{display:flex;gap:8px;justify-content:space-around;flex-wrap:wrap}
+    #dash .gauge{text-align:center;width:108px}
+    #dash .gauge svg{width:98px;height:98px}
+    #dash .gtrack{fill:none;stroke:var(--track);stroke-width:9}
+    #dash .gval{fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .5s}
+    #dash .gpct{fill:var(--ink);font-size:19px;font-weight:700;text-anchor:middle}
+    #dash .glbl{fill:var(--muted);font-size:8.5px;text-anchor:middle;text-transform:uppercase;letter-spacing:.5px}
+    #dash .gsub{font-size:.7rem;color:var(--muted);margin-top:2px}
+    #dash .kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.82rem;color:var(--muted)}
+    #dash .kv:last-child{border-bottom:0}
+    #dash .kv b{color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+    #dash .daybars{display:flex;align-items:flex-end;gap:4px;height:130px}
+    #dash .daybars .db{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;height:100%}
+    #dash .daybars .db i{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .4s}
+    #dash .daybars .db span{font-size:.58rem;color:var(--muted);white-space:nowrap}
+    #dash .uprow{display:flex;align-items:center;gap:9px;font-size:.82rem;padding:6px 0;border-bottom:1px solid var(--line)}
+    #dash .uprow:last-child{border-bottom:0}
+    #dash .uprow .ud{width:8px;height:8px;border-radius:50%;flex:none}
+    #dash .uprow .un{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+    #dash .uprow .uv{color:var(--muted);font-variant-numeric:tabular-nums}
+    #dash .live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:.76rem}
+    </style>
+    <div class="card-h">
+     <h2>📊 Dashboard <span class="csub">live server monitoring · refreshes every 5s</span></h2>
+     <span class="live"><span id="dashdot" class="livedot"></span> <span id="dashts">connecting…</span></span>
+    </div>
+    <div class="dash-tiles" id="dtiles"><div class="empty">loading metrics…</div></div>
+    <div class="dash-grid">
+     <div class="dcard"><h3>CPU % · over time</h3><div class="chart" id="cCpu"></div></div>
+     <div class="dcard"><h3>Memory used % · over time</h3><div class="chart" id="cMem"></div></div>
+     <div class="dcard"><h3>Network I/O · rx / tx over time</h3><div class="chart" id="cNet"></div></div>
+     <div class="dcard"><h3>Memory by app</h3><div id="cByApp"></div></div>
+     <div class="dcard"><h3>Utilization</h3><div class="gauges-wrap" id="cGauges"></div></div>
+     <div class="dcard"><h3>Storage &amp; cache · docker</h3><div id="cStore"></div></div>
+     <div class="dcard"><h3>Incidents · last 14 days</h3><div class="daybars" id="cInc"></div></div>
+     <div class="dcard"><h3>Uptime by app</h3><div id="cUp"></div></div>
+     <div class="dcard"><h3>Edge &amp; host</h3><div id="cEdge"></div></div>
+    </div>
+    <script>
+    (function(){
+     var el=function(id){return document.getElementById(id);};
+     if(!el("dash"))return;
+     function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"})[c];});}
+     function hb(b){b=+b||0;var u=["B","KB","MB","GB","TB"],i=0;while(b>=1024&&i<u.length-1){b/=1024;i++;}return (b<10&&i>0?b.toFixed(1):Math.round(b))+u[i];}
+     function line(vals,color){
+      if(!vals||vals.length<2)return '<div class="empty">collecting samples…</div>';
+      var w=520,h=140,p=6,max=1,i;for(i=0;i<vals.length;i++){if(vals[i]>max)max=vals[i];}
+      var n=vals.length,step=(w-p*2)/(n-1),pts=[];
+      for(i=0;i<n;i++){pts.push([p+i*step,h-p-(vals[i]/max)*(h-p*2)]);}
+      var d="";for(i=0;i<n;i++){d+=(i?" L":"M")+pts[i][0].toFixed(1)+" "+pts[i][1].toFixed(1);}
+      var area=d+" L"+pts[n-1][0].toFixed(1)+" "+(h-p)+" L"+pts[0][0].toFixed(1)+" "+(h-p)+" Z";
+      return '<svg class="lc" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'
+       +'<path d="'+area+'" fill="'+color+'" fill-opacity=".12"/>'
+       +'<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
+     }
+     function dline(a,b,ca,cb){
+      if((!a||a.length<2)&&(!b||b.length<2))return '<div class="empty">collecting samples…</div>';
+      var w=520,h=140,p=6,max=1,i,all=(a||[]).concat(b||[]);for(i=0;i<all.length;i++){if(all[i]>max)max=all[i];}
+      function path(v){var n=v.length,step=(w-p*2)/Math.max(1,n-1),d="",j;for(j=0;j<n;j++){var x=p+j*step,y=h-p-(v[j]/max)*(h-p*2);d+=(j?" L":"M")+x.toFixed(1)+" "+y.toFixed(1);}return d;}
+      var s='<svg class="lc" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">';
+      if(a&&a.length>1)s+='<path d="'+path(a)+'" fill="none" stroke="'+ca+'" stroke-width="2" vector-effect="non-scaling-stroke"/>';
+      if(b&&b.length>1)s+='<path d="'+path(b)+'" fill="none" stroke="'+cb+'" stroke-width="2" vector-effect="non-scaling-stroke"/>';
+      return s+'</svg>';
+     }
+     function gauge(pct,label,sub,color){
+      pct=Math.max(0,Math.min(100,pct||0));var r=40,c=2*Math.PI*r,off=c*(1-pct/100);
+      return '<div class="gauge"><svg viewBox="0 0 100 100"><circle class="gtrack" cx="50" cy="50" r="'+r+'"/>'
+       +'<circle class="gval" cx="50" cy="50" r="'+r+'" stroke="'+color+'" stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 50 50)"/>'
+       +'<text class="gpct" x="50" y="50" dominant-baseline="middle">'+Math.round(pct)+'%</text>'
+       +'<text class="glbl" x="50" y="72">'+esc(label)+'</text></svg><div class="gsub">'+esc(sub)+'</div></div>';
+     }
+     function tile(v,l,d){return '<div class="tile"><div class="tv">'+esc(v)+'</div><div class="tl">'+esc(l)+'</div>'+(d?'<div class="td">'+esc(d)+'</div>':'')+'</div>';}
+     function colFor(p){return p>=90?"var(--danger)":p>=75?"var(--amber)":"var(--ok)";}
+     function draw(m){
+      var t=el("dashts");if(t)t.textContent="updated "+(m.ts||"");
+      var dot=el("dashdot");if(dot){dot.classList.remove("beat");void dot.offsetWidth;dot.classList.add("beat");}
+      var a=m.aggregate||{},sv=m.server||{},inc=m.incidents||{},sy=m.system||{},e=m.edge||{};
+      var tiles="";
+      if(m.dockerOK){
+       tiles+=tile(a.running+" / "+a.total,"Apps running",(a.total-a.running)+" stopped");
+       tiles+=tile((a.cpuPct||0)+"%","Total CPU","across running apps");
+       tiles+=tile((a.memPct||0)+"%","Memory",(a.memUsedH||"0")+" / "+(a.memCapH||"0"));
+       tiles+=tile(hb(a.netRx)+" ↓","Network","↑ "+hb(a.netTx));
+      }else{tiles+=tile("—","Docker","unreachable");}
+      tiles+=tile(inc.open||0,"Open incidents",(inc.resolved||0)+" resolved");
+      if(sv.uptime)tiles+=tile(sv.uptime,"Host uptime",esc(sv.host||""));
+      el("dtiles").innerHTML=tiles;
+      var H=m.history||[];
+      el("cCpu").innerHTML=line(H.map(function(x){return x.cpu;}),"var(--brand)");
+      el("cMem").innerHTML=line(H.map(function(x){return x.memPct;}),"var(--amber)");
+      el("cNet").innerHTML=dline(H.map(function(x){return x.netRx;}),H.map(function(x){return x.netTx;}),"var(--ok)","var(--brand)");
+      var apps=(m.apps||[]).filter(function(x){return x.state==="running"&&x.memUsed>0;}).sort(function(x,y){return y.memUsed-x.memUsed;});
+      if(!apps.length){el("cByApp").innerHTML='<div class="empty">no running apps</div>';}
+      else{var mx=apps[0].memUsed||1;el("cByApp").innerHTML=apps.map(function(x){var pct=Math.round(x.memUsed/mx*100);return '<div class="barrow"><span class="bn" title="'+esc(x.name)+'">'+esc(x.name)+'</span><span class="bt"><i class="bf" style="width:'+pct+'%;background:'+colFor(x.memPct)+'"></i></span><span class="bv">'+hb(x.memUsed)+'</span></div>';}).join("");}
+      var g="";
+      g+=gauge(a.total?Math.round(a.running/a.total*100):0,"Uptime",(a.running||0)+"/"+(a.total||0)+" up","var(--ok)");
+      g+=gauge(a.memPct||0,"Memory",(a.memUsedH||"0"),colFor(a.memPct||0));
+      g+=gauge(sv.diskPct||0,"Disk",(sv.diskUsed||"?")+" / "+(sv.diskCap||"?"),colFor(sv.diskPct||0));
+      el("cGauges").innerHTML=g;
+      el("cStore").innerHTML=
+        '<div class="kv"><span>Images</span><b>'+(sy.images||0)+' · '+esc(sy.imagesSize||"—")+'</b></div>'
+       +'<div class="kv"><span>Containers</span><b>'+(sy.containers||0)+'</b></div>'
+       +'<div class="kv"><span>Volumes</span><b>'+(sy.volumes||0)+' · '+esc(sy.volumesSize||"—")+'</b></div>'
+       +'<div class="kv"><span>Build cache</span><b>'+esc(sy.buildCache||"—")+'</b></div>'
+       +'<div class="kv"><span>Reclaimable</span><b>'+esc(sy.reclaimable||"—")+'</b></div>'
+       +'<div class="kv"><span>RAM · cores</span><b>'+esc(sv.ram||"?")+' · '+(sv.cores||"?")+'</b></div>';
+      var days=inc.days||[],dmax=1;days.forEach(function(x){if(x.count>dmax)dmax=x.count;});
+      el("cInc").innerHTML=days.length?days.map(function(x){var hp=x.count?Math.max(6,Math.round(x.count/dmax*100)):0;return '<div class="db" title="'+esc(x.day)+': '+x.count+' incident(s)"><i style="height:'+hp+'%;background:'+(x.count?"var(--danger)":"var(--track)")+'"></i><span>'+esc((x.day.split(" ")[1]||x.day))+'</span></div>';}).join(""):'<div class="empty">no data</div>';
+      var ua=(m.apps||[]);
+      el("cUp").innerHTML=ua.length?ua.map(function(x){var run=x.state==="running";return '<div class="uprow"><span class="ud" style="background:'+(run?"var(--ok)":"var(--danger)")+'"></span><span class="un" title="'+esc(x.name)+'">'+esc(x.name)+'</span><span class="uv">'+(run?esc(x.up||"up"):esc(x.state))+'</span></div>';}).join(""):'<div class="empty">no apps</div>';
+      el("cEdge").innerHTML=
+        '<div class="kv"><span>Tunnel</span><b>'+esc(e.tunnelName||"—")+'</b></div>'
+       +'<div class="kv"><span>Connector</span><b>'+esc(e.tunnelState||"unknown")+'</b></div>'
+       +'<div class="kv"><span>Access</span><b>'+(e.protected?"protected":"open")+'</b></div>'
+       +'<div class="kv"><span>Host</span><b>'+esc(sv.host||"—")+'</b></div>'
+       +'<div class="kv"><span>OS</span><b>'+esc(sv.os||"—")+'</b></div>';
+     }
+     function poll(){fetch("/api/metrics",{cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject();}).then(draw).catch(function(){var t=el("dashts");if(t)t.textContent="offline — retrying";});}
+     poll();
+     setInterval(function(){if(!document.hidden)poll();},5000);
+    })();
+    </script>
+   </section>
    {{else}}
    {{if .Error}}
    <div class="card"><div class="result err" style="margin:16px">status error: {{.Error}}</div></div>
@@ -2755,6 +3080,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
  // of truth (the server template) — no client-side rendering to drift.
  var busy=false;
  function refresh(force){
+  if(document.getElementById("dash"))return;   // dashboard has its own /api/metrics poll
   if(!force){
    if(busy||document.hidden)return;
    if(document.querySelector("dialog[open]"))return;         // adding an app
