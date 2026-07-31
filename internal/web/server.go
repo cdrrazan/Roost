@@ -2384,8 +2384,8 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     #dash .tile .tv{font-size:1.45rem;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
     #dash .tile .tl{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
     #dash .tile .td{font-size:.72rem;color:var(--muted);margin-top:4px}
-    #dash .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
-    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0;height:250px;display:flex;flex-direction:column;overflow:hidden}
+    #dash .dash-grid{display:grid;grid-template-columns:repeat(var(--cols,4),1fr);gap:14px}
+    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0;height:var(--ch,230px);display:flex;flex-direction:column;overflow:hidden}
     #dash .dcard h3{flex:none;font-size:.76rem;font-weight:600;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em}
     #dash .dbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
     #dash .chart{height:100%}
@@ -2506,8 +2506,24 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
       var ua=(m.apps||[]);
       el("cUp").innerHTML=ua.length?ua.map(function(x){var run=x.state==="running";return '<div class="uprow"><span class="ud" style="background:'+(run?"var(--ok)":"var(--danger)")+'"></span><span class="un" title="'+esc(x.name)+'">'+esc(x.name)+'</span><span class="uv">'+(run?esc(x.up||"up"):esc(x.state))+'</span></div>';}).join(""):'<div class="empty">no apps</div>';
      }
-     function poll(){fetch("/api/metrics",{cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject();}).then(draw).catch(function(){var t=el("dashts");if(t)t.textContent="offline — retrying";});}
-     poll();
+     // Divide the available viewport among the 8 cards: pick a column count
+     // from the width, then size every card to the height left below the grid
+     // so all rows fit on screen without the page scrolling (each card body
+     // scrolls internally instead).
+     var NCARDS=8;
+     function layout(){
+      var grid=el("dash")&&el("dash").querySelector(".dash-grid");if(!grid)return;
+      var w=window.innerWidth,cols=w>=1200?4:w>=800?2:1;
+      var rows=Math.ceil(NCARDS/cols),gap=14;
+      var top=grid.getBoundingClientRect().top;
+      var avail=window.innerHeight-top-18;                 // 18px breathing room
+      var ch=Math.max(150,Math.floor((avail-(rows-1)*gap)/rows));
+      grid.style.setProperty("--cols",cols);
+      grid.style.setProperty("--ch",ch+"px");
+     }
+     var rz;window.addEventListener("resize",function(){clearTimeout(rz);rz=setTimeout(layout,120);});
+     function poll(){fetch("/api/metrics",{cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject();}).then(function(m){draw(m);layout();}).catch(function(){var t=el("dashts");if(t)t.textContent="offline — retrying";});}
+     layout();poll();
      setInterval(function(){if(!document.hidden)poll();},5000);
     })();
     </script>
