@@ -151,6 +151,8 @@ apps:
       SOME_KEY: value
     build_env:                # build-time environment (Docker builder stage)
       SKIP_ENV_VALIDATION: "1"
+    volumes:                  # persistent on-disk state (see below)
+      - data:/usr/src/paperless/data
 ```
 
 - **`category:`** — display grouping for the **`roost web`** panel only:
@@ -174,6 +176,41 @@ app's `.env.example`, provisions a single shared `redis:7-alpine` service, and
 injects `REDIS_URL=redis://redis:6379/0`. Set `redis:` to override the
 detection — `redis: true` forces it on, `redis: false` opts out. One Redis
 service is shared by every app that needs one (each connecting to database `0`).
+
+## Persistent volumes — `volumes:`
+
+Most roost apps keep their state in the shared database, so a rebuild
+(`docker compose up --build`) loses nothing. Apps that write **files to disk**
+— a document manager's uploads and search index, a media library — need a
+persistent volume, or that data is gone on the next rebuild. roost gives an app
+only a read-only source mount by default; add `volumes:` for anything that must
+survive.
+
+```yaml
+apps:
+  - path: ~/apps/paperless
+    domain: docs.example.com
+    volumes:
+      - data:/usr/src/paperless/data      # named volume (survives rebuilds)
+      - media:/usr/src/paperless/media    # named volume
+      - /srv/paperless/consume:/usr/src/paperless/consume   # host bind mount
+```
+
+Each entry is a Docker mount, `source:/container/path[:ro]`:
+
+- **Named source** (no slash — `data`, `media`) → a Docker **named volume**.
+  roost namespaces it with the app name (`paperless-data`) so two apps' `data`
+  volumes never collide, and declares it at the top of the generated
+  `compose.yml`. This is the right default for app state — it persists across
+  rebuilds and `roost down`/`up`, and is only removed by an explicit
+  `docker volume rm` (or `roost` clean/purge).
+- **Path source** (`/srv/x`, `~/x`, `./x`) → a **host bind mount**, passed
+  through verbatim. Use it when you want the files on the host filesystem (an
+  import/consume directory you drop files into, a path you back up directly).
+
+The container path must be absolute; a malformed entry is a hard error from
+`roost` with the fix quoted. Volumes coexist with the source mount — an
+interpreted app keeps its live-edit `:ro` mount **and** its persistent volumes.
 
 ## Background workers — `worker:` + `command:`
 

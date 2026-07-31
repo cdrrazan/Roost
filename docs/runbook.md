@@ -8,6 +8,7 @@ Copy-paste commands, grouped by task. `<app>` = app name, `<path>` = host dir,
 - [Add an app](#add-an-app)
 - [Update an app from GitHub](#update-an-app-from-github)
 - [Forked app: own Dockerfile + Postgres](#forked-app-own-dockerfile--postgres)
+- [Stateful app with persistent files — paperless-ngx](#stateful-app-with-persistent-files--paperless-ngx)
 - [Common ops](#common-ops)
 - [Two environments (laptop dev + box prod)](#two-environments-laptop-dev--box-prod)
 
@@ -115,6 +116,71 @@ docker exec roost-caddy-1 caddy reload --config /etc/caddy/Caddyfile
 Static front-end SPA (server URL set in-app, not baked): serve its `dist/` as a
 `framework: static` app at its own host — no port, no db. If it calls the backend
 cross-origin, the backend must send CORS for the SPA's origin.
+
+## Stateful app with persistent files — paperless-ngx
+
+paperless-ngx keeps documents, the search index and thumbnails **on disk**, so
+it needs `volumes:` — without them a rebuild wipes the library. It also wants
+Redis + Postgres, both of which roost already provides. Uses the prebuilt image
+via a one-line wrapper Dockerfile (no source compile).
+
+```bash
+# 1. fork -> clone into a source dir roost owns (or any path)
+git clone --depth 1 https://github.com/<you>/paperless-ngx ~/.roost/sources/paperless
+
+# 2. root Dockerfile = thin wrapper over the official image (fast, no build)
+printf 'FROM ghcr.io/paperless-ngx/paperless-ngx:latest\n' > ~/.roost/sources/paperless/Dockerfile
+
+# 3. app entry -> ~/.roost/apps/paperless.yml   (box: docs.byaru.com; local: docs-local.byaru.com)
+cat > ~/.roost/apps/paperless.yml <<'YAML'
+apps:
+  - path: ~/.roost/sources/paperless
+    name: paperless
+    domain: docs.byaru.com
+    category: utility
+    framework: django       # override: skips detection; wrapper image builds it
+    port: 8000
+    database: postgres
+    redis: true
+    migrate: false          # paperless migrates itself on boot
+    memory: 1g
+    volumes:
+      - data:/usr/src/paperless/data      # app data + search index (named vol)
+      - media:/usr/src/paperless/media    # the document library (named vol)
+      - /srv/paperless/consume:/usr/src/paperless/consume   # drop files here to import
+    env:
+      PAPERLESS_URL: https://docs.byaru.com     # also sets CSRF trusted origin
+      PAPERLESS_PORT: "8000"
+      PAPERLESS_REDIS: redis://redis:6379
+      PAPERLESS_DBHOST: postgres
+      PAPERLESS_DBNAME: paperless
+      PAPERLESS_DBUSER: paperless
+      PAPERLESS_DBPASS: rp_bc708bb73c00939d707bfcf4   # = roost's role pw for "paperless"
+      PAPERLESS_OCR_LANGUAGE: eng
+      PAPERLESS_TIME_ZONE: Asia/Kathmandu
+      PAPERLESS_SECRET_KEY: change-me-long-random     # keep this stable
+YAML
+roost generate
+
+# 4. Postgres role — auto-created only on a fresh volume; on an existing box
+#    volume create it by hand (pw MUST match PAPERLESS_DBPASS above):
+docker exec roost-postgres-1 psql -U roost -c "CREATE ROLE paperless LOGIN CREATEDB PASSWORD 'rp_bc708bb73c00939d707bfcf4';"
+docker exec roost-postgres-1 psql -U roost -c 'CREATE DATABASE "paperless" OWNER paperless;'
+#    (verify roost's derived pw: grep -A1 paperless ~/.roost/build/postgres-init.sql)
+
+# 5. build + start + route
+cd ~/.roost/build && docker compose -p roost up -d --build paperless
+docker exec roost-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+
+# 6. create the first admin (paperless has no signup)
+docker exec -it roost-paperless-1 python manage.py createsuperuser
+```
+
+`PAPERLESS_DBPASS` above is roost's deterministic role password for the app name
+`paperless` (`rp_` + `sha256("roost-pg:paperless")[:24]`). Rename the app → the
+password changes; recompute it from `postgres-init.sql`. Immich is **not** run
+under roost (it needs a special pgvecto.rs Postgres + its own ML container) —
+run it as its own compose stack and only reverse-proxy it.
 
 ## Common ops
 
