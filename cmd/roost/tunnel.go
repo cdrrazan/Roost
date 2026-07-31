@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cdrrazan/roost/internal/config"
+	"github.com/cdrrazan/roost/internal/generate"
 	"github.com/cdrrazan/roost/internal/state"
 	"github.com/cdrrazan/roost/internal/tunnel"
 )
@@ -192,6 +193,26 @@ func accessPatterns(plan []tunnel.PlannedRecord) []string {
 	return patterns
 }
 
+// workerRouteSpecs derives one Worker route per distinct zone in the plan,
+// each a "*.<zone>/*" wildcard so the fallback Worker fronts every app in
+// that zone. One route per zone keeps the Worker independent of how many
+// apps exist — the same reason DNS is one wildcard per suffix.
+func workerRouteSpecs(plan []tunnel.PlannedRecord) []tunnel.WorkerRouteSpec {
+	seen := map[string]bool{}
+	var specs []tunnel.WorkerRouteSpec
+	for _, rec := range plan {
+		if seen[rec.Zone.ID] {
+			continue
+		}
+		seen[rec.Zone.ID] = true
+		specs = append(specs, tunnel.WorkerRouteSpec{
+			ZoneID:  rec.Zone.ID,
+			Pattern: "*." + rec.Zone.Name + "/*",
+		})
+	}
+	return specs
+}
+
 // newTunnelCmd groups `tunnel setup` (create the tunnel, plan and
 // create every DNS record, push ingress, apply Access — the whole
 // remote side, no dashboard visit) and `tunnel access` (policies only).
@@ -316,6 +337,22 @@ func newTunnelCmd(flags *rootFlags) *cobra.Command {
 
 			if err := writeTunnelEnv(res.Token); err != nil {
 				return err
+			}
+
+			if tc.cfg.Tunnel.MaintenancePage {
+				page, err := generate.RenderErrorPage()
+				if err != nil {
+					return err
+				}
+				worker, err := tunnel.EnsureWorker(tc.client, tc.accountID, page, workerRouteSpecs(plan))
+				if err != nil {
+					return err
+				}
+				tc.st.Worker = worker
+				if err := tc.st.Save(tc.statePath); err != nil {
+					return err
+				}
+				cmd.Printf("maintenance Worker deployed (%d route(s)) — the edge serves roost's offline page when the tunnel is down\n", len(worker.Routes))
 			}
 
 			if tc.cfg.Tunnel.Access != nil {

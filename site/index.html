@@ -580,6 +580,11 @@
     copy <span class="k">config.yml</span> and credentials, restore your database
     dumps, <span class="k">roost up</span>, and drive the fleet from the web
     panel. Same tool, your call on where it lives.</p>
+    <p>And visitors don't hit a raw error while you're away: a single app down
+    gets a branded <b>“temporarily offline”</b> page from Caddy automatically,
+    and — with <span class="k">maintenance_page: true</span> — a whole-tunnel
+    outage (Cloudflare's blunt <span class="k">1033</span>) is answered by a tiny
+    edge <b>Worker</b> serving the same page, auto-retrying every 30s.</p>
   </div>
 </section>
 

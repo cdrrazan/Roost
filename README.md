@@ -125,6 +125,7 @@ domain: demo.example.com          # fallback suffix for bare-path apps
 tunnel:
   name: rserver                   # your tunnel's name (never generated)
   protocol: http2                 # optional; force TCP/443 when your ISP throttles UDP/QUIC (default: QUIC)
+  maintenance_page: true          # optional; edge Worker serves a branded page on a full-tunnel-down (1033)
   access:
     emails: [me@example.com]      # Cloudflare Access wall before first exposure
 defaults:
@@ -290,6 +291,15 @@ machine asleep, on a plane — your apps are down. roost is a **local-first prev
 and personal-hosting** tool for demos, side projects, and sharing work in
 progress. It is not a replacement for a server; when the laptop wakes,
 `cloudflared` reconnects within ~5–10 seconds and everything is live again.
+
+**Visitors don't see a raw error while you're away.** If a single app is down,
+Caddy serves a branded *"temporarily offline"* page instead of a bare 502 —
+automatic, no config. If the *whole* tunnel is down (lid shut, machine off →
+Cloudflare's blunt **1033**), set `tunnel.maintenance_page: true` and
+`roost tunnel setup` deploys a tiny Cloudflare **Worker** that answers with the
+same page from the edge, where your host can't. Both render an identical
+self-contained page that auto-retries every 30s. See
+[docs/configuration.md](docs/configuration.md#offline--maintenance-ui--two-layers).
 
 ---
 

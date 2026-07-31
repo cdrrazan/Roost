@@ -5,6 +5,19 @@
 {
 	auto_https off
 }
+
+# Branded page served when an app's container is down or unhealthy: without
+# this, Caddy hands back a bare "502 Bad Gateway". The tunnel is still up, so
+# Caddy is reachable and can answer for the dead upstream. (A wholly-down
+# tunnel — Cloudflare 1033 — never reaches Caddy; the edge Worker covers that.)
+(roost_maintenance) {
+	handle_errors {
+		root * /etc/caddy
+		rewrite * /error.html
+		file_server
+		header Content-Type "text/html; charset=utf-8"
+	}
+}
 {{range .Apps}}
 http://{{.FQDN}} {
 	# Cloudflare terminates TLS at the edge; the request reaches the app over
@@ -14,6 +27,7 @@ http://{{.FQDN}} {
 	reverse_proxy {{.Name}}:{{.Port}} {
 		header_up X-Forwarded-Proto https
 	}
+	import roost_maintenance
 }
 {{end}}
 {{- if .ControlHost}}

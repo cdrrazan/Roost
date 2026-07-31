@@ -69,13 +69,26 @@ type envelope struct {
 
 // do performs one API call, unwrapping Cloudflare's response envelope.
 func (c *Client) do(method, path string, body, out any) error {
-	reqBody := bytes.NewBuffer(nil)
+	var raw []byte
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("encode request: %w", err)
 		}
-		reqBody = bytes.NewBuffer(data)
+		raw = data
+	}
+	return c.doRaw(method, path, "application/json", raw, out)
+}
+
+// doRaw is do without JSON encoding of the body — for endpoints (Worker
+// script upload) that take a raw payload under a non-JSON content type.
+// The response is still Cloudflare's standard envelope.
+func (c *Client) doRaw(method, path, contentType string, body []byte, out any) error {
+	var reqBody *bytes.Buffer
+	if body != nil {
+		reqBody = bytes.NewBuffer(body)
+	} else {
+		reqBody = bytes.NewBuffer(nil)
 	}
 	base := c.BaseURL
 	if base == "" {
@@ -86,7 +99,7 @@ func (c *Client) do(method, path string, body, out any) error {
 		return fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 
 	httpClient := c.HTTP
 	if httpClient == nil {

@@ -37,6 +37,25 @@ type State struct {
 	// retained (with their path + domain) so the panel can offer a one-click
 	// re-add. A successful re-add clears the entry — see ClearRemoved.
 	Removed []RemovedApp `json:"removed,omitempty"`
+	// Worker is the edge fallback Worker roost deployed, if any, so teardown
+	// can remove exactly the script and routes roost created.
+	Worker *Worker `json:"worker,omitempty"`
+}
+
+// WorkerRoute is one Cloudflare Worker route roost created, kept so
+// teardown removes only routes roost made.
+type WorkerRoute struct {
+	ID      string `json:"id"`
+	ZoneID  string `json:"zone_id"`
+	Pattern string `json:"pattern,omitempty"`
+}
+
+// Worker records the edge fallback Worker roost deployed — the branded
+// maintenance page the Cloudflare edge serves when the tunnel is wholly
+// down (a 1033 that never reaches Caddy). Nil when not deployed.
+type Worker struct {
+	ScriptName string        `json:"script_name"`
+	Routes     []WorkerRoute `json:"routes,omitempty"`
 }
 
 // RemovedApp is an app the panel removed, kept so it can be re-added without

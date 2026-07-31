@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Temporarily offline</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #0b0d10; color: #e8eaed;
+  }
+  @media (prefers-color-scheme: light) {
+    body { background: #f5f6f8; color: #1b1d20; }
+    .card { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
+    .sub { color: #5a6069; }
+    .dot { background: #e6e8eb; }
+  }
+  .card {
+    width: 100%; max-width: 460px; padding: 40px 36px;
+    background: #14171c; border-radius: 16px; text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.4), 0 12px 40px rgba(0,0,0,.35);
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; margin-bottom: 24px; border-radius: 999px;
+    font-size: 13px; font-weight: 600; letter-spacing: .02em;
+    background: rgba(245, 158, 11, .12); color: #f59e0b;
+  }
+  .badge span.pulse {
+    width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  h1 { margin: 0 0 12px; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+  .sub { margin: 0 auto; max-width: 360px; color: #9aa0a8; }
+  .meta {
+    margin-top: 28px; padding-top: 20px; font-size: 13px; color: #6b7178;
+    border-top: 1px solid rgba(255,255,255,.06);
+  }
+  @media (prefers-color-scheme: light) { .meta { border-top-color: rgba(0,0,0,.07); } }
+  .meta a { color: inherit; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge"><span class="pulse"></span> Temporarily offline</div>
+    <h1>This site is catching its breath</h1>
+    <p class="sub">The service is briefly unavailable — it's being restarted or is down for maintenance. It should be back shortly. Please try again in a moment.</p>
+    <p class="meta">Auto-retrying &middot; <a href="" onclick="location.reload();return false;">reload now</a></p>
+  </main>
+  <script>setTimeout(function(){ location.reload(); }, 30000);</script>
+</body>
+</html>

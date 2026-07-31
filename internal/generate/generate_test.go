@@ -530,6 +530,64 @@ func TestRenderComposeVolumesCoexistWithSourceMount(t *testing.T) {
 	}
 }
 
+func TestRenderErrorPage(t *testing.T) {
+	out, err := RenderErrorPage()
+	if err != nil {
+		t.Fatalf("RenderErrorPage: %v", err)
+	}
+	s := string(out)
+	if !strings.HasPrefix(s, "<!doctype html>") {
+		t.Errorf("error page is not HTML:\n%s", s[:min(120, len(s))])
+	}
+	// No external asset references — the page must render standalone (it is
+	// also embedded into the edge Worker where no origin is reachable).
+	for _, bad := range []string{"http://", "https://", "src=", "//cdn"} {
+		if strings.Contains(s, bad) {
+			t.Errorf("error page references an external asset (%q); must be self-contained:\n%s", bad, s)
+		}
+	}
+}
+
+func TestRenderCaddyfileServesMaintenancePage(t *testing.T) {
+	apps := []App{{Name: "blog", FQDN: "blog.example.com", Port: 3000}}
+	out, err := RenderCaddyfile(apps, "")
+	if err != nil {
+		t.Fatalf("RenderCaddyfile: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "handle_errors") {
+		t.Errorf("Caddyfile has no handle_errors block:\n%s", s)
+	}
+	if !strings.Contains(s, "import roost_maintenance") {
+		t.Errorf("app site does not import the maintenance snippet:\n%s", s)
+	}
+	if !strings.Contains(s, "/etc/caddy/error.html") && !strings.Contains(s, "rewrite * /error.html") {
+		t.Errorf("maintenance snippet does not serve error.html:\n%s", s)
+	}
+}
+
+func TestGenerateWritesErrorPage(t *testing.T) {
+	dir := t.TempDir()
+	apps := []App{{
+		Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog",
+		Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m",
+	}}
+	if _, err := Generate(dir, apps, Opts{}); err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "error.html")); err != nil {
+		t.Errorf("error.html not generated: %v", err)
+	}
+	// compose must mount it into caddy.
+	compose, err := os.ReadFile(filepath.Join(dir, "compose.yml"))
+	if err != nil {
+		t.Fatalf("read compose: %v", err)
+	}
+	if !strings.Contains(string(compose), "error.html:/etc/caddy/error.html:ro") {
+		t.Errorf("compose does not mount error.html into caddy:\n%s", compose)
+	}
+}
+
 func TestRenderComposeOmitsUnusedDatabases(t *testing.T) {
 	apps := []App{{
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",
