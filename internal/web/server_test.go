@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1017,3 +1018,116 @@ func TestBusyBlocksConcurrentAction(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// --- Dashboard (monitoring) page ---
+
+func dashFake() *fakeController {
+	return &fakeController{
+		statuses: []runner.AppStatus{
+			{Name: "keeparu", State: "running", URL: "https://keeparu.byaru.com",
+				CPU: "2.75%", Memory: "160MiB / 512MiB", Net: "1.2MB / 800kB", Up: "Up 3 hours"},
+			{Name: "sure", State: "running", URL: "https://sure.byaru.com",
+				CPU: "5.0%", Memory: "300MiB / 512MiB", Net: "2MB / 1MB", Up: "Up 1 hour"},
+			{Name: "trackaru", State: "exited"},
+		},
+		server: ServerInfo{Host: "roost-box", OS: "Ubuntu 24.04", Uptime: "5 days",
+			Cores: 4, RAM: "15 GiB", DiskUsed: "12 GiB", DiskCap: "40 GiB", DiskPct: 30},
+		system: SystemInfo{Images: 20, ImagesSize: "19 GB", Containers: 15, Volumes: 4,
+			VolumesSize: "500 MB", BuildCache: "12 GB", Reclaimable: "8 GB"},
+		edge: EdgeInfo{TunnelName: "rserver", TunnelState: "connected", Protected: true,
+			Hosts: []string{"*.byaru.com"}},
+	}
+}
+
+func TestDashboardPageRenders(t *testing.T) {
+	rr := serve(NewServer(dashFake(), ""), "GET", "/dashboard", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	// Reuses the shell: both sidebars present.
+	for _, want := range []string{`class="side"`, `class="rail"`, "Resources"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard page missing shell element %q", want)
+		}
+	}
+	// Dashboard-specific markers: the metrics container + the polling endpoint.
+	for _, want := range []string{`id="dash"`, "/api/metrics"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dashboard page missing %q", want)
+		}
+	}
+	// The Dashboard nav item is active on this page.
+	if !strings.Contains(body, `href="/dashboard"`) {
+		t.Error("no Dashboard nav link")
+	}
+}
+
+func TestNavHasDashboardAndLogoLinksHome(t *testing.T) {
+	body := serve(NewServer(dashFake(), ""), "GET", "/", nil).Body.String()
+	if !strings.Contains(body, `href="/dashboard"`) || !strings.Contains(body, "Dashboard</a>") {
+		t.Error("sidebar missing a Dashboard nav item")
+	}
+	// Logo is a link home.
+	if !strings.Contains(body, `<a href="/" class="logo"`) {
+		t.Error("logo is not a link to the home page")
+	}
+}
+
+func TestMetricsAPIReturnsJSON(t *testing.T) {
+	rr := serve(NewServer(dashFake(), ""), "GET", "/api/metrics", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("content-type = %q, want application/json", ct)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, rr.Body.String())
+	}
+	if m["dockerOK"] != true {
+		t.Errorf("dockerOK = %v, want true", m["dockerOK"])
+	}
+	agg, _ := m["aggregate"].(map[string]any)
+	if agg == nil {
+		t.Fatal("no aggregate block")
+	}
+	if agg["total"].(float64) != 3 {
+		t.Errorf("aggregate.total = %v, want 3", agg["total"])
+	}
+	if agg["running"].(float64) != 2 {
+		t.Errorf("aggregate.running = %v, want 2", agg["running"])
+	}
+	// CPU aggregate = 2.75 + 5.0 = 7.75
+	if agg["cpuPct"].(float64) < 7.0 || agg["cpuPct"].(float64) > 8.5 {
+		t.Errorf("aggregate.cpuPct = %v, want ~7.75", agg["cpuPct"])
+	}
+	apps, _ := m["apps"].([]any)
+	if len(apps) != 3 {
+		t.Errorf("apps len = %d, want 3", len(apps))
+	}
+	srv, _ := m["server"].(map[string]any)
+	if srv == nil || srv["host"] != "roost-box" {
+		t.Errorf("server block wrong: %v", srv)
+	}
+	if _, ok := m["history"].([]any); !ok {
+		t.Error("no history array")
+	}
+}
+
+func TestMetricsHistoryAccumulates(t *testing.T) {
+	srv := NewServer(dashFake(), "")
+	var last int
+	for i := 0; i < 3; i++ {
+		rr := serve(srv, "GET", "/api/metrics", nil)
+		var m map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
+			t.Fatal(err)
+		}
+		last = len(m["history"].([]any))
+	}
+	if last < 3 {
+		t.Errorf("history did not accumulate across polls: len=%d, want >=3", last)
+	}
+}

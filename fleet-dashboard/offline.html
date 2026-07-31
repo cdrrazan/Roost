@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Fleet — At anchor">
+<meta property="og:description" content="This service has pulled into harbor for a moment. It'll set sail again shortly.">
+<meta property="og:url" content="https://cdrrazan.github.io/Roost/offline.html">
+<meta name="twitter:title" content="Fleet — At anchor">
+<meta name="twitter:description" content="This service has pulled into harbor for a moment. It'll set sail again shortly.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Fleet">
+<meta property="og:image" content="https://cdrrazan.github.io/Roost/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://cdrrazan.github.io/Roost/assets/img/og.png">
+<title>At anchor · Fleet</title>
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/fleet.css">
+<script src="assets/js/theme.js"></script>
+<style>
+ /* All classes are o-* prefixed so nothing inherits fleet.css component rules. */
+ body{min-height:100vh;display:grid;place-items:center;padding:24px;margin:0}
+ .o-card{width:100%;max-width:480px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg);text-align:center}
+
+ /* ---- harbour-at-night scene ---- */
+ .o-scene{display:block;width:100%;height:194px}
+ .o-sky-top{stop-color:color-mix(in srgb,var(--brand) 30%,var(--md-surface-container-lowest))}
+ .o-sky-bot{stop-color:var(--md-surface-container-lowest)}
+ .o-moon{fill:#fde68a}
+ .o-crater{fill:color-mix(in srgb,#fde68a 70%,#000 20%);opacity:.5}
+ .o-star{fill:color-mix(in srgb,var(--ink) 70%,transparent)}
+ .o-sea{fill:color-mix(in srgb,var(--brand) 20%,var(--md-surface-container-lowest))}
+ .o-wave{fill:none;stroke:color-mix(in srgb,var(--brand) 45%,transparent);stroke-width:2;stroke-linecap:round}
+ .o-hull{fill:color-mix(in srgb,var(--ink) 82%,var(--brand))}
+ .o-sail-main{fill:url(#o-sail)} .o-sail-jib{fill:color-mix(in srgb,var(--brand) 60%,#fff)}
+ .o-mast{stroke:color-mix(in srgb,var(--ink) 60%,transparent);stroke-width:2;stroke-linecap:round}
+ .o-flag{fill:var(--danger)}
+ .o-rope{stroke:color-mix(in srgb,var(--ink) 35%,transparent);stroke-width:1.4}
+
+ .o-boat{transform-origin:160px 150px;animation:o-bob 4.2s ease-in-out infinite}
+ @keyframes o-bob{0%,100%{transform:translateY(0) rotate(-1.4deg)}50%{transform:translateY(3px) rotate(1.4deg)}}
+ .o-waves{animation:o-drift 6s ease-in-out infinite}
+ @keyframes o-drift{0%,100%{transform:translateX(0)}50%{transform:translateX(-8px)}}
+ .o-flag{transform-origin:160px 92px;animation:o-flap 1.6s ease-in-out infinite}
+ @keyframes o-flap{0%,100%{transform:scaleX(1)}50%{transform:scaleX(.6)}}
+ .o-tw{animation:o-tw 3s ease-in-out infinite}
+ .o-t2{animation-delay:.7s}.o-t3{animation-delay:1.4s}.o-t4{animation-delay:2.1s}
+ @keyframes o-tw{0%,100%{opacity:.35}50%{opacity:1}}
+ @media (prefers-reduced-motion:reduce){.o-boat,.o-waves,.o-flag,.o-tw,.o-pulse,.o-spin{animation:none}}
+
+ .o-body{padding:26px 32px 30px}
+ .o-badge{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;padding:6px 14px;margin:0 0 18px;border-radius:var(--radius-full);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:var(--indigo-bg);color:var(--indigo-ink)}
+ .o-pulse{width:8px;height:8px;border-radius:50%;background:var(--brand);animation:o-pulse 1.6s ease-in-out infinite}
+ @keyframes o-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+ .o-title{font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.2;margin:0 0 10px;color:var(--ink)}
+ .o-sub{color:var(--muted);font-size:15px;line-height:1.6;max-width:360px;margin:0 auto}
+ .o-retry{margin:22px auto 0;display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--faint)}
+ .o-spin{width:13px;height:13px;flex:none;border:2px solid color-mix(in srgb,var(--brand) 40%,transparent);border-top-color:var(--brand);border-radius:50%;animation:o-spin 1s linear infinite}
+ @keyframes o-spin{to{transform:rotate(360deg)}}
+ .o-retry a{color:var(--brand);font-weight:600;text-decoration:none} .o-retry a:hover{text-decoration:underline}
+
+ .o-foot{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;align-items:center;font-size:12.5px;color:var(--faint)}
+ .o-brand{display:inline-flex;align-items:center;gap:7px;font-weight:700;color:var(--ink)}
+ .o-brand svg{width:18px;height:18px}
+ .o-foot a{color:var(--muted);text-decoration:none} .o-foot a:hover{color:var(--brand)}
+ .o-sep{opacity:.5}
+</style>
+</head>
+<body>
+ <main class="o-card">
+  <!-- The fleet is at anchor, riding out the dark. -->
+  <svg class="o-scene" viewBox="0 0 320 194" role="img" aria-label="A sailboat at anchor in a moonlit harbour at night">
+   <defs>
+    <linearGradient id="o-sky" x1="0" y1="0" x2="0" y2="1"><stop class="o-sky-top" offset="0"/><stop class="o-sky-bot" offset="1"/></linearGradient>
+    <linearGradient id="o-sail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b83f7"/><stop offset=".55" stop-color="#5b54e6"/><stop offset="1" stop-color="#4338ca"/></linearGradient>
+   </defs>
+
+   <rect x="0" y="0" width="320" height="194" fill="url(#o-sky)"/>
+
+   <!-- moon -->
+   <circle class="o-moon" cx="258" cy="48" r="24"/>
+   <circle class="o-crater" cx="251" cy="42" r="4.5"/>
+   <circle class="o-crater" cx="266" cy="54" r="3"/>
+   <circle class="o-crater" cx="254" cy="58" r="2.5"/>
+
+   <!-- stars -->
+   <circle class="o-star o-tw"    cx="38"  cy="38" r="1.7"/>
+   <circle class="o-star o-tw o-t2" cx="92"  cy="24" r="1.3"/>
+   <circle class="o-star o-tw o-t3" cx="150" cy="44" r="1.5"/>
+   <circle class="o-star o-tw o-t4" cx="205" cy="30" r="1.2"/>
+   <circle class="o-star o-tw o-t2" cx="26"  cy="92" r="1.3"/>
+
+   <!-- the boat, at anchor -->
+   <g class="o-boat">
+    <line class="o-rope" x1="150" y1="150" x2="140" y2="176"/>
+    <line class="o-mast" x1="160" y1="148" x2="160" y2="92"/>
+    <path class="o-flag" d="M160,90 L176,95 L160,100 Z"/>
+    <path class="o-sail-jib" d="M157,100 L157,146 L128,146 Z"/>
+    <path class="o-sail-main" d="M163,98 L163,146 L198,146 Z"/>
+    <path class="o-hull" d="M120,148 L200,148 L188,166 Q160,173 132,166 Z"/>
+   </g>
+
+   <!-- sea + waves -->
+   <path class="o-sea" d="M0,168 Q80,160 160,168 T320,168 V194 H0 Z"/>
+   <g class="o-waves">
+    <path class="o-wave" d="M-10,178 q20,-6 40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0"/>
+    <path class="o-wave" d="M-10,187 q20,-6 40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0" opacity=".6"/>
+   </g>
+  </svg>
+
+  <div class="o-body">
+   <div class="o-badge"><span class="o-pulse"></span> At anchor</div>
+   <h1 class="o-title">This service has dropped anchor</h1>
+   <p class="o-sub">It's pulled into harbour for a moment — restarting or down for a spell
+     of maintenance. It'll set sail again on its own. No need to refresh.</p>
+
+   <div class="o-retry"><span class="o-spin"></span> Auto-checking every 30s &middot; <a href="" onclick="location.reload();return false;">retry now</a></div>
+
+   <footer class="o-foot">
+    <span class="o-brand">
+     <svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect width="40" height="40" rx="11" fill="url(#o-lg)"/><path d="M10.5 19.2 L20 11 L29.5 19.2" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.4 18.4 V28.6 H26.6 V18.4" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.4 28.6 V24 a2.6 2.6 0 0 1 5.2 0 V28.6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="o-lg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b83f7"/><stop offset=".55" stop-color="#5b54e6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs></svg>
+     Fleet
+    </span>
+    <span>crafted by <a href="https://github.com/cdrrazan">Rajan Bhattarai</a> <span class="o-sep">&middot;</span> <a href="https://github.com/cdrrazan/roost">github.com/cdrrazan/roost</a></span>
+   </footer>
+  </div>
+ </main>
+ <script>setTimeout(function(){location.reload();},30000);</script>
+</body>
+</html>

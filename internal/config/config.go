@@ -82,6 +82,11 @@ type Tunnel struct {
 	// Set "http2" to force TCP/443 on networks that throttle or drop UDP
 	// (many home/office ISPs), where QUIC flaps and every app 502s.
 	Protocol string `yaml:"protocol"`
+	// MaintenancePage, when true, makes `tunnel setup` deploy a Cloudflare
+	// Worker that serves roost's branded "temporarily offline" page from the
+	// edge whenever the tunnel is wholly down (a 1033 that never reaches
+	// Caddy). Opt-in: it deploys a Worker + one route per routing suffix.
+	MaintenancePage bool `yaml:"maintenance_page"`
 }
 
 // Access is the optional Cloudflare Access policy configuration.

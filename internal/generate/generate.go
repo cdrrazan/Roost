@@ -522,6 +522,14 @@ func RenderCaddyfile(apps []App, controlHost string) ([]byte, error) {
 	return render("Caddyfile.tmpl", caddyData{Apps: routed, ControlHost: controlHost})
 }
 
+// RenderErrorPage renders the branded "temporarily offline" HTML. It is the
+// single source of truth for the maintenance UI: Caddy serves it as a static
+// file when an app upstream is down (502/503), and the edge Worker embeds the
+// same bytes to answer a wholly-down tunnel (Cloudflare 1033).
+func RenderErrorPage() ([]byte, error) {
+	return render("error.html.tmpl", nil)
+}
+
 // RenderMySQLInit renders mysql-init.sql: one database per mysql app,
 // all granted to the shared roost user.
 func RenderMySQLInit(apps []App) ([]byte, error) {
@@ -690,6 +698,16 @@ func Generate(buildDir string, apps []App, opts Opts) ([]string, error) {
 		return nil, err
 	}
 	if err := write("Caddyfile", caddy); err != nil {
+		return nil, err
+	}
+
+	// The maintenance page Caddy serves for a downed upstream (mounted into
+	// the caddy service by compose.yml).
+	errPage, err := RenderErrorPage()
+	if err != nil {
+		return nil, err
+	}
+	if err := write("error.html", errPage); err != nil {
 		return nil, err
 	}
 

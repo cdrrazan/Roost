@@ -2,6 +2,16 @@
 
 All notable changes to Fleet are documented here. Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.7.0] — 2026-07-31
+
+### Added
+- **Offline / maintenance page** (`offline.html`) — a standalone branded page to
+  serve when a service is unreachable (proxy 502/503 or a downed tunnel). An
+  animated moonlit-harbour scene (a sailboat riding at anchor, drifting waves,
+  twinkling stars), an *At anchor* status badge, a spinner, and an auto-retry
+  every 30s (`location.reload`, honours `prefers-reduced-motion`). Fully themed
+  via the MD3 tokens — light + dark. Linked from Components → **Offline page**.
+
 ## [1.6.0] — 2026-07-28
 
 ### Added

@@ -125,6 +125,7 @@ domain: demo.example.com          # fallback suffix for bare-path apps
 tunnel:
   name: rserver                   # your tunnel's name (never generated)
   protocol: http2                 # optional; force TCP/443 when your ISP throttles UDP/QUIC (default: QUIC)
+  maintenance_page: true          # optional; edge Worker serves a branded page on a full-tunnel-down (1033)
   access:
     emails: [me@example.com]      # Cloudflare Access wall before first exposure
 defaults:
@@ -291,6 +292,15 @@ and personal-hosting** tool for demos, side projects, and sharing work in
 progress. It is not a replacement for a server; when the laptop wakes,
 `cloudflared` reconnects within ~5–10 seconds and everything is live again.
 
+**Visitors don't see a raw error while you're away.** If a single app is down,
+Caddy serves a branded *"temporarily offline"* page instead of a bare 502 —
+automatic, no config. If the *whole* tunnel is down (lid shut, machine off →
+Cloudflare's blunt **1033**), set `tunnel.maintenance_page: true` and
+`roost tunnel setup` deploys a tiny Cloudflare **Worker** that answers with the
+same page from the edge, where your host can't. Both render an identical
+self-contained page that auto-retries every 30s. See
+[docs/configuration.md](docs/configuration.md#offline--maintenance-ui--two-layers).
+
 ---
 
 ## ⚡ 60-second quickstart
@@ -415,6 +425,12 @@ it does:
   pill, health, and a colour-coded **memory bar**; a *Needs attention* strip
   surfaces anything not running, and metric cards summarise running / memory /
   stopped.
+- **Dashboard** (sidebar → **Dashboard**, above Resources) — a real-time
+  monitoring page that polls `GET /api/metrics` every 5s and draws hand-rolled
+  inline SVG charts (no external libs): CPU %, memory %, and network I/O **over
+  time**, **memory by app**, utilization **gauges** (uptime / memory / disk),
+  docker **storage & cache**, a **14-day incidents** bar chart, and per-app
+  uptime — plus a stat-tile row. The clickable **logo returns to the home view**.
 - **Control** — **Start all** / **Stop all**, or per-app **Start** / **Stop**.
   Stop leaves Caddy + the tunnel up so the panel stays reachable (only the CLI
   `roost down` tears down everything).

@@ -61,6 +61,7 @@ services:
     {{- end}}
     volumes:
       - {{.BuildDir}}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - {{.BuildDir}}/error.html:/etc/caddy/error.html:ro
     networks:
       - roost
 

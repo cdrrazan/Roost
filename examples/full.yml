@@ -23,6 +23,11 @@ tunnel:
   # Always the literal default or your own value — roost never invents
   # tunnel names, so the Cloudflare dashboard stays recognizable.
   name: roost
+  # When the whole tunnel is down (cloudflared/Docker/box off), Cloudflare
+  # shows a bare 1033. Set this and `tunnel setup` deploys an edge Worker
+  # that serves roost's branded "temporarily offline" page instead. (A
+  # single app being down is handled by Caddy automatically — no config.)
+  maintenance_page: true
   # With access set, every routing suffix gets a Cloudflare Access
   # wall BEFORE the first `up`. Hostnames leak via Certificate
   # Transparency logs within hours; personal apps want this.

@@ -27,6 +27,14 @@ func Teardown(client *Client, st *state.State, removeTunnel bool) error {
 	}
 	st.Records = kept
 
+	// The fallback Worker is edge infra created alongside the tunnel; remove
+	// it on a full uninstall, before the tunnel it fronts.
+	if removeTunnel {
+		if err := TeardownWorker(client, st); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	if removeTunnel && st.TunnelID != "" {
 		if err := client.DeleteTunnel(st.AccountID, st.TunnelID); err != nil {
 			errs = append(errs, fmt.Errorf("tunnel %s: %w", st.TunnelName, err))
