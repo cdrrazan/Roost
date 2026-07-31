@@ -2385,7 +2385,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     #dash .tile .tl{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
     #dash .tile .td{font-size:.72rem;color:var(--muted);margin-top:4px}
     #dash .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
-    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0;height:250px;display:flex;flex-direction:column;overflow:hidden}
+    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0;height:300px;display:flex;flex-direction:column;overflow:hidden}
     #dash .dcard h3{flex:none;font-size:.76rem;font-weight:600;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em}
     #dash .dbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
     #dash .chart{height:100%}
