@@ -2374,25 +2374,29 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     </section>
    </form>
    {{else if eq .Page "metrics"}}
-   <section class="card" id="dash">
+   <section id="dash">
     <style>
-    #dash .dash-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin:14px 0}
+    #dash{display:flex;flex-direction:column;gap:14px}
+    #dash .dash-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    #dash .dash-head h2{margin:0;font-size:1.05rem}
+    #dash .dash-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px}
     #dash .tile{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
     #dash .tile .tv{font-size:1.45rem;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
     #dash .tile .tl{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:3px}
     #dash .tile .td{font-size:.72rem;color:var(--muted);margin-top:4px}
     #dash .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
-    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0}
-    #dash .dcard h3{font-size:.76rem;font-weight:600;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em}
-    #dash .chart{height:140px}
-    #dash .lc{width:100%;height:140px;display:block}
+    #dash .dcard{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:14px 16px;min-width:0;height:250px;display:flex;flex-direction:column;overflow:hidden}
+    #dash .dcard h3{flex:none;font-size:.76rem;font-weight:600;color:var(--muted);margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em}
+    #dash .dbody{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+    #dash .chart{height:100%}
+    #dash .lc{width:100%;height:100%;display:block}
     #dash .empty{color:var(--muted);font-size:.8rem;padding:26px 0;text-align:center}
     #dash .barrow{display:flex;align-items:center;gap:9px;margin:7px 0;font-size:.78rem}
     #dash .barrow .bn{width:92px;flex:none;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #dash .barrow .bt{flex:1;height:10px;background:var(--track);border-radius:6px;overflow:hidden}
     #dash .barrow .bf{height:100%;border-radius:6px;transition:width .5s}
     #dash .barrow .bv{width:76px;flex:none;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
-    #dash .gauges-wrap{display:flex;gap:8px;justify-content:space-around;flex-wrap:wrap}
+    #dash .gauges-wrap{display:flex;gap:8px;justify-content:space-around;align-items:center;flex-wrap:wrap}
     #dash .gauge{text-align:center;width:108px}
     #dash .gauge svg{width:98px;height:98px}
     #dash .gtrack{fill:none;stroke:var(--track);stroke-width:9}
@@ -2403,7 +2407,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     #dash .kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:.82rem;color:var(--muted)}
     #dash .kv:last-child{border-bottom:0}
     #dash .kv b{color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
-    #dash .daybars{display:flex;align-items:flex-end;gap:4px;height:130px}
+    #dash .daybars{display:flex;align-items:flex-end;gap:4px}
     #dash .daybars .db{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:5px;height:100%}
     #dash .daybars .db i{width:100%;border-radius:3px 3px 0 0;min-height:2px;transition:height .4s}
     #dash .daybars .db span{font-size:.58rem;color:var(--muted);white-space:nowrap}
@@ -2414,21 +2418,20 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
     #dash .uprow .uv{color:var(--muted);font-variant-numeric:tabular-nums}
     #dash .live{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:.76rem}
     </style>
-    <div class="card-h">
+    <div class="dash-head">
      <h2>📊 Dashboard <span class="csub">live server monitoring · refreshes every 5s</span></h2>
      <span class="live"><span id="dashdot" class="livedot"></span> <span id="dashts">connecting…</span></span>
     </div>
     <div class="dash-tiles" id="dtiles"><div class="empty">loading metrics…</div></div>
     <div class="dash-grid">
-     <div class="dcard"><h3>CPU % · over time</h3><div class="chart" id="cCpu"></div></div>
-     <div class="dcard"><h3>Memory used % · over time</h3><div class="chart" id="cMem"></div></div>
-     <div class="dcard"><h3>Network I/O · rx / tx over time</h3><div class="chart" id="cNet"></div></div>
-     <div class="dcard"><h3>Memory by app</h3><div id="cByApp"></div></div>
-     <div class="dcard"><h3>Utilization</h3><div class="gauges-wrap" id="cGauges"></div></div>
-     <div class="dcard"><h3>Storage &amp; cache · docker</h3><div id="cStore"></div></div>
-     <div class="dcard"><h3>Incidents · last 14 days</h3><div class="daybars" id="cInc"></div></div>
-     <div class="dcard"><h3>Uptime by app</h3><div id="cUp"></div></div>
-     <div class="dcard"><h3>Edge &amp; host</h3><div id="cEdge"></div></div>
+     <div class="dcard"><h3>CPU % · over time</h3><div class="dbody chart" id="cCpu"></div></div>
+     <div class="dcard"><h3>Memory used % · over time</h3><div class="dbody chart" id="cMem"></div></div>
+     <div class="dcard"><h3>Network I/O · rx / tx over time</h3><div class="dbody chart" id="cNet"></div></div>
+     <div class="dcard"><h3>Memory by app</h3><div class="dbody" id="cByApp"></div></div>
+     <div class="dcard"><h3>Utilization</h3><div class="dbody gauges-wrap" id="cGauges"></div></div>
+     <div class="dcard"><h3>Storage &amp; cache · docker</h3><div class="dbody" id="cStore"></div></div>
+     <div class="dcard"><h3>Incidents · last 14 days</h3><div class="dbody daybars" id="cInc"></div></div>
+     <div class="dcard"><h3>Uptime by app</h3><div class="dbody" id="cUp"></div></div>
     </div>
     <script>
     (function(){
@@ -2468,7 +2471,7 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
      function draw(m){
       var t=el("dashts");if(t)t.textContent="updated "+(m.ts||"");
       var dot=el("dashdot");if(dot){dot.classList.remove("beat");void dot.offsetWidth;dot.classList.add("beat");}
-      var a=m.aggregate||{},sv=m.server||{},inc=m.incidents||{},sy=m.system||{},e=m.edge||{};
+      var a=m.aggregate||{},sv=m.server||{},inc=m.incidents||{},sy=m.system||{};
       var tiles="";
       if(m.dockerOK){
        tiles+=tile(a.running+" / "+a.total,"Apps running",(a.total-a.running)+" stopped");
@@ -2502,12 +2505,6 @@ var statusTmpl = template.Must(template.New("status").Funcs(template.FuncMap{
       el("cInc").innerHTML=days.length?days.map(function(x){var hp=x.count?Math.max(6,Math.round(x.count/dmax*100)):0;return '<div class="db" title="'+esc(x.day)+': '+x.count+' incident(s)"><i style="height:'+hp+'%;background:'+(x.count?"var(--danger)":"var(--track)")+'"></i><span>'+esc((x.day.split(" ")[1]||x.day))+'</span></div>';}).join(""):'<div class="empty">no data</div>';
       var ua=(m.apps||[]);
       el("cUp").innerHTML=ua.length?ua.map(function(x){var run=x.state==="running";return '<div class="uprow"><span class="ud" style="background:'+(run?"var(--ok)":"var(--danger)")+'"></span><span class="un" title="'+esc(x.name)+'">'+esc(x.name)+'</span><span class="uv">'+(run?esc(x.up||"up"):esc(x.state))+'</span></div>';}).join(""):'<div class="empty">no apps</div>';
-      el("cEdge").innerHTML=
-        '<div class="kv"><span>Tunnel</span><b>'+esc(e.tunnelName||"—")+'</b></div>'
-       +'<div class="kv"><span>Connector</span><b>'+esc(e.tunnelState||"unknown")+'</b></div>'
-       +'<div class="kv"><span>Access</span><b>'+(e.protected?"protected":"open")+'</b></div>'
-       +'<div class="kv"><span>Host</span><b>'+esc(sv.host||"—")+'</b></div>'
-       +'<div class="kv"><span>OS</span><b>'+esc(sv.os||"—")+'</b></div>';
      }
      function poll(){fetch("/api/metrics",{cache:"no-store"}).then(function(r){return r.ok?r.json():Promise.reject();}).then(draw).catch(function(){var t=el("dashts");if(t)t.textContent="offline — retrying";});}
      poll();
