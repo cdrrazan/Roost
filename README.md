@@ -415,6 +415,12 @@ it does:
   pill, health, and a colour-coded **memory bar**; a *Needs attention* strip
   surfaces anything not running, and metric cards summarise running / memory /
   stopped.
+- **Dashboard** (sidebar → **Dashboard**, above Resources) — a real-time
+  monitoring page that polls `GET /api/metrics` every 5s and draws hand-rolled
+  inline SVG charts (no external libs): CPU %, memory %, and network I/O **over
+  time**, **memory by app**, utilization **gauges** (uptime / memory / disk),
+  docker **storage & cache**, a **14-day incidents** bar chart, and per-app
+  uptime — plus a stat-tile row. The clickable **logo returns to the home view**.
 - **Control** — **Start all** / **Stop all**, or per-app **Start** / **Stop**.
   Stop leaves Caddy + the tunnel up so the panel stays reachable (only the CLI
   `roost down` tears down everything).

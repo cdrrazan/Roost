@@ -44,6 +44,11 @@ apps: [...]                # see below
   — connected / reconnecting-after-wake / down), a per-app detail drawer
   (image, restarts, env keys, recent logs), an activity timeline, and a ⌘K
   command palette. It auto-refreshes every 5s.
+  - **Dashboard page** — a dedicated real-time monitoring view (sidebar →
+    **Dashboard**) that polls `/api/metrics` every 5s and draws inline-SVG
+    charts: CPU / memory / network over time, memory by app, utilization gauges
+    (uptime / memory / disk), docker storage & cache, a 14-day incidents chart,
+    and per-app uptime.
   - **Public status page** — the panel also serves a controls-free, secret-free
     board at **`/status`** (app name + operational/degraded/down + uptime + open
     incident detail), safe to share. It **auto-refreshes every 2 min** so a fresh
