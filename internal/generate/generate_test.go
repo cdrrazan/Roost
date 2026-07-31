@@ -429,6 +429,31 @@ func TestRenderComposeNoMountForCompiledApps(t *testing.T) {
 	}
 }
 
+func TestRenderComposeOwnDockerfileSkipsSourceMount(t *testing.T) {
+	// An own-Dockerfile app builds everything into its image and defines
+	// its own filesystem layout — roost must never bind-mount host source
+	// over /app, even for an interpreted framework like django. The near-
+	// empty wrapper dir would otherwise shadow /app in the image.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte("FROM x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	apps, err := Plan(&config.Config{}, []config.ResolvedApp{{
+		App:  config.App{Path: dir, Framework: "django", Domain: "docs.example.com"},
+		Name: "paperless", FQDN: "docs.example.com",
+	}})
+	if err != nil {
+		t.Fatalf("Plan: %v", err)
+	}
+	out, err := RenderCompose("/b", apps, Opts{})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	if strings.Contains(string(out), ":/app:ro") {
+		t.Errorf("own-Dockerfile app must not get a source mount:\n%s", out)
+	}
+}
+
 func TestRenderComposePersistentVolumes(t *testing.T) {
 	// A stateful app (e.g. paperless) declares persistent mounts via
 	// config volumes:. A named source (no slash) becomes a namespaced

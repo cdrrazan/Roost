@@ -491,7 +491,7 @@ func RenderCompose(buildDir string, apps []App, opts Opts) ([]byte, error) {
 			Database:    app.Database,
 			Redis:       app.Redis,
 			Command:     app.Command,
-			MountSource: mountsSource(app.Framework) && !app.NoSourceMount,
+			MountSource: mountsSource(app.Framework) && !app.NoSourceMount && !app.HasOwnDockerfile,
 			HealthCheck: app.HealthCheck,
 			Env:         appEnv(app, seed),
 			Volumes:     mounts,
