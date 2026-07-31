@@ -429,6 +429,82 @@ func TestRenderComposeNoMountForCompiledApps(t *testing.T) {
 	}
 }
 
+func TestRenderComposePersistentVolumes(t *testing.T) {
+	// A stateful app (e.g. paperless) declares persistent mounts via
+	// config volumes:. A named source (no slash) becomes a namespaced
+	// named volume, declared at the top level and prefixed with the app
+	// name so two apps' "data" volumes never collide. A path source
+	// (starts with /, ~ or .) is a host bind mount, passed through
+	// verbatim and never declared.
+	apps := []App{{
+		Name: "paperless", FQDN: "docs.example.com", Path: "/apps/paperless",
+		Framework: "django", Port: 8000, StartCommand: "gunicorn", Memory: "1g",
+		Volumes: []string{
+			"data:/usr/src/paperless/data",
+			"media:/usr/src/paperless/media",
+			"/srv/consume:/usr/src/paperless/consume",
+		},
+	}}
+	out, err := RenderCompose("/b", apps, Opts{})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("compose.yml is not valid YAML: %v\n%s", err, out)
+	}
+	services, _ := doc["services"].(map[string]any)
+	svc, _ := services["paperless"].(map[string]any)
+	vols, _ := svc["volumes"].([]any)
+	got := make(map[string]bool)
+	for _, v := range vols {
+		got[v.(string)] = true
+	}
+	// Named sources are namespaced with the app name.
+	if !got["paperless-data:/usr/src/paperless/data"] {
+		t.Errorf("named volume not namespaced/mounted:\n%v", vols)
+	}
+	if !got["paperless-media:/usr/src/paperless/media"] {
+		t.Errorf("named volume not namespaced/mounted:\n%v", vols)
+	}
+	// Host bind mounts pass through untouched.
+	if !got["/srv/consume:/usr/src/paperless/consume"] {
+		t.Errorf("host bind mount not passed through:\n%v", vols)
+	}
+	// Named volumes are declared at the top level; bind mounts are not.
+	topVols, _ := doc["volumes"].(map[string]any)
+	if _, has := topVols["paperless-data"]; !has {
+		t.Errorf("named volume paperless-data not declared at top level:\n%v", topVols)
+	}
+	if _, has := topVols["paperless-media"]; !has {
+		t.Errorf("named volume paperless-media not declared at top level:\n%v", topVols)
+	}
+	if _, has := topVols["consume"]; has {
+		t.Errorf("host bind mount must not be declared as a named volume:\n%v", topVols)
+	}
+}
+
+func TestRenderComposeVolumesCoexistWithSourceMount(t *testing.T) {
+	// An interpreted app keeps its :ro source mount AND gets its
+	// persistent volumes — both under the one service volumes: key.
+	apps := []App{{
+		Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog",
+		Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m",
+		Volumes: []string{"uploads:/rails/storage"},
+	}}
+	out, err := RenderCompose("/b", apps, Opts{})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "/apps/blog:/app:ro") {
+		t.Errorf("source mount lost when volumes present:\n%s", s)
+	}
+	if !strings.Contains(s, "blog-uploads:/rails/storage") {
+		t.Errorf("persistent volume missing alongside source mount:\n%s", s)
+	}
+}
+
 func TestRenderComposeOmitsUnusedDatabases(t *testing.T) {
 	apps := []App{{
 		Name: "site", FQDN: "site.example.com", Path: "/apps/site",
