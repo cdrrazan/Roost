@@ -102,6 +102,24 @@ apps:
     env:
       DATABASE_URL: "postgres://roost:roost@postgres:5432/finance"
 
+  # A stateful app that stores files on disk (a document manager, a media
+  # library) — it needs volumes:, or a rebuild wipes them. Each entry is a
+  # Docker mount, source:/container/path[:ro]. A named source (data) becomes
+  # a named volume, namespaced with the app name (docs-data) and declared for
+  # you; a path source (/srv/x, ~/x) is a host bind mount, passed through.
+  # This app also runs the official prebuilt image via a one-line wrapper
+  # Dockerfile at its root, so roost builds THAT (own-Dockerfile app: no
+  # source mount) and its entrypoint migrates itself (migrate: false).
+  - path: ~/apps/docs
+    domain: docs.example.com
+    framework: django
+    migrate: false
+    redis: true # this app uses Redis as its task broker
+    volumes:
+      - data:/usr/src/paperless/data # named volume (survives rebuilds)
+      - media:/usr/src/paperless/media # the document library
+      - /srv/docs/consume:/usr/src/paperless/consume # host bind mount
+
 # ------------------------------------------------------------------
 # Not in this file: shared demo credentials.
 # Drop a ~/.roost/seed.env (mode 0600, KEY=VALUE) and roost injects its

@@ -81,6 +81,11 @@ type App struct {
 	// frameworks. Set in remote mode: the remote Docker host has no copy of
 	// the local source, so the app must build everything into its image.
 	NoSourceMount bool
+	// Volumes are persistent mounts for stateful apps (config volumes:),
+	// each a compose mount "source:/container/path[:ro]". Named sources are
+	// namespaced and declared at the top level; path sources are host bind
+	// mounts. See config.App.Volumes.
+	Volumes []string
 }
 
 // Plan merges each resolved app with its framework detection (or the
@@ -121,6 +126,7 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			Redis:          d.Redis,
 			Worker:         r.Worker,
 			Category:       r.Category,
+			Volumes:        r.Volumes,
 		}
 		// Workers are always grouped as workers in the panel, whatever the
 		// config says.
@@ -267,6 +273,25 @@ func mountsSource(framework string) bool {
 	return true
 }
 
+// appVolumes turns an app's config volumes: into rendered compose mount
+// lines plus the list of named volumes that must be declared at the top
+// level. A named source ("data") is namespaced with the app name so two
+// apps' "data" volumes never collide ("paperless-data:/path", declared as
+// "paperless-data"). A host bind mount ("/srv/x:/path") passes through
+// verbatim and is never declared.
+func appVolumes(app App) (mounts, named []string) {
+	for _, v := range app.Volumes {
+		if config.VolumeIsNamedSource(v) {
+			vol := app.Name + "-" + config.VolumeSource(v)
+			mounts = append(mounts, vol+":"+config.VolumeTarget(v))
+			named = append(named, vol)
+			continue
+		}
+		mounts = append(mounts, v)
+	}
+	return mounts, named
+}
+
 // dockerfilePath returns the Dockerfile compose should build with:
 // the app's own when it has one, the generated one otherwise.
 func dockerfilePath(buildDir string, app App) string {
@@ -409,6 +434,10 @@ type composeApp struct {
 	MountSource bool
 	HealthCheck string
 	Env         []envPair
+	// Volumes are rendered compose mount lines ("source:/container/path").
+	// Named sources are namespaced with the app name; host bind mounts pass
+	// through verbatim.
+	Volumes []string
 }
 
 // Opts carries the stack-wide (non-per-app) settings that shape the
@@ -434,6 +463,9 @@ type composeData struct {
 	ControlHost string
 	// TunnelProtocol, when set, forces the cloudflared --protocol flag.
 	TunnelProtocol string
+	// NamedVolumes are the namespaced named volumes to declare at the top
+	// level (from apps' persistent volumes: with a named source).
+	NamedVolumes []string
 }
 
 // RenderCompose renders compose.yml. buildDir is where generated
@@ -448,6 +480,8 @@ func RenderCompose(buildDir string, apps []App, opts Opts) ([]byte, error) {
 		data.NeedsMySQL = data.NeedsMySQL || app.Database == "mysql"
 		data.NeedsPostgres = data.NeedsPostgres || app.Database == "postgres"
 		data.NeedsRedis = data.NeedsRedis || app.Redis
+		mounts, named := appVolumes(app)
+		data.NamedVolumes = append(data.NamedVolumes, named...)
 		data.Apps = append(data.Apps, composeApp{
 			Name:        app.Name,
 			Path:        app.Path,
@@ -457,9 +491,10 @@ func RenderCompose(buildDir string, apps []App, opts Opts) ([]byte, error) {
 			Database:    app.Database,
 			Redis:       app.Redis,
 			Command:     app.Command,
-			MountSource: mountsSource(app.Framework) && !app.NoSourceMount,
+			MountSource: mountsSource(app.Framework) && !app.NoSourceMount && !app.HasOwnDockerfile,
 			HealthCheck: app.HealthCheck,
 			Env:         appEnv(app, seed),
+			Volumes:     mounts,
 		})
 	}
 	return render("compose.yml.tmpl", data)

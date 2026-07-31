@@ -14,7 +14,7 @@ roost --config examples/demo/config.yml detect
 | [`explicit.yml`](explicit.yml) | explicit per-app hostnames — what `roost init` writes |
 | [`multi-domain.yml`](multi-domain.yml) | one config spanning three domains plus a bare apex |
 | [`frameworks.yml`](frameworks.yml) | one app per detected framework — Rails, Sinatra, Next, SvelteKit, Express, Astro, Vite, Django, Flask, Laravel, static |
-| [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env, build_env, seed, `control_host`, `remote` |
+| [`full.yml`](full.yml) | every knob: overrides, profiles, Access, defaults, env, build_env, seed, `volumes`, `control_host`, `remote` |
 | [`includes/config.yml`](includes/config.yml) | a main file that pulls apps from `apps/*.yml`, one file per feature |
 | [`demo/config.yml`](demo/config.yml) | a fully-populated fake setup for a fictional developer |
 
@@ -30,6 +30,12 @@ value is used verbatim and can live in any zone of your Cloudflare account
 **"Some apps are heavy, start them on demand"** — put them in a profile
 (`full.yml`), then `roost up` starts only the always-on set and
 `roost up --profile extras` brings in the rest.
+
+**"My app stores files on disk"** — a document manager, a media library, or
+anything that isn't purely in the DB needs `volumes:`, or a rebuild wipes it
+(`full.yml`). A named source (`data`) becomes a persistent named volume; a
+path source (`/srv/x`) is a host bind mount. See the [paperless-ngx
+recipe](../docs/runbook.md#stateful-app-with-persistent-files--paperless-ngx).
 
 **"My apps are private"** — set `tunnel.access.emails`. Every routing suffix
 gets a Cloudflare Access wall before first exposure (`full.yml`).

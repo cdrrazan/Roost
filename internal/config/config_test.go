@@ -99,6 +99,49 @@ func TestLoadAppForms(t *testing.T) {
 	}
 }
 
+func TestLoadAppVolumes(t *testing.T) {
+	dir := t.TempDir()
+	mkApps(t, dir, "docs")
+	yaml := "domain: example.com\napps:\n" +
+		"  - path: " + filepath.Join(dir, "docs") + "\n" +
+		"    domain: docs.example.com\n" +
+		"    volumes:\n" +
+		"      - data:/usr/src/paperless/data\n" +
+		"      - /srv/consume:/usr/src/paperless/consume\n"
+	cfg, err := Load(writeConfig(t, t.TempDir(), yaml))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	got := cfg.Apps[0].Volumes
+	want := []string{"data:/usr/src/paperless/data", "/srv/consume:/usr/src/paperless/consume"}
+	if len(got) != len(want) {
+		t.Fatalf("Volumes = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("Volumes[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestResolveRejectsMalformedVolume(t *testing.T) {
+	dir := t.TempDir()
+	mkApps(t, dir, "docs")
+	// No container path (no colon) is a hard error with a specific remedy.
+	yaml := "apps:\n" +
+		"  - path: " + filepath.Join(dir, "docs") + "\n" +
+		"    domain: docs.example.com\n" +
+		"    volumes:\n" +
+		"      - justaname\n"
+	cfg, err := Load(writeConfig(t, t.TempDir(), yaml))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, _, err := Resolve(cfg); err == nil || !strings.Contains(err.Error(), "volume") {
+		t.Errorf("want a volume-format error, got %v", err)
+	}
+}
+
 func TestLoadTopLevelFields(t *testing.T) {
 	dir := t.TempDir()
 	mkApps(t, dir, "app1")

@@ -30,9 +30,14 @@ services:
     profiles:
       - {{.Profile}}
 {{- end}}
-{{- if .MountSource}}
+{{- if or .MountSource .Volumes}}
     volumes:
+{{- if .MountSource}}
       - {{.Path}}:/app:ro
+{{- end}}
+{{- range .Volumes}}
+      - {{.}}
+{{- end}}
 {{- end}}
 {{- if or .Database .Redis}}
     depends_on:
@@ -113,7 +118,7 @@ services:
 
 networks:
   roost: {}
-{{- if or .NeedsMySQL .NeedsPostgres .NeedsRedis}}
+{{- if or .NeedsMySQL .NeedsPostgres .NeedsRedis .NamedVolumes}}
 
 volumes:
 {{- if .NeedsMySQL}}
@@ -124,5 +129,8 @@ volumes:
 {{- end}}
 {{- if .NeedsRedis}}
   roost-redis-data: {}
+{{- end}}
+{{- range .NamedVolumes}}
+  {{.}}: {}
 {{- end}}
 {{- end}}

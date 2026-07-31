@@ -137,6 +137,15 @@ type App struct {
 	// worker entry that runs a background process (e.g.
 	// "bundle exec sidekiq") instead of the framework's web server.
 	Command string `yaml:"command"`
+	// Volumes are persistent mounts for stateful apps whose data lives on
+	// disk rather than in the shared database (e.g. paperless documents).
+	// Each entry is a compose mount "source:/container/path[:ro]". A named
+	// source (no slash — "data") becomes a named volume, declared at the
+	// top level and namespaced with the app name so two apps' "data"
+	// volumes never collide; a path source ("/srv/x", "~/x", "./x") is a
+	// host bind mount, passed through verbatim. Without this, a rebuilt
+	// container loses its on-disk state.
+	Volumes []string `yaml:"volumes"`
 	// Worker marks a non-HTTP background process — typically a second
 	// entry sharing another app's path. A worker gets no domain and no
 	// Caddy route, and roost runs no DB setup or seed for it; it must
@@ -479,6 +488,12 @@ func Resolve(cfg *Config) ([]ResolvedApp, []SkippedApp, error) {
 			continue
 		}
 
+		for _, v := range app.Volumes {
+			if err := ValidateVolume(v); err != nil {
+				return nil, nil, fmt.Errorf("app %q: %w", name, err)
+			}
+		}
+
 		// A worker is a non-HTTP background process: it needs a command to
 		// run and gets no hostname or Caddy route.
 		if app.Worker {
@@ -513,6 +528,73 @@ func Resolve(cfg *Config) ([]ResolvedApp, []SkippedApp, error) {
 		resolved = append(resolved, ResolvedApp{App: app, Name: name, FQDN: fqdn})
 	}
 	return resolved, skipped, nil
+}
+
+// ValidateVolume checks a per-app volume mount "source:/container/path".
+// The container path (after the first colon) must be absolute. It never
+// repairs; it accepts or rejects with a precise remedy.
+func ValidateVolume(v string) error {
+	src, target, ok := splitVolume(v)
+	if !ok {
+		return fmt.Errorf("volume %q is missing a container path; use \"source:/container/path\" (e.g. data:/usr/src/paperless/data)", v)
+	}
+	if src == "" {
+		return fmt.Errorf("volume %q has an empty source; use \"source:/container/path\"", v)
+	}
+	if !strings.HasPrefix(target, "/") {
+		return fmt.Errorf("volume %q container path %q must be absolute (start with /)", v, target)
+	}
+	return nil
+}
+
+// splitVolume splits "source:/container/path[:ro]" into source and the
+// container path (dropping a trailing :ro/:rw mode). ok is false when
+// there is no container path at all.
+func splitVolume(v string) (src, target string, ok bool) {
+	i := strings.Index(v, ":")
+	if i < 0 {
+		return v, "", false
+	}
+	src = v[:i]
+	target = v[i+1:]
+	// Drop a trailing mount mode so the target is just the path.
+	if j := strings.LastIndex(target, ":"); j >= 0 {
+		if mode := target[j+1:]; mode == "ro" || mode == "rw" {
+			target = target[:j]
+		}
+	}
+	return src, target, true
+}
+
+// VolumeIsNamedSource reports whether a volume entry's source is a named
+// volume (as opposed to a host bind mount). A source with no path
+// separator and no ~ prefix is a named volume; anything that looks like a
+// path (/, ~, .) is a host bind mount, passed through untouched.
+func VolumeIsNamedSource(v string) bool {
+	src, _, ok := splitVolume(v)
+	if !ok {
+		return false
+	}
+	if strings.HasPrefix(src, "/") || strings.HasPrefix(src, "~") || strings.HasPrefix(src, ".") {
+		return false
+	}
+	return !strings.Contains(src, "/")
+}
+
+// VolumeSource returns the source part of a volume entry.
+func VolumeSource(v string) string {
+	src, _, _ := splitVolume(v)
+	return src
+}
+
+// VolumeTarget returns the container path (and any :mode suffix) of a
+// volume entry — everything after the first colon.
+func VolumeTarget(v string) string {
+	i := strings.Index(v, ":")
+	if i < 0 {
+		return ""
+	}
+	return v[i+1:]
 }
 
 // ValidateHostname checks that host is a valid fully-qualified
