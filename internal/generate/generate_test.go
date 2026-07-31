@@ -539,12 +539,18 @@ func TestRenderErrorPage(t *testing.T) {
 	if !strings.HasPrefix(s, "<!doctype html>") {
 		t.Errorf("error page is not HTML:\n%s", s[:min(120, len(s))])
 	}
-	// No external asset references — the page must render standalone (it is
-	// also embedded into the edge Worker where no origin is reachable).
-	for _, bad := range []string{"http://", "https://", "src=", "//cdn"} {
+	// No externally *loaded* assets — the page must render standalone (it is
+	// also embedded into the edge Worker where the origin is unreachable).
+	// Plain <a href> links are fine: they navigate on click, they aren't
+	// fetched to render the page.
+	for _, bad := range []string{"src=", "<link", "@import", "url(http", "//cdn", "fonts.googleapis"} {
 		if strings.Contains(s, bad) {
-			t.Errorf("error page references an external asset (%q); must be self-contained:\n%s", bad, s)
+			t.Errorf("error page loads an external asset (%q); must be self-contained:\n%s", bad, s)
 		}
+	}
+	// The only outbound references are the credit/repo links.
+	if !strings.Contains(s, "github.com/cdrrazan/roost") {
+		t.Errorf("error page missing the roost repo link:\n%s", s)
 	}
 }
 

@@ -4,55 +4,207 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Temporarily offline</title>
+<title>Gone to roost · temporarily offline</title>
 <style>
-  :root { color-scheme: light dark; }
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0d12;
+    --card: #12161f;
+    --ink: #e8eaed;
+    --muted: #9aa0a8;
+    --faint: #6b7178;
+    --line: rgba(255,255,255,.07);
+    --accent: #f59e0b;
+    --accent2: #fb7185;
+    --sky1: #1a2138;
+    --sky2: #0e1322;
+    --moon: #fde68a;
+    --star: rgba(255,255,255,.85);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #eef1f6;
+      --card: #ffffff;
+      --ink: #1b1d20;
+      --muted: #5a6069;
+      --faint: #8b929c;
+      --line: rgba(0,0,0,.08);
+      --sky1: #cfe0ff;
+      --sky2: #eaf1ff;
+      --moon: #f6c453;
+      --star: rgba(60,80,120,.55);
+    }
+  }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
     display: flex; align-items: center; justify-content: center;
     min-height: 100vh; padding: 24px;
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #0b0d10; color: #e8eaed;
-  }
-  @media (prefers-color-scheme: light) {
-    body { background: #f5f6f8; color: #1b1d20; }
-    .card { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
-    .sub { color: #5a6069; }
-    .dot { background: #e6e8eb; }
+    background:
+      radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%),
+      var(--bg);
+    color: var(--ink);
   }
   .card {
-    width: 100%; max-width: 460px; padding: 40px 36px;
-    background: #14171c; border-radius: 16px; text-align: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,.4), 0 12px 40px rgba(0,0,0,.35);
+    width: 100%; max-width: 480px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+    overflow: hidden; text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.25), 0 24px 60px rgba(0,0,0,.35);
   }
+
+  /* --- night scene with the roost --- */
+  .scene { display: block; width: 100%; height: 190px; }
+  .scene .sky-top { stop-color: var(--sky1); }
+  .scene .sky-bot { stop-color: var(--sky2); }
+  .moon { fill: var(--moon); }
+  .crater { fill: color-mix(in srgb, var(--moon) 70%, #000 18%); opacity: .5; }
+  .star { fill: var(--star); }
+  .wire { stroke: color-mix(in srgb, var(--ink) 40%, transparent); stroke-width: 2.4; stroke-linecap: round; }
+  .bird-body { fill: url(#plume); }
+  .bird-tail { fill: color-mix(in srgb, var(--accent) 82%, #000 14%); }
+  .comb { fill: var(--accent2); }
+  .beak { fill: #f97316; }
+  .wattle { fill: var(--accent2); }
+  .leg { stroke: color-mix(in srgb, var(--ink) 55%, transparent); stroke-width: 2.2; stroke-linecap: round; }
+  .eye { fill: #10131a; }
+  @media (prefers-color-scheme: light) { .eye { fill: #10131a; } }
+  .zzz { fill: var(--muted); font: 700 15px -apple-system, sans-serif; }
+
+  .perch { transform-origin: 80px 96px; animation: bob 3.6s ease-in-out infinite; }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50%      { transform: translateY(2px) rotate(-1.2deg); }
+  }
+  .z { opacity: 0; animation: zfloat 3.6s ease-in-out infinite; }
+  .z2 { animation-delay: 1.2s; }
+  .z3 { animation-delay: 2.4s; }
+  @keyframes zfloat {
+    0%   { opacity: 0; transform: translate(0, 4px) scale(.7); }
+    35%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(6px, -14px) scale(1.1); }
+  }
+  .twinkle { animation: tw 3s ease-in-out infinite; }
+  .t2 { animation-delay: .8s; } .t3 { animation-delay: 1.6s; } .t4 { animation-delay: 2.2s; }
+  @keyframes tw { 0%,100% { opacity:.35; } 50% { opacity:1; } }
+
+  .body { padding: 26px 32px 30px; }
   .badge {
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 14px; margin-bottom: 24px; border-radius: 999px;
-    font-size: 13px; font-weight: 600; letter-spacing: .02em;
-    background: rgba(245, 158, 11, .12); color: #f59e0b;
+    padding: 6px 14px; margin-bottom: 18px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent);
   }
-  .badge span.pulse {
-    width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;
-    animation: pulse 1.8s ease-in-out infinite;
+  .badge .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.8); } }
+  h1 { margin: 0 0 10px; font-size: 25px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { margin: 0 auto; max-width: 380px; color: var(--muted); font-size: 15px; }
+  .retry {
+    margin-top: 22px; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--faint);
   }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-  h1 { margin: 0 0 12px; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
-  .sub { margin: 0 auto; max-width: 360px; color: #9aa0a8; }
-  .meta {
-    margin-top: 28px; padding-top: 20px; font-size: 13px; color: #6b7178;
-    border-top: 1px solid rgba(255,255,255,.06);
+  .spin { width: 13px; height: 13px; border: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .retry a { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .retry a:hover { text-decoration: underline; }
+
+  footer {
+    margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+    font-size: 12.5px; color: var(--faint);
   }
-  @media (prefers-color-scheme: light) { .meta { border-top-color: rgba(0,0,0,.07); } }
-  .meta a { color: inherit; }
+  .brand { display: inline-flex; align-items: center; gap: 7px; font-weight: 800; color: var(--ink); letter-spacing: -.01em; }
+  .brand svg { width: 18px; height: 18px; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--accent); }
+  footer .sep { opacity: .5; }
 </style>
 </head>
 <body>
   <main class="card">
-    <div class="badge"><span class="pulse"></span> Temporarily offline</div>
-    <h1>This site is catching its breath</h1>
-    <p class="sub">The service is briefly unavailable — it's being restarted or is down for maintenance. It should be back shortly. Please try again in a moment.</p>
-    <p class="meta">Auto-retrying &middot; <a href="" onclick="location.reload();return false;">reload now</a></p>
+    <!-- The flock has gone to roost for the night. -->
+    <svg class="scene" viewBox="0 0 320 190" role="img" aria-label="A little roost bird perched on a wire under the moon, asleep">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop class="sky-top" offset="0"/>
+          <stop class="sky-bot" offset="1"/>
+        </linearGradient>
+        <linearGradient id="plume" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#fbbf24"/>
+          <stop offset="1" stop-color="#f97316"/>
+        </linearGradient>
+      </defs>
+
+      <rect x="0" y="0" width="320" height="190" fill="url(#sky)"/>
+
+      <!-- moon -->
+      <circle class="moon" cx="255" cy="52" r="26"/>
+      <circle class="crater" cx="248" cy="45" r="5"/>
+      <circle class="crater" cx="264" cy="58" r="3.5"/>
+      <circle class="crater" cx="252" cy="63" r="2.5"/>
+
+      <!-- stars -->
+      <circle class="star twinkle"    cx="40"  cy="40" r="1.8"/>
+      <circle class="star twinkle t2" cx="90"  cy="26" r="1.4"/>
+      <circle class="star twinkle t3" cx="150" cy="48" r="1.6"/>
+      <circle class="star twinkle t4" cx="200" cy="30" r="1.3"/>
+      <circle class="star twinkle t2" cx="300" cy="96" r="1.5"/>
+      <circle class="star twinkle t3" cx="24"  cy="96" r="1.4"/>
+
+      <!-- wire -->
+      <path class="wire" d="M8,132 C120,150 200,150 312,132"/>
+
+      <!-- the roosting bird -->
+      <g class="perch">
+        <!-- legs -->
+        <line class="leg" x1="74" y1="112" x2="74" y2="132"/>
+        <line class="leg" x1="86" y1="112" x2="86" y2="132"/>
+        <!-- tail feathers -->
+        <path class="bird-tail" d="M60,96 C46,92 40,80 42,68 C50,78 58,84 66,88 Z"/>
+        <!-- body -->
+        <ellipse class="bird-body" cx="82" cy="94" rx="27" ry="24"/>
+        <!-- comb -->
+        <path class="comb" d="M76,70 q3,-8 6,-1 q3,-8 6,-1 q2,4 -2,6 q-6,-3 -10,0 q-3,-2 0,-4 Z"/>
+        <!-- beak -->
+        <path class="beak" d="M107,88 L122,92 L107,97 Z"/>
+        <!-- wattle -->
+        <circle class="wattle" cx="106" cy="100" r="3.4"/>
+        <!-- closed sleepy eye -->
+        <path class="eye" d="M94,86 q4,4 8,0" fill="none" stroke="#10131a" stroke-width="2" stroke-linecap="round"/>
+      </g>
+
+      <!-- sleepy z's -->
+      <text class="zzz z"  x="120" y="72">z</text>
+      <text class="zzz z z2" x="132" y="64">z</text>
+      <text class="zzz z z3" x="144" y="56">z</text>
+    </svg>
+
+    <div class="body">
+      <div class="badge"><span class="pulse"></span> Roosting</div>
+      <h1>This app has gone to roost</h1>
+      <p class="sub">It's flown up to the rafters for a moment — restarting or down for
+        a spell of maintenance. It'll flutter back on its own. No need to refresh.</p>
+
+      <div class="retry"><span class="spin"></span> Auto-checking every 30s &middot; <a href="" onclick="location.reload();return false;">wake it now</a></div>
+
+      <footer>
+        <span class="brand">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 18c1-5 4-8 8-8 3 0 5 1 7 3-2 1-3 2-4 3" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 10c0-3 2-5 5-5-1 2-1 3-1 4" stroke="#fb7185" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="14" cy="9" r="1" fill="#f59e0b"/>
+            <path d="M6 18v2M9 18v2" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          roost
+        </span>
+        <span>
+          crafted by <a href="https://github.com/cdrrazan">Rajan Bhattarai</a>
+          <span class="sep">&middot;</span>
+          <a href="https://github.com/cdrrazan/roost">github.com/cdrrazan/roost</a>
+        </span>
+      </footer>
+    </div>
   </main>
   <script>setTimeout(function(){ location.reload(); }, 30000);</script>
 </body>
