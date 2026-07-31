@@ -226,6 +226,8 @@
     <span class="key">redis:</span> <span class="str">true</span>           <span class="cm"># shared redis + REDIS_URL (auto-detected)</span>
     <span class="key">build_env:</span>            <span class="cm"># build-time env</span>
       <span class="key">SKIP_ENV_VALIDATION:</span> <span class="str">"1"</span>
+    <span class="key">volumes:</span>              <span class="cm"># persistent disk for stateful apps</span>
+      - <span class="str">data:/app/data</span>     <span class="cm"># named vol; /srv/x:/… = host bind mount</span>
   - <span class="key">path:</span> <span class="str">~/code/trackaru</span>   <span class="cm"># a background worker over the same code</span>
     <span class="key">worker:</span> <span class="str">true</span>          <span class="cm"># no domain, no route</span>
     <span class="key">command:</span> <span class="str">bundle exec sidekiq</span></pre>
