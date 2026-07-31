@@ -121,24 +121,39 @@ cross-origin, the backend must send CORS for the SPA's origin.
 
 paperless-ngx keeps documents, the search index and thumbnails **on disk**, so
 it needs `volumes:` — without them a rebuild wipes the library. It also wants
-Redis + Postgres, both of which roost already provides. Uses the prebuilt image
-via a one-line wrapper Dockerfile (no source compile).
+Redis + Postgres, both of which roost already provides. Building paperless from
+source is heavy and fragile, so run the **official prebuilt image** via a
+one-line wrapper Dockerfile. Because roost only builds a file literally named
+`Dockerfile` at the app root, the fork's own root Dockerfile IS the wrapper.
 
 ```bash
-# 1. fork -> clone into a source dir roost owns (or any path)
-git clone --depth 1 https://github.com/<you>/paperless-ngx ~/.roost/sources/paperless
+# 1. clone your fork to a real source dir (same convention as memos/joplin).
+#    On the box, clone over https so no GitHub SSH key is needed.
+git clone --depth 1 https://github.com/<you>/paperless-ngx ~/apps/paperless-ngx
+cd ~/apps/paperless-ngx
 
-# 2. root Dockerfile = thin wrapper over the official image (fast, no build)
-printf 'FROM ghcr.io/paperless-ngx/paperless-ngx:latest\n' > ~/.roost/sources/paperless/Dockerfile
+# 2. replace the fork's root Dockerfile with a wrapper over the prebuilt image.
+#    Keep upstream's build files as backups, and set .dockerignore to skip the
+#    whole context (the wrapper COPYs nothing — otherwise Docker uploads the
+#    full ~300MB working tree on every build). Commit so `roost deploy`'s
+#    `git pull --ff-only` has a clean tree to fast-forward.
+cp Dockerfile Dockerfile.upstream ; cp .dockerignore .dockerignore.upstream
+printf 'FROM ghcr.io/paperless-ngx/paperless-ngx:latest\n' > Dockerfile
+printf '# roost wrapper build needs no context (FROM prebuilt image).\n*\n' > .dockerignore
+git add -A && git commit -m "chore(roost): wrapper image Dockerfile for roost hosting"
+#   restore the source build later with: mv Dockerfile.upstream Dockerfile
 
 # 3. app entry -> ~/.roost/apps/paperless.yml   (box: docs.byaru.com; local: docs-local.byaru.com)
 cat > ~/.roost/apps/paperless.yml <<'YAML'
 apps:
-  - path: ~/.roost/sources/paperless
+  - path: ~/apps/paperless-ngx
+    repo: git@github.com:<you>/paperless-ngx.git   # informational; enables Pull & redeploy
     name: paperless
     domain: docs.byaru.com
-    category: utility
-    framework: django       # override: skips detection; wrapper image builds it
+    category: utilities
+    framework: django       # override: skips detection. Own root Dockerfile =>
+                            #   roost builds THAT, and (own-Dockerfile app) gives
+                            #   it NO source mount and NO generated healthcheck.
     port: 8000
     database: postgres
     redis: true
@@ -147,7 +162,8 @@ apps:
     volumes:
       - data:/usr/src/paperless/data      # app data + search index (named vol)
       - media:/usr/src/paperless/media    # the document library (named vol)
-      - /srv/paperless/consume:/usr/src/paperless/consume   # drop files here to import
+      - consume:/usr/src/paperless/consume  # drop-folder (docker cp files in)
+      - export:/usr/src/paperless/export  # document exports
     env:
       PAPERLESS_URL: https://docs.byaru.com     # also sets CSRF trusted origin
       PAPERLESS_PORT: "8000"
@@ -156,14 +172,18 @@ apps:
       PAPERLESS_DBNAME: paperless
       PAPERLESS_DBUSER: paperless
       PAPERLESS_DBPASS: rp_bc708bb73c00939d707bfcf4   # = roost's role pw for "paperless"
+      PAPERLESS_ADMIN_USER: admin                     # auto-creates the admin on
+      PAPERLESS_ADMIN_PASSWORD: change-me-strong      #   first boot (no signup UI)
+      PAPERLESS_SECRET_KEY: change-me-long-random     # keep this stable
       PAPERLESS_OCR_LANGUAGE: eng
       PAPERLESS_TIME_ZONE: Asia/Kathmandu
-      PAPERLESS_SECRET_KEY: change-me-long-random     # keep this stable
 YAML
 roost generate
 
-# 4. Postgres role — auto-created only on a fresh volume; on an existing box
-#    volume create it by hand (pw MUST match PAPERLESS_DBPASS above):
+# 4. Postgres role — auto-created only on a FRESH postgres volume; on an
+#    existing volume (any prior app) create it by hand (pw MUST match
+#    PAPERLESS_DBPASS above). Symptom if missing: paperless logs
+#    "password authentication failed for user paperless".
 docker exec roost-postgres-1 psql -U roost -c "CREATE ROLE paperless LOGIN CREATEDB PASSWORD 'rp_bc708bb73c00939d707bfcf4';"
 docker exec roost-postgres-1 psql -U roost -c 'CREATE DATABASE "paperless" OWNER paperless;'
 #    (verify roost's derived pw: grep -A1 paperless ~/.roost/build/postgres-init.sql)
@@ -171,16 +191,19 @@ docker exec roost-postgres-1 psql -U roost -c 'CREATE DATABASE "paperless" OWNER
 # 5. build + start + route
 cd ~/.roost/build && docker compose -p roost up -d --build paperless
 docker exec roost-caddy-1 caddy reload --config /etc/caddy/Caddyfile
-
-# 6. create the first admin (paperless has no signup)
-docker exec -it roost-paperless-1 python manage.py createsuperuser
 ```
 
 `PAPERLESS_DBPASS` above is roost's deterministic role password for the app name
 `paperless` (`rp_` + `sha256("roost-pg:paperless")[:24]`). Rename the app → the
-password changes; recompute it from `postgres-init.sql`. Immich is **not** run
+password changes; recompute it from `postgres-init.sql`. The volumes are keyed
+by app name (`paperless-data`, …), not path, so repointing `path:` later (e.g.
+throwaway dir → fork) rebuilds without touching the data. Immich is **not** run
 under roost (it needs a special pgvecto.rs Postgres + its own ML container) —
 run it as its own compose stack and only reverse-proxy it.
+
+On an **exact-record tunnel** (a second env sharing the same base domain — see
+[Two environments](#two-environments-laptop-dev--box-prod)), `docs-local` needs
+both a DNS record AND a tunnel ingress rule, not just DNS — see that section.
 
 ## Common ops
 
@@ -229,3 +252,42 @@ ssh -i ~/.ssh/oracle-roost ubuntu@<box-ip>    # reach the box
 Rule: **one cloudflared per tunnel**. Each env has isolated Docker volumes (its
 own Postgres/MySQL) — data does not cross; use an app's own sync if you need it.
 See [README → Where to run it](../README.md#-where-to-run-it--laptop-server-or-both).
+
+### Sharing one base domain across both envs (wildcard + exact records)
+
+If both envs use the **same** base domain — box on `*.byaru.com`, laptop on
+`*-local.byaru.com` — the box owns the wildcard record `*.byaru.com → box
+tunnel`. That wildcard also matches `docs-local.byaru.com`, so the laptop can't
+rely on a second wildcard (they'd collide in the zone). The laptop instead uses
+**exact per-host records** (`docs-local.byaru.com → laptop tunnel`); an exact
+record beats the wildcard, so it wins for that one host while everything else
+still falls through to the box.
+
+`roost tunnel setup` creates *wildcards*, so it's the wrong tool for the laptop
+here — run it and it would try to add a second `*.byaru.com`. Add each laptop
+host by hand instead. **Two things are required, not one** — a DNS record alone
+gives a 404, because a remotely-managed tunnel's ingress is per-host with a
+catch-all `→ 404`:
+
+```bash
+TOKEN=$(cat ~/.roost/credentials); ZONE=<byaru.com zone id>
+LOCALTUN=<laptop tunnel id>; ACCT=<account id>
+
+# 1. DNS: proxied CNAME, exact host -> laptop tunnel (overrides the wildcard)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  "https://api.cloudflare.com/client/v4/zones/$ZONE/dns_records" \
+  --data "{\"type\":\"CNAME\",\"name\":\"docs-local.byaru.com\",\"content\":\"$LOCALTUN.cfargotunnel.com\",\"proxied\":true}"
+
+# 2. Ingress: add the host -> caddy rule BEFORE the catch-all, else cloudflared
+#    404s the host even though DNS resolves. GET the config, insert, PUT it back:
+#    accounts/$ACCT/cfd_tunnel/$LOCALTUN/configurations
+#    ingress: [... , {"hostname":"docs-local.byaru.com","service":"http://caddy:80"},
+#                     {"service":"http_status:404"}]
+```
+
+`state.json` records the tunnel + the records roost created, so `down
+--remove-dns`/uninstall clean up only your own. If it ever holds the *other*
+env's tunnel/records (e.g. it got copied between machines), rebuild it: set
+`tunnel_id`/`tunnel_name` to this env's, and list this env's exact records
+(query the zone for CNAMEs whose content is `<this tunnel>.cfargotunnel.com`).
+Keep `seeded`/`mysql_volume_id` — they're per-machine already.
