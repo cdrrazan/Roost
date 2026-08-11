@@ -29,6 +29,12 @@ type Runner struct {
 	Stagger time.Duration
 	// Sleep is time.Sleep, injectable for tests.
 	Sleep func(time.Duration)
+	// BuildBatch, when > 0, prunes the Docker build cache after every
+	// BuildBatch app builds during Up. Zero (the default) keeps the warm
+	// cache — the fast path. Set it only on a disk-constrained host (a small
+	// Docker VM) where a cold build of many apps would otherwise exhaust the
+	// daemon's disk mid-run. Sourced from config `build_batch`.
+	BuildBatch int
 }
 
 // New returns a Runner with real shell execution and default stagger.
@@ -121,6 +127,13 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 		if i > 0 {
 			r.Sleep(r.Stagger)
 		}
+		// On a disk-constrained host, free the shared build cache between
+		// batches so a cold build of many apps can't run the Docker VM out
+		// of disk mid-run. Prunes after every BuildBatch builds (before the
+		// batch's first app), never before the very first app.
+		if r.BuildBatch > 0 && i > 0 && i%r.BuildBatch == 0 {
+			r.pruneBuildCache()
+		}
 		// Build as an explicit streamed step: a first build installs
 		// dependencies and can take minutes, and the user must see it
 		// happening rather than a silent prompt.
@@ -136,6 +149,14 @@ func (r *Runner) Up(apps []generate.App, profiles []string) error {
 		r.reloadProxy()
 	}
 	return nil
+}
+
+// pruneBuildCache frees the daemon's build cache between build batches so a
+// cold build of many apps on a small Docker VM does not exhaust its disk
+// mid-run. Streamed so the reclaimed total is visible. Best-effort: a prune
+// failure never aborts the up — the remaining builds may still fit.
+func (r *Runner) pruneBuildCache() {
+	_ = r.Shell.Stream("docker", "builder", "prune", "-af")
 }
 
 // Prepare runs post-start database setup and seeding for the selected

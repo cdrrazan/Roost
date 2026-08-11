@@ -90,6 +90,37 @@ func TestUpPinsProjectNameEverywhere(t *testing.T) {
 	}
 }
 
+func TestUpPrunesBuildCacheBetweenBatches(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake)
+	r.BuildBatch = 2
+	if err := r.Up(testApps(), nil); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	calls := allCalls(fake)
+	// 3 apps, batch of 2 → prune once, after the 2nd app builds and before
+	// the 3rd, so peak build-cache never spans more than a batch.
+	if n := strings.Count(calls, "builder prune"); n != 1 {
+		t.Fatalf("want 1 build-cache prune between batches of 2 (3 apps), got %d:\n%s", n, calls)
+	}
+	pruneIdx := strings.Index(calls, "builder prune")
+	siteIdx := strings.Index(calls, "build site")
+	if pruneIdx < 0 || siteIdx < 0 || pruneIdx > siteIdx {
+		t.Errorf("prune must land before the next batch's first build (site):\n%s", calls)
+	}
+}
+
+func TestUpDefaultDoesNotPruneBuildCache(t *testing.T) {
+	fake := &shell.Fake{}
+	r, _ := newTestRunner(fake) // BuildBatch defaults to 0
+	if err := r.Up(testApps(), nil); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if strings.Contains(allCalls(fake), "builder prune") {
+		t.Errorf("default Up must keep the warm build cache (no prune)")
+	}
+}
+
 func TestUpStaggersAppStarts(t *testing.T) {
 	fake := &shell.Fake{}
 	r, sleeps := newTestRunner(fake)

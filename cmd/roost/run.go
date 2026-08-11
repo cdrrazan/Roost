@@ -73,6 +73,11 @@ func newUpCmd(flags *rootFlags) *cobra.Command {
 				return err
 			}
 			r := runner.New(dir)
+			// Carry the disk-constrained batch-prune knob (config
+			// `build_batch`) into the runner; a silent reload, no reprint.
+			if cfg, _, _, cerr := loadResolved(flags); cerr == nil {
+				r.BuildBatch = cfg.BuildBatch
+			}
 			cmd.Println("starting stack (first runs build images and can take several minutes)...")
 			if err := r.Up(apps, profiles); err != nil {
 				return err
