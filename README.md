@@ -131,6 +131,8 @@ tunnel:
 defaults:
   memory: 512m                    # per-app default
 
+build_batch: 5                    # optional; prune the Docker build cache every 5 app builds (small-VM hosts)
+
 apps:
   - ~/projects/blog               # 👈 bare path — everything inferred
 
@@ -158,6 +160,17 @@ apps:
 | `volumes:` | **Persistent on-disk state** for apps that store files (a document manager, a media library) rather than everything in the DB — without it a rebuild wipes them. Each entry is `source:/container/path[:ro]`. A named source (`data`) → a Docker named volume, namespaced with the app name (`paperless-data`) and declared for you; a path source (`/srv/x`, `~/x`) → a host bind mount. Coexists with the source mount. See the [paperless-ngx recipe](docs/runbook.md#stateful-app-with-persistent-files--paperless-ngx). |
 | `worker:` + `command:` | **Background workers.** `command:` overrides an app's start command. A second entry over the same `path:` with `worker: true` runs a non-HTTP process (Sidekiq, Solid Queue) — no domain, no Caddy route, no `db:prepare`/seed (the web entry owns the DB). It **requires** a `command:`. Point its `DATABASE_URL` at the web app's DB (an explicit `env:` value wins over roost's per-app default). |
 | `category:` | **Display grouping for `roost web` only** — `main` or `utility` (empty = main). Buckets the app under *Main apps* / *Utilities* in the control panel; `worker: true` apps always show under *Workers*. No effect on how roost builds or runs anything. |
+
+### 💽 Cold-build a big fleet on a small Docker VM — `build_batch`
+
+A cold `roost up` of many apps holds every image **and** the whole build cache
+on the Docker daemon's disk at once — on a small Docker Desktop VM that peak can
+hit "no space left on device" partway through. Set top-level `build_batch: N` and
+`roost up` prunes the build cache after every **N** app builds, capping peak disk
+to roughly one batch of cache plus the images. It trades the warm cache (fast
+rebuilds) for space, so use it **only** where disk is the wall — omit it (or `0`)
+everywhere else and the cache stays warm. The real fix, when you can, is raising
+the Docker Desktop disk-image size; `build_batch` is the workaround when you can't.
 
 ### 🧩 Split a big fleet across files — `include`
 

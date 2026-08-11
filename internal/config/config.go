@@ -33,6 +33,13 @@ type Config struct {
 	// the host (outside the stack). Empty means no panel route is generated.
 	ControlHost string `yaml:"control_host"`
 
+	// BuildBatch, when > 0, makes `roost up` prune the Docker build cache
+	// after every N app builds. It trades the warm cache (fast rebuilds) for
+	// a bounded peak disk footprint — set it only on a disk-constrained host
+	// (a small Docker VM) where a cold build of many apps would run the
+	// daemon out of disk mid-run. Zero/absent keeps the cache (the default).
+	BuildBatch int `yaml:"build_batch"`
+
 	// Remote, when set, points roost at a remote Docker daemon (an ssh://,
 	// tcp://, or unix:// endpoint) instead of the local one, so the same
 	// config runs the stack on a VPS. Empty = local, the default. It only
@@ -328,6 +335,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("resolve config path %s: %w", path, err)
 	}
 	cfg.Dir = filepath.Dir(abs)
+
+	if cfg.BuildBatch < 0 {
+		return nil, fmt.Errorf("build_batch %d must be zero (keep cache) or a positive batch size", cfg.BuildBatch)
+	}
 
 	if cfg.Remote != "" {
 		switch {
