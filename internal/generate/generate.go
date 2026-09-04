@@ -86,6 +86,8 @@ type App struct {
 	// namespaced and declared at the top level; path sources are host bind
 	// mounts. See config.App.Volumes.
 	Volumes []string
+	// Labels are extra Docker labels for the service. See config.App.Labels.
+	Labels map[string]string
 }
 
 // Plan merges each resolved app with its framework detection (or the
@@ -127,6 +129,7 @@ func Plan(cfg *config.Config, resolved []config.ResolvedApp) ([]App, error) {
 			Worker:         r.Worker,
 			Category:       r.Category,
 			Volumes:        r.Volumes,
+			Labels:         r.Labels,
 		}
 		// Workers are always grouped as workers in the panel, whatever the
 		// config says.
@@ -438,6 +441,9 @@ type composeApp struct {
 	// Named sources are namespaced with the app name; host bind mounts pass
 	// through verbatim.
 	Volumes []string
+	// Labels are key-sorted so the generated compose.yml is byte-stable
+	// across runs, the same way Env is.
+	Labels []envPair
 }
 
 // Opts carries the stack-wide (non-per-app) settings that shape the
@@ -495,6 +501,7 @@ func RenderCompose(buildDir string, apps []App, opts Opts) ([]byte, error) {
 			HealthCheck: app.HealthCheck,
 			Env:         appEnv(app, seed),
 			Volumes:     mounts,
+			Labels:      sortedPairs(app.Labels),
 		})
 	}
 	return render("compose.yml.tmpl", data)

@@ -148,6 +148,8 @@ apps:
       SECRET_KEY_BASE: "…"
     build_env:                    #    build-time environment (Docker builder)
       SKIP_ENV_VALIDATION: "1"
+    labels:                       #    extra Docker labels on the container
+      glance.name: "CRM"
 ```
 
 | Key | Purpose |
@@ -159,6 +161,7 @@ apps:
 | `redis:` | **Shared Redis broker.** Auto-detected from the `sidekiq`/`redis` gem or a `REDIS_URL` in `.env.example` — roost provisions one `redis:7-alpine` shared by every app that needs it and injects `REDIS_URL=redis://redis:6379/0`. `redis: true`/`false` overrides the detection. |
 | `volumes:` | **Persistent on-disk state** for apps that store files (a document manager, a media library) rather than everything in the DB — without it a rebuild wipes them. Each entry is `source:/container/path[:ro]`. A named source (`data`) → a Docker named volume, namespaced with the app name (`paperless-data`) and declared for you; a path source (`/srv/x`, `~/x`) → a host bind mount. Coexists with the source mount. See the [paperless-ngx recipe](docs/runbook.md#stateful-app-with-persistent-files--paperless-ngx). |
 | `worker:` + `command:` | **Background workers.** `command:` overrides an app's start command. A second entry over the same `path:` with `worker: true` runs a non-HTTP process (Sidekiq, Solid Queue) — no domain, no Caddy route, no `db:prepare`/seed (the web entry owns the DB). It **requires** a `command:`. Point its `DATABASE_URL` at the web app's DB (an explicit `env:` value wins over roost's per-app default). |
+| `labels:` | **Extra Docker labels on the container**, for tools that read the Docker API and want more than a compose service name to work with — a display name, a grouping, a link. roost never reads them (`glance.name`, `glance.category` and `glance.url` drive [glance](https://github.com/glanceapp/glance)'s `docker-containers` widget). roost's own services — caddy, cloudflared, and the databases — carry fixed labels of their own. Docker fixes labels at container creation, so a change lands on **recreate**, not restart. |
 | `category:` | **Display grouping for `roost web` only** — `main` or `utility` (empty = main). Buckets the app under *Main apps* / *Utilities* in the control panel; `worker: true` apps always show under *Workers*. No effect on how roost builds or runs anything. |
 
 ### 💽 Cold-build a big fleet on a small Docker VM — `build_batch`

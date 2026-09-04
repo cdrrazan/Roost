@@ -163,6 +163,13 @@ type App struct {
 	// Caddy route, and roost runs no DB setup or seed for it; it must
 	// carry a command:. roost still starts and supervises its container.
 	Worker bool `yaml:"worker"`
+	// Labels are extra Docker labels stamped onto the app's container.
+	// roost itself never reads them; they exist so tools that watch the
+	// Docker API can identify a container as more than a compose service
+	// name (e.g. glance's docker-containers widget groups on
+	// "glance.category" and links on "glance.url"). Changing them takes
+	// effect only when the container is recreated, not on restart.
+	Labels map[string]string `yaml:"labels"`
 	// Category is a display grouping for the web control panel only —
 	// "main", "utility", or left empty (treated as main). It has no effect
 	// on how roost builds or runs the app. Worker entries are grouped as

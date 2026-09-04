@@ -26,6 +26,12 @@ services:
       {{.Key}}: "{{.Value}}"
 {{- end}}
 {{- end}}
+{{- if .Labels}}
+    labels:
+{{- range .Labels}}
+      {{.Key}}: "{{.Value}}"
+{{- end}}
+{{- end}}
 {{- if .Profile}}
     profiles:
       - {{.Profile}}
@@ -54,6 +60,11 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    # Identifies the container to dashboards reading the Docker API;
+    # roost itself never reads these.
+    labels:
+      glance.name: "Caddy"
+      glance.category: "Stack"
     {{- if .ControlHost}}
     # Let Caddy reach the roost web control panel running on the host.
     extra_hosts:
@@ -68,6 +79,11 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
+    # Identifies the container to dashboards reading the Docker API;
+    # roost itself never reads these.
+    labels:
+      glance.name: "Cloudflare Tunnel"
+      glance.category: "Stack"
     command: tunnel run {{if .TunnelProtocol}}--protocol {{.TunnelProtocol}} {{end}}--token ${ROOST_TUNNEL_TOKEN}
     networks:
       - roost
@@ -79,6 +95,11 @@ services:
   mysql:
     image: mysql:8.4
     restart: unless-stopped
+    # Identifies the container to dashboards reading the Docker API;
+    # roost itself never reads these.
+    labels:
+      glance.name: "MySQL"
+      glance.category: "Stack"
     environment:
       MYSQL_ROOT_PASSWORD: "roost"
     volumes:
@@ -95,6 +116,11 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Identifies the container to dashboards reading the Docker API;
+    # roost itself never reads these.
+    labels:
+      glance.name: "PostgreSQL"
+      glance.category: "Stack"
     environment:
       POSTGRES_USER: "roost"
       POSTGRES_PASSWORD: "roost"
@@ -111,6 +137,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Identifies the container to dashboards reading the Docker API;
+    # roost itself never reads these.
+    labels:
+      glance.name: "Redis"
+      glance.category: "Stack"
     volumes:
       - roost-redis-data:/data
     networks:
