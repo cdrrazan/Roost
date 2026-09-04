@@ -1051,3 +1051,110 @@ func TestTunnelProtocol(t *testing.T) {
 		t.Error("--protocol leaked when tunnel protocol unset")
 	}
 }
+
+func TestRenderComposeLabels(t *testing.T) {
+	// An app's labels: are rendered as compose service labels. They exist so
+	// tools that read the Docker API — glance's docker-containers widget being
+	// the motivating case — can name, group and link a container, which is
+	// otherwise only identifiable by its raw compose service name.
+	apps := []App{{
+		Name: "paperless", FQDN: "docs.example.com", Path: "/apps/paperless",
+		Framework: "django", Port: 8000, StartCommand: "gunicorn", Memory: "1g",
+		Labels: map[string]string{
+			"glance.name":     "Paperless",
+			"glance.category": "documents",
+			"glance.url":      "https://docs.example.com",
+		},
+	}}
+	out, err := RenderCompose("/b", apps, Opts{})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("compose.yml is not valid YAML: %v\n%s", err, out)
+	}
+	services, _ := doc["services"].(map[string]any)
+	svc, _ := services["paperless"].(map[string]any)
+	labels, ok := svc["labels"].(map[string]any)
+	if !ok {
+		t.Fatalf("paperless has no labels: mapping\n%s", out)
+	}
+	for k, want := range map[string]string{
+		"glance.name":     "Paperless",
+		"glance.category": "documents",
+		"glance.url":      "https://docs.example.com",
+	} {
+		if got, _ := labels[k].(string); got != want {
+			t.Errorf("label %s = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestRenderComposeNoLabelsKeyWhenUnset(t *testing.T) {
+	// Apps without labels: must not grow an empty labels: key — every app in
+	// an existing config would otherwise churn in the generated compose.yml.
+	apps := []App{{
+		Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog",
+		Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m",
+	}}
+	out, err := RenderCompose("/b", apps, Opts{})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("compose.yml is not valid YAML: %v\n%s", err, out)
+	}
+	services, _ := doc["services"].(map[string]any)
+	svc, _ := services["blog"].(map[string]any)
+	// Scoped to the app's own service: roost's shared services (caddy,
+	// cloudflared, the databases) always carry identifying labels, so
+	// asserting on the whole document would be testing the wrong thing.
+	if _, ok := svc["labels"]; ok {
+		t.Errorf("app service grew a labels: key with none configured\n%s", out)
+	}
+}
+
+func TestRenderComposeSharedServicesAreLabelled(t *testing.T) {
+	// The shared services roost owns (proxy, tunnel, databases, cache) carry
+	// identifying labels too, so a dashboard reading the Docker API can name
+	// and group them alongside the app containers instead of showing raw
+	// image names. Without this they are the only containers in the stack
+	// with nothing but a compose service name to go on.
+	apps := []App{{
+		Name: "blog", FQDN: "blog.example.com", Path: "/apps/blog",
+		Framework: "rails", Port: 3000, StartCommand: "puma", Memory: "512m",
+		Database: "mysql",
+	}}
+	out, err := RenderCompose("/b", apps, Opts{})
+	if err != nil {
+		t.Fatalf("RenderCompose: %v", err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(out, &doc); err != nil {
+		t.Fatalf("compose.yml is not valid YAML: %v\n%s", err, out)
+	}
+	services, _ := doc["services"].(map[string]any)
+	for svc, wantName := range map[string]string{
+		"caddy":       "Caddy",
+		"cloudflared": "Cloudflare Tunnel",
+		"mysql":       "MySQL",
+	} {
+		s, ok := services[svc].(map[string]any)
+		if !ok {
+			t.Fatalf("service %s missing\n%s", svc, out)
+		}
+		labels, ok := s["labels"].(map[string]any)
+		if !ok {
+			t.Errorf("service %s has no labels:", svc)
+			continue
+		}
+		if got, _ := labels["glance.name"].(string); got != wantName {
+			t.Errorf("%s glance.name = %q, want %q", svc, got, wantName)
+		}
+		if got, _ := labels["glance.category"].(string); got != "Stack" {
+			t.Errorf("%s glance.category = %q, want %q", svc, got, "Stack")
+		}
+	}
+}
