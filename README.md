@@ -5,7 +5,7 @@
 <br><br>
 
 [![CI](https://github.com/cdrrazan/roost/actions/workflows/ci.yml/badge.svg)](https://github.com/cdrrazan/roost/actions/workflows/ci.yml)
-[![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/cdrrazan/roost?include_prereleases)](https://github.com/cdrrazan/roost/releases)
 [![Dependencies: 2](https://img.shields.io/badge/deps-cobra%20%2B%20yaml.v3-blue)](go.mod)
@@ -349,7 +349,7 @@ roost enable        # start everything at login
 <details>
 <summary><b>Installing from source</b></summary>
 
-A standard Go build — Go 1.24+, no build scripts, two dependencies fetched
+A standard Go build — Go 1.27+, no build scripts, two dependencies fetched
 automatically. No Go? `brew install go` (macOS), `sudo dnf install golang`
 (Fedora), or the tarball from [go.dev/dl](https://go.dev/dl/) — then put
 `~/go/bin` on your `PATH`.
@@ -853,7 +853,7 @@ is the supervisor.
 - **[Security policy](SECURITY.md)** · **[Code of Conduct](CODE_OF_CONDUCT.md)**
 - **Support** — via [GitHub Sponsors](https://github.com/sponsors/cdrrazan).
 
-Built with **Go 1.24+**, exactly **two dependencies** (`cobra`, `yaml.v3`).
+Built with **Go 1.27+**, exactly **two dependencies** (`cobra`, `yaml.v3`).
 `go test ./...` runs the whole suite — no test touches Docker or the network
 (shell calls go through a fake; the Cloudflare API is `httptest`). TDD is the
 house rule: failing test first.
