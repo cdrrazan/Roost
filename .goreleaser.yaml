@@ -29,6 +29,20 @@ changelog:
       - "^docs:"
       - "^test:"
 
+# `goreleaser check` flags this as deprecated in favour of `homebrew_casks`.
+# Staying on `brews` deliberately — deprecated properties are only removed on a
+# GoReleaser major, release.yml pins `~> v2`, and the cask migration costs more
+# than it buys here:
+#   - Homebrew casks are macOS-only; we ship linux/amd64 + linux/arm64, so the
+#     tap would stop serving Linux.
+#   - Casks expect signed binaries. Unsigned ones fail with "roost is damaged
+#     and cannot be opened" unless we add an `xattr -dr com.apple.quarantine`
+#     post-install hook, which GoReleaser's own docs warn circumvents Gatekeeper
+#     and may stop working without notice. Signing properly needs a paid Apple
+#     Developer account.
+#   - `test:` has no cask equivalent, so we would lose the install smoke test.
+#   - Needs a tap_migrations.json and the old formula deleted in homebrew-tap.
+# Revisit when GoReleaser v3 is on the horizon or the binaries get signed.
 brews:
   - repository:
       owner: cdrrazan
